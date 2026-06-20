@@ -80,8 +80,8 @@ Passed:
 Additional Linux validation on an OrbStack Ubuntu 24.04 arm64 VM:
 
 ```sh
-orbctl run -m ubuntu -w /mnt/mac/Users/revol/code/fuck-nat ./manage verify
-orbctl run -m ubuntu -w /mnt/mac/Users/revol/code/fuck-nat ./scripts/linux-smoke-nftables.sh
+orbctl run -m ubuntu -w <repo-on-linux> ./manage verify
+orbctl run -m ubuntu -w <repo-on-linux> ./scripts/linux-smoke-nftables.sh
 ```
 
 Results:

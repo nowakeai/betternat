@@ -92,6 +92,7 @@ docs_check() {
   test -f docs/spec-v0.md
   test -f docs/deployment/AI_WORKFLOW.md
   test -f docs/deployment/DEPENDENCY_POLICY.md
+  test -f docs/deployment/LOCAL_VM_TEST_MATRIX.md
   test -f docs/deployment/LINUX_DATAPATH_VALIDATION.md
 }
 
