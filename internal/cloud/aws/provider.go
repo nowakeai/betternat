@@ -172,6 +172,10 @@ func routeTarget(route types.Route) string {
 		return awssdk.ToString(route.GatewayId)
 	case route.TransitGatewayId != nil:
 		return awssdk.ToString(route.TransitGatewayId)
+	case route.VpcPeeringConnectionId != nil:
+		return awssdk.ToString(route.VpcPeeringConnectionId)
+	case route.EgressOnlyInternetGatewayId != nil:
+		return awssdk.ToString(route.EgressOnlyInternetGatewayId)
 	default:
 		return ""
 	}

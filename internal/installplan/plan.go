@@ -15,7 +15,12 @@ type Input struct {
 	LeaseTableName       string
 	AgentConfigHash      string
 	AMIID                string
+	AMIChannel           string
 	InstanceType         string
+	UseSpot              bool
+	RouteDestinationCIDR string
+	RouteTargetType      string
+	Tags                 map[string]string
 }
 
 type Plan struct {
@@ -23,7 +28,9 @@ type Plan struct {
 	Region              string            `json:"region"`
 	VPCID               string            `json:"vpc_id"`
 	AMIID               string            `json:"ami_id,omitempty"`
+	AMIChannel          string            `json:"ami_channel,omitempty"`
 	InstanceType        string            `json:"instance_type"`
+	UseSpot             bool              `json:"use_spot,omitempty"`
 	IAMRoleName         string            `json:"iam_role_name"`
 	InstanceProfileName string            `json:"instance_profile_name"`
 	SecurityGroupName   string            `json:"security_group_name"`
@@ -74,12 +81,29 @@ func Build(input Input) (Plan, error) {
 	if instanceType == "" {
 		instanceType = "t3.small"
 	}
+	amiChannel := input.AMIChannel
+	if amiChannel == "" {
+		amiChannel = "stable"
+	}
+	routeDestinationCIDR := input.RouteDestinationCIDR
+	if routeDestinationCIDR == "" {
+		routeDestinationCIDR = "0.0.0.0/0"
+	}
+	routeTargetType := input.RouteTargetType
+	if routeTargetType == "" {
+		routeTargetType = "instance"
+	}
+	if routeTargetType != "instance" {
+		return Plan{}, fmt.Errorf("unsupported route target type %q", routeTargetType)
+	}
 	plan := Plan{
 		Name:                input.Name,
 		Region:              input.Region,
 		VPCID:               input.VPCID,
 		AMIID:               input.AMIID,
+		AMIChannel:          amiChannel,
 		InstanceType:        instanceType,
+		UseSpot:             input.UseSpot,
 		IAMRoleName:         "betternat-" + input.Name + "-agent",
 		InstanceProfileName: "betternat-" + input.Name + "-agent",
 		SecurityGroupName:   "betternat-" + input.Name + "-appliance",
@@ -100,6 +124,14 @@ func Build(input Input) (Plan, error) {
 			"ManagedBy":        "betternat",
 		},
 	}
+	for key, value := range input.Tags {
+		if key == "" {
+			return Plan{}, fmt.Errorf("tag key cannot be empty")
+		}
+		plan.Tags[key] = value
+	}
+	plan.Tags["BetterNATGateway"] = input.Name
+	plan.Tags["ManagedBy"] = "betternat"
 	if input.AgentConfigHash != "" {
 		plan.Tags["BetterNATAgentConfigHash"] = input.AgentConfigHash
 	}
@@ -126,7 +158,7 @@ func Build(input Input) (Plan, error) {
 			plan.ManagedRoutes = append(plan.ManagedRoutes, ManagedRoute{
 				RouteTableID:      routeTableID,
 				AvailabilityZone:  az,
-				DestinationCIDR:   "0.0.0.0/0",
+				DestinationCIDR:   routeDestinationCIDR,
 				InitialTargetRole: "active",
 			})
 		}

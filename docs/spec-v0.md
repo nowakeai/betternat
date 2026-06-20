@@ -123,6 +123,7 @@ The provider MUST require:
 - `vpc_id`
 - optional `ami_id`
 - optional `instance_type`
+- optional `use_spot`
 - at least one public subnet
 - at least one private route table
 - private CIDR allowlist for NAT
@@ -159,6 +160,10 @@ The provider MUST create or manage:
 The provider MUST NOT perform runtime failover. Runtime failover belongs to `betternat-agent`.
 
 The current Go implementation represents provider work as a deterministic install plan. The AWS applier consumes that plan with the AWS SDK. If appliance instance IDs are not supplied by an outer installer, the applier MUST launch EC2 appliances from `ami_id`; otherwise it MUST fail before route mutation. `instance_type` defaults to `t3.small`.
+
+`use_spot` MAY be enabled for low-cost tests and interruption-tolerant deployments. It MUST default to `false` because production NAT appliances should not silently use interruptible capacity.
+
+Before a BetterNAT AMI exists, v0 development tests MAY use a standard cloud Linux AMI plus cloud-init. In that mode the provider MAY accept a sensitive `agent_binary_url` and optional `loxicmd_binary_url`; bootstrap downloads the agent and either downloads `loxicmd` or creates a host wrapper for the LoxiLB container.
 
 ## AWS Resource Model
 

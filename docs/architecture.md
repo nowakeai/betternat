@@ -106,6 +106,8 @@ Implementation note for the current Go provider/applier split:
 - The AWS install applier consumes that install plan and uses the AWS SDK to create IAM, security group, DynamoDB lease table, EIPs, EC2 appliance instances, source/destination check settings, and initial route targets.
 - `ami_id` is required when the applier needs to launch appliance instances itself.
 - `instance_type` defaults to `t3.small` when not specified.
+- `use_spot` is available for low-cost tests and interruption-tolerant environments, but it defaults to `false`.
+- Before BetterNAT AMIs exist, AWS tests use an official Linux AMI plus cloud-init. The provider can pass a sensitive `agent_binary_url` so bootstrap downloads the current `betternat-agent` build at first boot.
 - Existing appliance instance IDs can still be supplied by an outer installer, which is useful for tests, bring-your-own-AMI flows, or phased migration.
 
 Example target UX:

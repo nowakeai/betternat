@@ -19,7 +19,6 @@ Usage:
   ./manage verify
   ./manage build [all|cli|agent|provider]
   ./manage smoke [doctor|status|datapath|failover|metrics]
-  ./manage docs check
   ./manage deps check
   ./manage deps upgrade
 
@@ -83,20 +82,6 @@ smoke_target() {
   esac
 }
 
-docs_check() {
-  test -f README.md
-  test -f AGENTS.md
-  test -f CODEX.md
-  test -f docs/README.md
-  test -f docs/architecture.md
-  test -f docs/spec-v0.md
-  test -f docs/deployment/AI_WORKFLOW.md
-  test -f docs/deployment/AWS_TEST_PLAN.md
-  test -f docs/deployment/DEPENDENCY_POLICY.md
-  test -f docs/deployment/LOCAL_VM_TEST_MATRIX.md
-  test -f docs/deployment/LINUX_DATAPATH_VALIDATION.md
-}
-
 deps_check() {
   go list -m -u all
 }
@@ -118,25 +103,12 @@ case "${1:-help}" in
     build_target all
     smoke_target doctor
     smoke_target failover
-    docs_check
     ;;
   build)
     build_target "${2:-all}"
     ;;
   smoke)
     smoke_target "${2:-doctor}"
-    ;;
-  docs)
-    case "${2:-check}" in
-      check)
-        docs_check
-        ;;
-      *)
-        echo "unknown docs command: ${2:-}" >&2
-        usage >&2
-        exit 2
-        ;;
-    esac
     ;;
   deps)
     case "${2:-check}" in

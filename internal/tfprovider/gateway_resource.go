@@ -12,6 +12,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/betternat/betternat/internal/bootstrap"
@@ -23,7 +25,10 @@ var _ resource.Resource = (*GatewayResource)(nil)
 var _ resource.ResourceWithConfigure = (*GatewayResource)(nil)
 
 type GatewayResource struct {
-	installerFactory InstallerFactory
+	installerFactory  InstallerFactory
+	rollbackerFactory RollbackerFactory
+	cleanerFactory    CleanerFactory
+	readerFactory     ReaderFactory
 }
 
 func NewGatewayResource() resource.Resource {
@@ -31,7 +36,11 @@ func NewGatewayResource() resource.Resource {
 }
 
 func NewGatewayResourceWithInstaller(factory InstallerFactory) resource.Resource {
-	return &GatewayResource{installerFactory: factory}
+	return NewGatewayResourceWithFactories(factory, defaultRollbackerFactory, defaultCleanerFactory, defaultReaderFactory)
+}
+
+func NewGatewayResourceWithFactories(installerFactory InstallerFactory, rollbackerFactory RollbackerFactory, cleanerFactory CleanerFactory, readerFactory ReaderFactory) resource.Resource {
+	return &GatewayResource{installerFactory: installerFactory, rollbackerFactory: rollbackerFactory, cleanerFactory: cleanerFactory, readerFactory: readerFactory}
 }
 
 type GatewayResourceModel struct {
@@ -41,7 +50,11 @@ type GatewayResourceModel struct {
 	Region                   types.String `tfsdk:"region"`
 	VPCID                    types.String `tfsdk:"vpc_id"`
 	AMIID                    types.String `tfsdk:"ami_id"`
+	AMIChannel               types.String `tfsdk:"ami_channel"`
 	InstanceType             types.String `tfsdk:"instance_type"`
+	UseSpot                  types.Bool   `tfsdk:"use_spot"`
+	AgentBinaryURL           types.String `tfsdk:"agent_binary_url"`
+	LoxiCMDBinaryURL         types.String `tfsdk:"loxicmd_binary_url"`
 	PublicSubnetIDs          types.Map    `tfsdk:"public_subnet_ids"`
 	PrivateRouteTableIDs     types.Map    `tfsdk:"private_route_table_ids"`
 	PrivateCIDRs             types.List   `tfsdk:"private_cidrs"`
@@ -49,6 +62,12 @@ type GatewayResourceModel struct {
 	FallbackDatapathEngine   types.String `tfsdk:"fallback_datapath_engine"`
 	StableEgressIP           types.Bool   `tfsdk:"stable_egress_ip"`
 	PrometheusEnabled        types.Bool   `tfsdk:"prometheus_enabled"`
+	RouteMode                types.String `tfsdk:"route_mode"`
+	RouteDestinationCIDR     types.String `tfsdk:"route_destination_cidr"`
+	RouteTargetType          types.String `tfsdk:"route_target_type"`
+	RollbackOnDestroy        types.Bool   `tfsdk:"rollback_on_destroy"`
+	AllowDestroyNoRollback   types.Bool   `tfsdk:"allow_destroy_without_rollback"`
+	Tags                     types.Map    `tfsdk:"tags"`
 	LeaseTableName           types.String `tfsdk:"lease_table_name"`
 	AgentConfigJSON          types.String `tfsdk:"agent_config_json"`
 	AgentConfigHash          types.String `tfsdk:"agent_config_hash"`
@@ -59,6 +78,7 @@ type GatewayResourceModel struct {
 	ActiveInstanceIDs        types.Map    `tfsdk:"active_instance_ids"`
 	StandbyInstanceIDs       types.Map    `tfsdk:"standby_instance_ids"`
 	RollbackRouteTargetsJSON types.String `tfsdk:"rollback_route_targets_json"`
+	ControlPlaneStatusJSON   types.String `tfsdk:"control_plane_status_json"`
 	Status                   types.String `tfsdk:"status"`
 }
 
@@ -76,6 +96,9 @@ func (r *GatewayResource) Configure(_ context.Context, req resource.ConfigureReq
 		return
 	}
 	r.installerFactory = data.InstallerFactory
+	r.rollbackerFactory = data.RollbackerFactory
+	r.cleanerFactory = data.CleanerFactory
+	r.readerFactory = data.ReaderFactory
 }
 
 func (r *GatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
@@ -89,7 +112,9 @@ func (r *GatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Required: true,
 			},
 			"cloud": schema.StringAttribute{
-				Required: true,
+				Optional: true,
+				Computed: true,
+				Default:  stringdefault.StaticString("aws"),
 			},
 			"region": schema.StringAttribute{
 				Required: true,
@@ -100,9 +125,28 @@ func (r *GatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"ami_id": schema.StringAttribute{
 				Optional: true,
 			},
+			"ami_channel": schema.StringAttribute{
+				Optional: true,
+				Computed: true,
+				Default:  stringdefault.StaticString("stable"),
+			},
 			"instance_type": schema.StringAttribute{
 				Optional: true,
 				Computed: true,
+				Default:  stringdefault.StaticString("t3.small"),
+			},
+			"use_spot": schema.BoolAttribute{
+				Optional: true,
+				Computed: true,
+				Default:  booldefault.StaticBool(false),
+			},
+			"agent_binary_url": schema.StringAttribute{
+				Optional:  true,
+				Sensitive: true,
+			},
+			"loxicmd_binary_url": schema.StringAttribute{
+				Optional:  true,
+				Sensitive: true,
 			},
 			"public_subnet_ids": schema.MapAttribute{
 				ElementType: types.StringType,
@@ -119,18 +163,51 @@ func (r *GatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"datapath_engine": schema.StringAttribute{
 				Optional: true,
 				Computed: true,
+				Default:  stringdefault.StaticString("loxilb"),
 			},
 			"fallback_datapath_engine": schema.StringAttribute{
 				Optional: true,
 				Computed: true,
+				Default:  stringdefault.StaticString("nftables"),
 			},
 			"stable_egress_ip": schema.BoolAttribute{
 				Optional: true,
 				Computed: true,
+				Default:  booldefault.StaticBool(true),
 			},
 			"prometheus_enabled": schema.BoolAttribute{
 				Optional: true,
 				Computed: true,
+				Default:  booldefault.StaticBool(true),
+			},
+			"route_mode": schema.StringAttribute{
+				Optional: true,
+				Computed: true,
+				Default:  stringdefault.StaticString("replace_route"),
+			},
+			"route_destination_cidr": schema.StringAttribute{
+				Optional: true,
+				Computed: true,
+				Default:  stringdefault.StaticString("0.0.0.0/0"),
+			},
+			"route_target_type": schema.StringAttribute{
+				Optional: true,
+				Computed: true,
+				Default:  stringdefault.StaticString("instance"),
+			},
+			"rollback_on_destroy": schema.BoolAttribute{
+				Optional: true,
+				Computed: true,
+				Default:  booldefault.StaticBool(true),
+			},
+			"allow_destroy_without_rollback": schema.BoolAttribute{
+				Optional: true,
+				Computed: true,
+				Default:  booldefault.StaticBool(false),
+			},
+			"tags": schema.MapAttribute{
+				ElementType: types.StringType,
+				Optional:    true,
 			},
 			"lease_table_name": schema.StringAttribute{
 				Computed: true,
@@ -168,6 +245,9 @@ func (r *GatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"rollback_route_targets_json": schema.StringAttribute{
 				Computed: true,
 			},
+			"control_plane_status_json": schema.StringAttribute{
+				Computed: true,
+			},
 			"status": schema.StringAttribute{
 				Computed: true,
 			},
@@ -186,6 +266,9 @@ func (r *GatewayResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 	if err := installGatewayState(ctx, &plan, r.installerFactory); err != nil {
+		if cleanupErr := cleanupGatewayResources(ctx, plan, r.cleanerFactory); cleanupErr != nil {
+			resp.Diagnostics.AddWarning("Cleanup failed BetterNAT gateway create", cleanupErr.Error())
+		}
 		resp.Diagnostics.AddError("Install BetterNAT gateway", err.Error())
 		return
 	}
@@ -197,6 +280,9 @@ func (r *GatewayResource) Read(ctx context.Context, req resource.ReadRequest, re
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+	if err := readGatewayState(ctx, &state, r.readerFactory); err != nil {
+		resp.Diagnostics.AddWarning("Read BetterNAT gateway state", err.Error())
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
@@ -212,13 +298,40 @@ func (r *GatewayResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 	if err := installGatewayState(ctx, &plan, r.installerFactory); err != nil {
+		if cleanupErr := cleanupGatewayResources(ctx, plan, r.cleanerFactory); cleanupErr != nil {
+			resp.Diagnostics.AddWarning("Cleanup failed BetterNAT gateway update", cleanupErr.Error())
+		}
 		resp.Diagnostics.AddError("Update BetterNAT gateway", err.Error())
 		return
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
-func (r *GatewayResource) Delete(context.Context, resource.DeleteRequest, *resource.DeleteResponse) {
+func (r *GatewayResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var state GatewayResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	rollbackOnDestroy := boolDefault(state.RollbackOnDestroy, true)
+	allowDestroyNoRollback := boolDefault(state.AllowDestroyNoRollback, false)
+	if rollbackOnDestroy && !allowDestroyNoRollback && rollbackTargetsUnknown(state.RollbackRouteTargetsJSON.ValueString()) {
+		resp.Diagnostics.AddError(
+			"Refusing to destroy BetterNAT gateway without rollback targets",
+			"rollback_on_destroy is true, but rollback_route_targets_json does not contain concrete previous route targets. Set allow_destroy_without_rollback = true only if you have manually restored or accepted the private route table state.",
+		)
+		return
+	}
+	if rollbackOnDestroy && !allowDestroyNoRollback {
+		if err := rollbackGatewayRoutes(ctx, state, r.rollbackerFactory); err != nil {
+			resp.Diagnostics.AddError("Rollback BetterNAT routes", err.Error())
+			return
+		}
+	}
+	if err := cleanupGatewayResources(ctx, state, r.cleanerFactory); err != nil {
+		resp.Diagnostics.AddError("Cleanup BetterNAT gateway resources", err.Error())
+		return
+	}
 }
 
 func applyGatewayPlan(ctx context.Context, plan *GatewayResourceModel) diag.Diagnostics {
@@ -237,7 +350,8 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	if plan.Name.IsNull() || plan.Name.IsUnknown() || plan.Name.ValueString() == "" {
 		return GatewayResourceModel{}, fmt.Errorf("name is required")
 	}
-	if plan.Cloud.ValueString() != "aws" {
+	cloud := stringDefault(plan.Cloud, "aws")
+	if cloud != "aws" {
 		return GatewayResourceModel{}, fmt.Errorf("only cloud %q is supported in v0", "aws")
 	}
 	if plan.Region.IsNull() || plan.Region.IsUnknown() || plan.Region.ValueString() == "" {
@@ -264,6 +378,13 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	if len(routeTablesByAZ) == 0 {
 		return GatewayResourceModel{}, fmt.Errorf("at least one private route table is required")
 	}
+	tags := map[string]string{}
+	if !plan.Tags.IsNull() && !plan.Tags.IsUnknown() {
+		tags, err = mapStrings(ctx, plan.Tags)
+		if err != nil {
+			return GatewayResourceModel{}, fmt.Errorf("tags: %w", err)
+		}
+	}
 
 	datapathEngine := stringDefault(plan.DatapathEngine, "loxilb")
 	fallbackEngine := stringDefault(plan.FallbackDatapathEngine, "nftables")
@@ -281,13 +402,29 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	stableEgressIP := boolDefault(plan.StableEgressIP, true)
 	prometheusEnabled := boolDefault(plan.PrometheusEnabled, true)
 	instanceType := stringDefault(plan.InstanceType, "t3.small")
+	useSpot := boolDefault(plan.UseSpot, false)
+	amiChannel := stringDefault(plan.AMIChannel, "stable")
+	routeMode := stringDefault(plan.RouteMode, "replace_route")
+	routeDestinationCIDR := stringDefault(plan.RouteDestinationCIDR, "0.0.0.0/0")
+	routeTargetType := stringDefault(plan.RouteTargetType, "instance")
+	rollbackOnDestroy := boolDefault(plan.RollbackOnDestroy, true)
+	allowDestroyNoRollback := boolDefault(plan.AllowDestroyNoRollback, false)
+	if amiChannel != "stable" && amiChannel != "candidate" && amiChannel != "dev" {
+		return GatewayResourceModel{}, fmt.Errorf("unsupported ami_channel %q", amiChannel)
+	}
+	if routeMode != "replace_route" {
+		return GatewayResourceModel{}, fmt.Errorf("unsupported route_mode %q", routeMode)
+	}
+	if routeTargetType != "instance" {
+		return GatewayResourceModel{}, fmt.Errorf("unsupported route_target_type %q", routeTargetType)
+	}
 	leaseTable := "betternat-" + plan.Name.ValueString() + "-leases"
 
 	azs := sortedKeys(routeTablesByAZ)
 	firstAZ := azs[0]
 	gatewaySpec := provider.GatewaySpec{
 		Name:         plan.Name.ValueString(),
-		Cloud:        plan.Cloud.ValueString(),
+		Cloud:        cloud,
 		Region:       plan.Region.ValueString(),
 		PrivateCIDRs: privateCIDRs,
 		Datapath: provider.DatapathSpec{
@@ -299,6 +436,9 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 			Enabled:               true,
 			LeaseTable:            leaseTable,
 			SharedEIPAllocationID: "auto",
+			RouteMode:             routeMode,
+			RouteDestinationCIDR:  routeDestinationCIDR,
+			RouteTargetType:       routeTargetType,
 		},
 		Observability: provider.ObservabilitySpec{
 			PrometheusListenAddress: "0.0.0.0",
@@ -318,7 +458,7 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 		AvailabilityZone:     firstAZ,
 		PrimaryInterface:     "ens5",
 		RouteTableIDs:        routeTablesByAZ[firstAZ],
-		RouteDestinationCIDR: "0.0.0.0/0",
+		RouteDestinationCIDR: routeDestinationCIDR,
 	})
 	if err != nil {
 		return GatewayResourceModel{}, err
@@ -329,13 +469,15 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	}
 	configHash := sha256.Sum256(configBytes)
 	userData, err := bootstrap.RenderUserData(bootstrap.Spec{
-		AgentConfig: string(configBytes),
+		AgentConfig:      string(configBytes),
+		AgentBinaryURL:   stringDefault(plan.AgentBinaryURL, ""),
+		LoxiCMDBinaryURL: stringDefault(plan.LoxiCMDBinaryURL, ""),
 	})
 	if err != nil {
 		return GatewayResourceModel{}, err
 	}
 	managedRouteTableIDs := flattenRouteTableIDs(routeTablesByAZ)
-	rollbackJSON, err := plannedRollbackJSON(routeTablesByAZ, "0.0.0.0/0")
+	rollbackJSON, err := plannedRollbackJSON(routeTablesByAZ, routeDestinationCIDR)
 	if err != nil {
 		return GatewayResourceModel{}, err
 	}
@@ -349,7 +491,12 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 		LeaseTableName:       leaseTable,
 		AgentConfigHash:      hex.EncodeToString(configHash[:]),
 		AMIID:                stringDefault(plan.AMIID, ""),
+		AMIChannel:           amiChannel,
 		InstanceType:         instanceType,
+		UseSpot:              useSpot,
+		RouteDestinationCIDR: routeDestinationCIDR,
+		RouteTargetType:      routeTargetType,
+		Tags:                 tags,
 	})
 	if err != nil {
 		return GatewayResourceModel{}, err
@@ -360,11 +507,19 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	}
 
 	result.ID = types.StringValue(plan.Name.ValueString())
+	result.Cloud = types.StringValue(cloud)
+	result.AMIChannel = types.StringValue(amiChannel)
 	result.DatapathEngine = types.StringValue(datapathEngine)
 	result.FallbackDatapathEngine = types.StringValue(fallbackEngine)
 	result.InstanceType = types.StringValue(instanceType)
+	result.UseSpot = types.BoolValue(useSpot)
 	result.StableEgressIP = types.BoolValue(stableEgressIP)
 	result.PrometheusEnabled = types.BoolValue(prometheusEnabled)
+	result.RouteMode = types.StringValue(routeMode)
+	result.RouteDestinationCIDR = types.StringValue(routeDestinationCIDR)
+	result.RouteTargetType = types.StringValue(routeTargetType)
+	result.RollbackOnDestroy = types.BoolValue(rollbackOnDestroy)
+	result.AllowDestroyNoRollback = types.BoolValue(allowDestroyNoRollback)
 	result.LeaseTableName = types.StringValue(leaseTable)
 	result.AgentConfigJSON = types.StringValue(string(configBytes))
 	result.AgentConfigHash = types.StringValue(hex.EncodeToString(configHash[:]))
@@ -375,6 +530,7 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	result.ActiveInstanceIDs = mustStringMap(emptyByAZ(publicSubnetsByAZ))
 	result.StandbyInstanceIDs = mustStringMap(emptyByAZ(publicSubnetsByAZ))
 	result.RollbackRouteTargetsJSON = types.StringValue(rollbackJSON)
+	result.ControlPlaneStatusJSON = types.StringValue("{}")
 	result.Status = types.StringValue("planned")
 	return result, nil
 }
@@ -392,6 +548,26 @@ func plannedRollbackJSON(routeTablesByAZ map[string][]string, destinationCIDR st
 		return "", fmt.Errorf("marshal planned rollback targets: %w", err)
 	}
 	return string(data), nil
+}
+
+func rollbackTargetsUnknown(raw string) bool {
+	if raw == "" {
+		return true
+	}
+	var entries map[string]map[string]string
+	if err := json.Unmarshal([]byte(raw), &entries); err != nil {
+		return true
+	}
+	if len(entries) == 0 {
+		return true
+	}
+	for _, entry := range entries {
+		target := entry["target"]
+		if target == "" || target == "unknown" {
+			return true
+		}
+	}
+	return false
 }
 
 func stringDefault(value types.String, fallback string) string {

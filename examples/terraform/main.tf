@@ -10,13 +10,17 @@ provider "betternat" {}
 
 resource "betternat_gateway" "egress" {
   name   = "prod-egress"
-  cloud  = "aws"
   region = "us-west-2"
 
   vpc_id = "vpc-123"
 
-  ami_id        = "ami-0123456789abcdef0"
+  # ami_channel is the happy path once BetterNAT publishes AMI channels.
+  # ami_id remains available as an explicit override for private AMIs.
+  ami_channel   = "stable"
   instance_type = "t3.small"
+  # Keep false for production-like examples. Low-cost AWS supplement tests can
+  # override this to true when interruption risk is acceptable.
+  use_spot = false
 
   public_subnet_ids = {
     us-west-2a = "subnet-public-a"
@@ -34,6 +38,7 @@ resource "betternat_gateway" "egress" {
   fallback_datapath_engine = "nftables"
   stable_egress_ip         = true
   prometheus_enabled       = true
+  rollback_on_destroy      = true
 }
 
 output "agent_config_hash" {

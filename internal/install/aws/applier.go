@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -21,23 +23,35 @@ import (
 
 type EC2API interface {
 	AllocateAddress(ctx context.Context, params *ec2.AllocateAddressInput, optFns ...func(*ec2.Options)) (*ec2.AllocateAddressOutput, error)
+	AssociateAddress(ctx context.Context, params *ec2.AssociateAddressInput, optFns ...func(*ec2.Options)) (*ec2.AssociateAddressOutput, error)
 	CreateSecurityGroup(ctx context.Context, params *ec2.CreateSecurityGroupInput, optFns ...func(*ec2.Options)) (*ec2.CreateSecurityGroupOutput, error)
 	CreateTags(ctx context.Context, params *ec2.CreateTagsInput, optFns ...func(*ec2.Options)) (*ec2.CreateTagsOutput, error)
+	DeleteSecurityGroup(ctx context.Context, params *ec2.DeleteSecurityGroupInput, optFns ...func(*ec2.Options)) (*ec2.DeleteSecurityGroupOutput, error)
+	DescribeAddresses(ctx context.Context, params *ec2.DescribeAddressesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeAddressesOutput, error)
+	DescribeRouteTables(ctx context.Context, params *ec2.DescribeRouteTablesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error)
 	DescribeSecurityGroups(ctx context.Context, params *ec2.DescribeSecurityGroupsInput, optFns ...func(*ec2.Options)) (*ec2.DescribeSecurityGroupsOutput, error)
+	DisassociateAddress(ctx context.Context, params *ec2.DisassociateAddressInput, optFns ...func(*ec2.Options)) (*ec2.DisassociateAddressOutput, error)
 	ModifyInstanceAttribute(ctx context.Context, params *ec2.ModifyInstanceAttributeInput, optFns ...func(*ec2.Options)) (*ec2.ModifyInstanceAttributeOutput, error)
 	ReplaceRoute(ctx context.Context, params *ec2.ReplaceRouteInput, optFns ...func(*ec2.Options)) (*ec2.ReplaceRouteOutput, error)
+	ReleaseAddress(ctx context.Context, params *ec2.ReleaseAddressInput, optFns ...func(*ec2.Options)) (*ec2.ReleaseAddressOutput, error)
 	RunInstances(ctx context.Context, params *ec2.RunInstancesInput, optFns ...func(*ec2.Options)) (*ec2.RunInstancesOutput, error)
+	TerminateInstances(ctx context.Context, params *ec2.TerminateInstancesInput, optFns ...func(*ec2.Options)) (*ec2.TerminateInstancesOutput, error)
 }
 
 type DynamoDBAPI interface {
 	CreateTable(ctx context.Context, params *dynamodb.CreateTableInput, optFns ...func(*dynamodb.Options)) (*dynamodb.CreateTableOutput, error)
+	DeleteTable(ctx context.Context, params *dynamodb.DeleteTableInput, optFns ...func(*dynamodb.Options)) (*dynamodb.DeleteTableOutput, error)
 }
 
 type IAMAPI interface {
 	CreateRole(ctx context.Context, params *iam.CreateRoleInput, optFns ...func(*iam.Options)) (*iam.CreateRoleOutput, error)
 	CreateInstanceProfile(ctx context.Context, params *iam.CreateInstanceProfileInput, optFns ...func(*iam.Options)) (*iam.CreateInstanceProfileOutput, error)
 	AddRoleToInstanceProfile(ctx context.Context, params *iam.AddRoleToInstanceProfileInput, optFns ...func(*iam.Options)) (*iam.AddRoleToInstanceProfileOutput, error)
+	DeleteInstanceProfile(ctx context.Context, params *iam.DeleteInstanceProfileInput, optFns ...func(*iam.Options)) (*iam.DeleteInstanceProfileOutput, error)
+	DeleteRole(ctx context.Context, params *iam.DeleteRoleInput, optFns ...func(*iam.Options)) (*iam.DeleteRoleOutput, error)
+	DeleteRolePolicy(ctx context.Context, params *iam.DeleteRolePolicyInput, optFns ...func(*iam.Options)) (*iam.DeleteRolePolicyOutput, error)
 	PutRolePolicy(ctx context.Context, params *iam.PutRolePolicyInput, optFns ...func(*iam.Options)) (*iam.PutRolePolicyOutput, error)
+	RemoveRoleFromInstanceProfile(ctx context.Context, params *iam.RemoveRoleFromInstanceProfileInput, optFns ...func(*iam.Options)) (*iam.RemoveRoleFromInstanceProfileOutput, error)
 }
 
 type Applier struct {
@@ -52,10 +66,27 @@ type Inputs struct {
 }
 
 type Result struct {
-	AllocatedEIPs       map[string]string `json:"allocated_eips"`
-	AllocatedPublicIPs  map[string]string `json:"allocated_public_ips"`
-	InitialRouteTargets map[string]string `json:"initial_route_targets"`
-	LaunchedInstances   map[string]string `json:"launched_instances"`
+	AllocatedEIPs        map[string]string `json:"allocated_eips"`
+	AllocatedPublicIPs   map[string]string `json:"allocated_public_ips"`
+	InitialRouteTargets  map[string]string `json:"initial_route_targets"`
+	LaunchedInstances    map[string]string `json:"launched_instances"`
+	PreviousRouteTargets map[string]string `json:"previous_route_targets"`
+}
+
+type RollbackRoute struct {
+	RouteTableID    string
+	DestinationCIDR string
+	Target          string
+}
+
+type CleanupInputs struct {
+	InstanceIDs []string
+}
+
+type ReadResult struct {
+	RouteTargets              map[string]string `json:"route_targets"`
+	EgressPublicIPs           map[string]string `json:"egress_public_ips"`
+	PublicIdentityInstanceIDs map[string]string `json:"public_identity_instance_ids"`
 }
 
 func (a Applier) Apply(ctx context.Context, plan installplan.Plan, inputs Inputs) (Result, error) {
@@ -79,10 +110,11 @@ func (a Applier) Apply(ctx context.Context, plan installplan.Plan, inputs Inputs
 		return Result{}, err
 	}
 	result := Result{
-		AllocatedEIPs:       map[string]string{},
-		AllocatedPublicIPs:  map[string]string{},
-		InitialRouteTargets: map[string]string{},
-		LaunchedInstances:   map[string]string{},
+		AllocatedEIPs:        map[string]string{},
+		AllocatedPublicIPs:   map[string]string{},
+		InitialRouteTargets:  map[string]string{},
+		LaunchedInstances:    map[string]string{},
+		PreviousRouteTargets: map[string]string{},
 	}
 	instanceIDs := map[string]string{}
 	for name, id := range inputs.ApplianceInstanceIDs {
@@ -107,25 +139,330 @@ func (a Applier) Apply(ctx context.Context, plan installplan.Plan, inputs Inputs
 		if err != nil {
 			return Result{}, err
 		}
+		activeName := plan.Name + "-" + az + "-active"
+		instanceID := instanceIDs[activeName]
+		if instanceID == "" {
+			return Result{}, fmt.Errorf("missing active instance id for %s", az)
+		}
+		if err := a.associateEIP(ctx, allocationID, instanceID); err != nil {
+			return Result{}, err
+		}
 		result.AllocatedEIPs[az] = allocationID
 		result.AllocatedPublicIPs[az] = publicIP
 	}
 	for _, route := range plan.ManagedRoutes {
+		previousTarget, err := a.describeRouteTarget(ctx, route.RouteTableID, route.DestinationCIDR)
+		if err != nil {
+			return Result{}, fmt.Errorf("snapshot previous route %s: %w", route.RouteTableID, err)
+		}
+		result.PreviousRouteTargets[route.RouteTableID] = previousTarget
 		activeName := plan.Name + "-" + route.AvailabilityZone + "-active"
 		instanceID := instanceIDs[activeName]
 		if instanceID == "" {
 			return Result{}, fmt.Errorf("missing active instance id for %s", route.AvailabilityZone)
 		}
-		if _, err := a.EC2.ReplaceRoute(ctx, &ec2.ReplaceRouteInput{
-			RouteTableId:         awssdk.String(route.RouteTableID),
-			DestinationCidrBlock: awssdk.String(route.DestinationCIDR),
-			InstanceId:           awssdk.String(instanceID),
-		}); err != nil {
+		input, err := replaceRouteInput(route.RouteTableID, route.DestinationCIDR, instanceID)
+		if err != nil {
+			return Result{}, fmt.Errorf("build initial route %s: %w", route.RouteTableID, err)
+		}
+		if _, err := a.EC2.ReplaceRoute(ctx, input); err != nil {
 			return Result{}, fmt.Errorf("replace initial route %s: %w", route.RouteTableID, err)
 		}
 		result.InitialRouteTargets[route.RouteTableID] = instanceID
 	}
 	return result, nil
+}
+
+func (a Applier) RestoreRoutes(ctx context.Context, routes []RollbackRoute) error {
+	if a.EC2 == nil {
+		return fmt.Errorf("ec2 client is required")
+	}
+	for _, route := range routes {
+		input, err := replaceRouteInput(route.RouteTableID, route.DestinationCIDR, route.Target)
+		if err != nil {
+			return fmt.Errorf("build rollback route %s: %w", route.RouteTableID, err)
+		}
+		if _, err := a.EC2.ReplaceRoute(ctx, input); err != nil {
+			return fmt.Errorf("rollback route %s: %w", route.RouteTableID, err)
+		}
+	}
+	return nil
+}
+
+func (a Applier) Cleanup(ctx context.Context, plan installplan.Plan, inputs CleanupInputs) error {
+	if a.EC2 == nil {
+		return fmt.Errorf("ec2 client is required")
+	}
+	if a.DynamoDB == nil {
+		return fmt.Errorf("dynamodb client is required")
+	}
+	if a.IAM == nil {
+		return fmt.Errorf("iam client is required")
+	}
+	if err := a.terminateAppliances(ctx, inputs.InstanceIDs); err != nil {
+		return err
+	}
+	if err := a.releaseEIPs(ctx, plan); err != nil {
+		return err
+	}
+	if err := a.deleteLeaseTable(ctx, plan); err != nil {
+		return err
+	}
+	if err := a.deleteIAM(ctx, plan); err != nil {
+		return err
+	}
+	if err := a.deleteSecurityGroup(ctx, plan); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (a Applier) Read(ctx context.Context, plan installplan.Plan) (ReadResult, error) {
+	if a.EC2 == nil {
+		return ReadResult{}, fmt.Errorf("ec2 client is required")
+	}
+	result := ReadResult{
+		RouteTargets:              map[string]string{},
+		EgressPublicIPs:           map[string]string{},
+		PublicIdentityInstanceIDs: map[string]string{},
+	}
+	for _, route := range plan.ManagedRoutes {
+		target, err := a.describeRouteTarget(ctx, route.RouteTableID, route.DestinationCIDR)
+		if err != nil {
+			return ReadResult{}, fmt.Errorf("read route %s: %w", route.RouteTableID, err)
+		}
+		result.RouteTargets[route.RouteTableID] = target
+	}
+	for az, name := range plan.EIPAllocationNames {
+		addresses, err := a.describeBetterNATAddresses(ctx, plan.Name, name)
+		if err != nil {
+			return ReadResult{}, fmt.Errorf("read eip %s: %w", name, err)
+		}
+		if len(addresses) == 0 {
+			continue
+		}
+		address := addresses[0]
+		result.EgressPublicIPs[az] = awssdk.ToString(address.PublicIp)
+		result.PublicIdentityInstanceIDs[az] = awssdk.ToString(address.InstanceId)
+	}
+	return result, nil
+}
+
+func (a Applier) terminateAppliances(ctx context.Context, instanceIDs []string) error {
+	ids := uniqueNonEmpty(instanceIDs)
+	if len(ids) == 0 {
+		return nil
+	}
+	if _, err := a.EC2.TerminateInstances(ctx, &ec2.TerminateInstancesInput{InstanceIds: ids}); err != nil {
+		if isAPIError(err, "InvalidInstanceID.NotFound") {
+			return nil
+		}
+		return fmt.Errorf("terminate appliances: %w", err)
+	}
+	return nil
+}
+
+func (a Applier) releaseEIPs(ctx context.Context, plan installplan.Plan) error {
+	for _, name := range plan.EIPAllocationNames {
+		addresses, err := a.describeBetterNATAddresses(ctx, plan.Name, name)
+		if err != nil {
+			return fmt.Errorf("describe eip %s: %w", name, err)
+		}
+		for _, address := range addresses {
+			allocationID := awssdk.ToString(address.AllocationId)
+			if allocationID == "" {
+				continue
+			}
+			if associationID := awssdk.ToString(address.AssociationId); associationID != "" {
+				if _, err := a.EC2.DisassociateAddress(ctx, &ec2.DisassociateAddressInput{AssociationId: awssdk.String(associationID)}); err != nil && !isAPIError(err, "InvalidAssociationID.NotFound") {
+					return fmt.Errorf("disassociate eip %s: %w", allocationID, err)
+				}
+			}
+			if _, err := a.EC2.ReleaseAddress(ctx, &ec2.ReleaseAddressInput{AllocationId: awssdk.String(allocationID)}); err != nil {
+				if isAPIError(err, "InvalidAllocationID.NotFound") {
+					continue
+				}
+				return fmt.Errorf("release eip %s: %w", allocationID, err)
+			}
+		}
+	}
+	return nil
+}
+
+func (a Applier) describeBetterNATAddresses(ctx context.Context, gatewayName string, eipName string) ([]ec2types.Address, error) {
+	output, err := a.EC2.DescribeAddresses(ctx, &ec2.DescribeAddressesInput{
+		Filters: []ec2types.Filter{
+			{Name: awssdk.String("tag:Name"), Values: []string{eipName}},
+			{Name: awssdk.String("tag:BetterNATGateway"), Values: []string{gatewayName}},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return output.Addresses, nil
+}
+
+func (a Applier) deleteLeaseTable(ctx context.Context, plan installplan.Plan) error {
+	if plan.LeaseTableName == "" {
+		return nil
+	}
+	if _, err := a.DynamoDB.DeleteTable(ctx, &dynamodb.DeleteTableInput{TableName: awssdk.String(plan.LeaseTableName)}); err != nil {
+		if isAPIError(err, "ResourceNotFoundException") {
+			return nil
+		}
+		return fmt.Errorf("delete lease table %s: %w", plan.LeaseTableName, err)
+	}
+	return nil
+}
+
+func (a Applier) deleteIAM(ctx context.Context, plan installplan.Plan) error {
+	if plan.IAMRoleName == "" && plan.InstanceProfileName == "" {
+		return nil
+	}
+	if plan.InstanceProfileName != "" && plan.IAMRoleName != "" {
+		if _, err := a.IAM.RemoveRoleFromInstanceProfile(ctx, &iam.RemoveRoleFromInstanceProfileInput{
+			InstanceProfileName: awssdk.String(plan.InstanceProfileName),
+			RoleName:            awssdk.String(plan.IAMRoleName),
+		}); err != nil && !isAPIError(err, "NoSuchEntity") {
+			return fmt.Errorf("remove role from instance profile %s: %w", plan.InstanceProfileName, err)
+		}
+	}
+	if plan.InstanceProfileName != "" {
+		if _, err := a.IAM.DeleteInstanceProfile(ctx, &iam.DeleteInstanceProfileInput{
+			InstanceProfileName: awssdk.String(plan.InstanceProfileName),
+		}); err != nil && !isAPIError(err, "NoSuchEntity") {
+			return fmt.Errorf("delete instance profile %s: %w", plan.InstanceProfileName, err)
+		}
+	}
+	if plan.IAMRoleName != "" {
+		if _, err := a.IAM.DeleteRolePolicy(ctx, &iam.DeleteRolePolicyInput{
+			RoleName:   awssdk.String(plan.IAMRoleName),
+			PolicyName: awssdk.String("betternat-runtime"),
+		}); err != nil && !isAPIError(err, "NoSuchEntity") {
+			return fmt.Errorf("delete role policy %s: %w", plan.IAMRoleName, err)
+		}
+		if _, err := a.IAM.DeleteRole(ctx, &iam.DeleteRoleInput{
+			RoleName: awssdk.String(plan.IAMRoleName),
+		}); err != nil && !isAPIError(err, "NoSuchEntity") {
+			return fmt.Errorf("delete role %s: %w", plan.IAMRoleName, err)
+		}
+	}
+	return nil
+}
+
+func (a Applier) deleteSecurityGroup(ctx context.Context, plan installplan.Plan) error {
+	if plan.SecurityGroupName == "" {
+		return nil
+	}
+	groupID, err := a.findSecurityGroup(ctx, plan)
+	if err != nil {
+		if strings.Contains(err.Error(), "could not be described") {
+			return nil
+		}
+		return err
+	}
+	input := &ec2.DeleteSecurityGroupInput{GroupId: awssdk.String(groupID)}
+	var lastErr error
+	for attempt := 0; attempt < 12; attempt++ {
+		if _, err := a.EC2.DeleteSecurityGroup(ctx, input); err != nil {
+			if isAPIError(err, "InvalidGroup.NotFound") {
+				return nil
+			}
+			if isAPIError(err, "DependencyViolation") {
+				lastErr = err
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(5 * time.Second):
+					continue
+				}
+			}
+			return fmt.Errorf("delete security group %s: %w", groupID, err)
+		}
+		return nil
+	}
+	if lastErr != nil {
+		return fmt.Errorf("delete security group %s after dependency wait: %w", groupID, lastErr)
+	}
+	return nil
+}
+
+func replaceRouteInput(routeTableID string, destinationCIDR string, target string) (*ec2.ReplaceRouteInput, error) {
+	if routeTableID == "" {
+		return nil, fmt.Errorf("route table id is required")
+	}
+	if destinationCIDR == "" {
+		return nil, fmt.Errorf("destination cidr is required")
+	}
+	if target == "" || target == "unknown" {
+		return nil, fmt.Errorf("concrete route target is required")
+	}
+	input := &ec2.ReplaceRouteInput{
+		RouteTableId:         awssdk.String(routeTableID),
+		DestinationCidrBlock: awssdk.String(destinationCIDR),
+	}
+	switch {
+	case strings.HasPrefix(target, "i-"):
+		input.InstanceId = awssdk.String(target)
+	case strings.HasPrefix(target, "eni-"):
+		input.NetworkInterfaceId = awssdk.String(target)
+	case strings.HasPrefix(target, "nat-"):
+		input.NatGatewayId = awssdk.String(target)
+	case strings.HasPrefix(target, "tgw-"):
+		input.TransitGatewayId = awssdk.String(target)
+	case strings.HasPrefix(target, "pcx-"):
+		input.VpcPeeringConnectionId = awssdk.String(target)
+	case strings.HasPrefix(target, "eigw-"):
+		input.EgressOnlyInternetGatewayId = awssdk.String(target)
+	case strings.HasPrefix(target, "igw-"), strings.HasPrefix(target, "vgw-"):
+		input.GatewayId = awssdk.String(target)
+	default:
+		return nil, fmt.Errorf("unsupported route target %q", target)
+	}
+	return input, nil
+}
+
+func (a Applier) describeRouteTarget(ctx context.Context, routeTableID string, destinationCIDR string) (string, error) {
+	output, err := a.EC2.DescribeRouteTables(ctx, &ec2.DescribeRouteTablesInput{
+		RouteTableIds: []string{routeTableID},
+	})
+	if err != nil {
+		return "", fmt.Errorf("describe route table: %w", err)
+	}
+	for _, table := range output.RouteTables {
+		for _, route := range table.Routes {
+			if awssdk.ToString(route.DestinationCidrBlock) != destinationCIDR {
+				continue
+			}
+			target := routeTarget(route)
+			if target == "" {
+				return "", fmt.Errorf("route %s in %s has no supported target", destinationCIDR, routeTableID)
+			}
+			return target, nil
+		}
+	}
+	return "", fmt.Errorf("route %s not found", destinationCIDR)
+}
+
+func routeTarget(route ec2types.Route) string {
+	switch {
+	case route.InstanceId != nil:
+		return awssdk.ToString(route.InstanceId)
+	case route.NetworkInterfaceId != nil:
+		return awssdk.ToString(route.NetworkInterfaceId)
+	case route.NatGatewayId != nil:
+		return awssdk.ToString(route.NatGatewayId)
+	case route.GatewayId != nil:
+		return awssdk.ToString(route.GatewayId)
+	case route.TransitGatewayId != nil:
+		return awssdk.ToString(route.TransitGatewayId)
+	case route.VpcPeeringConnectionId != nil:
+		return awssdk.ToString(route.VpcPeeringConnectionId)
+	case route.EgressOnlyInternetGatewayId != nil:
+		return awssdk.ToString(route.EgressOnlyInternetGatewayId)
+	default:
+		return ""
+	}
 }
 
 func (a Applier) ensureSecurityGroup(ctx context.Context, plan installplan.Plan) (string, error) {
@@ -144,11 +481,9 @@ func (a Applier) ensureSecurityGroup(ctx context.Context, plan installplan.Plan)
 	if groupID == "" {
 		return "", fmt.Errorf("create security group %s returned empty group id", plan.SecurityGroupName)
 	}
-	tags := ec2Tags(plan.Tags)
-	tags = append(tags, ec2types.Tag{Key: awssdk.String("Name"), Value: awssdk.String(plan.SecurityGroupName)})
 	if _, err := a.EC2.CreateTags(ctx, &ec2.CreateTagsInput{
 		Resources: []string{groupID},
-		Tags:      tags,
+		Tags:      ec2TagsWithName(plan.Tags, plan.SecurityGroupName),
 	}); err != nil {
 		return "", fmt.Errorf("tag security group %s: %w", groupID, err)
 	}
@@ -191,8 +526,7 @@ func (a Applier) launchAppliance(ctx context.Context, plan installplan.Plan, app
 		TagSpecifications: []ec2types.TagSpecification{
 			{
 				ResourceType: ec2types.ResourceTypeInstance,
-				Tags: append(ec2Tags(plan.Tags),
-					ec2types.Tag{Key: awssdk.String("Name"), Value: awssdk.String(appliance.Name)},
+				Tags: append(ec2TagsWithName(plan.Tags, appliance.Name),
 					ec2types.Tag{Key: awssdk.String("BetterNATApplianceRole"), Value: awssdk.String(appliance.Role)},
 					ec2types.Tag{Key: awssdk.String("BetterNATApplianceAZ"), Value: awssdk.String(appliance.AvailabilityZone)},
 				),
@@ -202,10 +536,33 @@ func (a Applier) launchAppliance(ctx context.Context, plan installplan.Plan, app
 	if securityGroupID != "" {
 		input.SecurityGroupIds = []string{securityGroupID}
 	}
+	if plan.UseSpot {
+		input.InstanceMarketOptions = &ec2types.InstanceMarketOptionsRequest{
+			MarketType: ec2types.MarketTypeSpot,
+			SpotOptions: &ec2types.SpotMarketOptions{
+				SpotInstanceType: ec2types.SpotInstanceTypeOneTime,
+			},
+		}
+	}
 	if userData != "" {
 		input.UserData = awssdk.String(base64.StdEncoding.EncodeToString([]byte(userData)))
 	}
-	output, err := a.EC2.RunInstances(ctx, input)
+	var output *ec2.RunInstancesOutput
+	var err error
+	for attempt := 0; attempt < 12; attempt++ {
+		output, err = a.EC2.RunInstances(ctx, input)
+		if err == nil {
+			break
+		}
+		if !isInstanceProfilePropagationError(err) {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(10 * time.Second):
+		}
+	}
 	if err != nil {
 		return "", fmt.Errorf("launch appliance %s: %w", appliance.Name, err)
 	}
@@ -217,6 +574,14 @@ func (a Applier) launchAppliance(ctx context.Context, plan installplan.Plan, app
 		return "", fmt.Errorf("launch appliance %s returned empty instance id", appliance.Name)
 	}
 	return instanceID, nil
+}
+
+func isInstanceProfilePropagationError(err error) bool {
+	if !isAPIError(err, "InvalidParameterValue") {
+		return false
+	}
+	message := err.Error()
+	return strings.Contains(message, "iamInstanceProfile") || strings.Contains(message, "IAM Instance Profile")
 }
 
 func (a Applier) createIAM(ctx context.Context, plan installplan.Plan) error {
@@ -320,15 +685,41 @@ func (a Applier) allocateEIP(ctx context.Context, name string, tags map[string]s
 	if allocationID == "" {
 		return "", "", fmt.Errorf("allocate eip %s returned empty allocation id", name)
 	}
-	ec2Tags := ec2Tags(tags)
-	ec2Tags = append(ec2Tags, ec2types.Tag{Key: awssdk.String("Name"), Value: awssdk.String(name)})
 	if _, err := a.EC2.CreateTags(ctx, &ec2.CreateTagsInput{
 		Resources: []string{allocationID},
-		Tags:      ec2Tags,
+		Tags:      ec2TagsWithName(tags, name),
 	}); err != nil {
 		return "", "", fmt.Errorf("tag eip %s: %w", allocationID, err)
 	}
 	return allocationID, awssdk.ToString(output.PublicIp), nil
+}
+
+func (a Applier) associateEIP(ctx context.Context, allocationID string, instanceID string) error {
+	if allocationID == "" {
+		return fmt.Errorf("allocation id is required")
+	}
+	if instanceID == "" {
+		return fmt.Errorf("instance id is required")
+	}
+	if _, err := a.EC2.AssociateAddress(ctx, &ec2.AssociateAddressInput{
+		AllocationId:       awssdk.String(allocationID),
+		InstanceId:         awssdk.String(instanceID),
+		AllowReassociation: awssdk.Bool(true),
+	}); err != nil {
+		return fmt.Errorf("associate eip %s to %s: %w", allocationID, instanceID, err)
+	}
+	return nil
+}
+
+func ec2TagsWithName(tags map[string]string, name string) []ec2types.Tag {
+	result := make([]ec2types.Tag, 0, len(tags)+1)
+	for key, value := range tags {
+		if key == "Name" {
+			continue
+		}
+		result = append(result, ec2types.Tag{Key: awssdk.String(key), Value: awssdk.String(value)})
+	}
+	return append(result, ec2types.Tag{Key: awssdk.String("Name"), Value: awssdk.String(name)})
 }
 
 func ec2Tags(tags map[string]string) []ec2types.Tag {
@@ -351,6 +742,22 @@ func iamTags(tags map[string]string) []iamtypes.Tag {
 	result := make([]iamtypes.Tag, 0, len(tags))
 	for key, value := range tags {
 		result = append(result, iamtypes.Tag{Key: awssdk.String(key), Value: awssdk.String(value)})
+	}
+	return result
+}
+
+func uniqueNonEmpty(values []string) []string {
+	seen := map[string]struct{}{}
+	var result []string
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
 	}
 	return result
 }

@@ -32,6 +32,9 @@ type HASpec struct {
 	TTLSeconds            int
 	RenewSeconds          int
 	SharedEIPAllocationID string
+	RouteMode             string
+	RouteDestinationCIDR  string
+	RouteTargetType       string
 }
 
 type ObservabilitySpec struct {
@@ -110,10 +113,10 @@ func RenderAgentConfig(gateway GatewaySpec, appliance ApplianceSpec) (config.Con
 				RenewIntervalSeconds: defaultInt(gateway.HA.RenewSeconds, 3),
 			},
 			RouteFailover: config.RouteFailoverConfig{
-				Mode:            "replace_route",
+				Mode:            defaultString(gateway.HA.RouteMode, "replace_route"),
 				RouteTableIDs:   append([]string(nil), appliance.RouteTableIDs...),
-				DestinationCIDR: defaultString(appliance.RouteDestinationCIDR, "0.0.0.0/0"),
-				TargetType:      "instance",
+				DestinationCIDR: defaultString(appliance.RouteDestinationCIDR, defaultString(gateway.HA.RouteDestinationCIDR, "0.0.0.0/0")),
+				TargetType:      defaultString(gateway.HA.RouteTargetType, "instance"),
 			},
 			PublicIdentity: config.PublicIdentityConfig{
 				Mode:         "shared_eip",

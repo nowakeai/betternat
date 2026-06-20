@@ -17,6 +17,7 @@ func TestBuild(t *testing.T) {
 		},
 		StableEgressIP:  true,
 		AgentConfigHash: "abc123",
+		Tags:            map[string]string{"BetterNATGateway": "wrong", "BetterNATRunId": "bnat-test", "ManagedBy": "custom"},
 	})
 	if err != nil {
 		t.Fatalf("build plan: %v", err)
@@ -32,6 +33,12 @@ func TestBuild(t *testing.T) {
 	}
 	if plan.InstanceType != "t3.small" {
 		t.Fatalf("unexpected instance type: %#v", plan)
+	}
+	if plan.UseSpot {
+		t.Fatalf("use spot should default false: %#v", plan)
+	}
+	if plan.AMIChannel != "stable" {
+		t.Fatalf("unexpected ami channel: %#v", plan)
 	}
 	if plan.LeaseTableName != "betternat-prod-egress-leases" {
 		t.Fatalf("unexpected lease table: %#v", plan)
@@ -50,6 +57,58 @@ func TestBuild(t *testing.T) {
 	}
 	if plan.Tags["BetterNATAgentConfigHash"] != "abc123" {
 		t.Fatalf("missing config hash tag: %#v", plan.Tags)
+	}
+	if plan.Tags["BetterNATRunId"] != "bnat-test" {
+		t.Fatalf("missing user tag: %#v", plan.Tags)
+	}
+	if plan.Tags["ManagedBy"] != "betternat" {
+		t.Fatalf("missing managed tag: %#v", plan.Tags)
+	}
+	if plan.Tags["BetterNATGateway"] != "prod-egress" {
+		t.Fatalf("managed gateway tag should not be user-overridable: %#v", plan.Tags)
+	}
+}
+
+func TestBuildUseSpot(t *testing.T) {
+	plan, err := Build(Input{
+		Name:   "prod-egress",
+		Region: "us-west-2",
+		VPCID:  "vpc-123",
+		PublicSubnetIDs: map[string]string{
+			"us-west-2a": "subnet-public-a",
+		},
+		PrivateRouteTableIDs: map[string][]string{
+			"us-west-2a": []string{"rtb-a"},
+		},
+		UseSpot: true,
+	})
+	if err != nil {
+		t.Fatalf("build plan: %v", err)
+	}
+	if !plan.UseSpot {
+		t.Fatalf("use spot should be preserved: %#v", plan)
+	}
+}
+
+func TestBuildCustomRouteDestination(t *testing.T) {
+	plan, err := Build(Input{
+		Name:   "prod-egress",
+		Region: "us-west-2",
+		VPCID:  "vpc-123",
+		PublicSubnetIDs: map[string]string{
+			"us-west-2a": "subnet-public-a",
+		},
+		PrivateRouteTableIDs: map[string][]string{
+			"us-west-2a": []string{"rtb-a"},
+		},
+		RouteDestinationCIDR: "10.20.0.0/16",
+		RouteTargetType:      "instance",
+	})
+	if err != nil {
+		t.Fatalf("build plan: %v", err)
+	}
+	if plan.ManagedRoutes[0].DestinationCIDR != "10.20.0.0/16" {
+		t.Fatalf("unexpected route destination: %#v", plan.ManagedRoutes)
 	}
 }
 
