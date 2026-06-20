@@ -1,0 +1,26 @@
+tmp/
+
+# Local machine/editor files.
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local environment files.
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Local Terraform state and plugin cache.
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+
+# Local binaries and coverage output.
+betternat
+betternat-agent
+terraform-provider-betternat
+coverage.out

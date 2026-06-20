@@ -1,0 +1,76 @@
+{
+  "version": "v0",
+  "gateway_id": "prod-egress",
+  "ha_group_id": "prod-egress-us-west-2a",
+  "cloud": "aws",
+  "region": "us-west-2",
+  "local": {
+    "instance_id": "auto",
+    "availability_zone": "auto",
+    "primary_interface": "ens5"
+  },
+  "datapath": {
+    "engine": "loxilb",
+    "fallback_engine": "nftables",
+    "private_cidrs": ["10.0.0.0/8"],
+    "loxilb": {
+      "api_address": "127.0.0.1",
+      "api_port": 11111,
+      "snat_to": "auto",
+      "snat_interface": "ens5",
+      "rule_preference_base": 100,
+      "reconcile_interval_seconds": 10
+    },
+    "nftables": {
+      "table_name": "betternat",
+      "chain_prefix": "betternat"
+    }
+  },
+  "ha": {
+    "enabled": true,
+    "lease": {
+      "backend": "dynamodb",
+      "table": "betternat-prod-egress-leases",
+      "key": "prod-egress-us-west-2a",
+      "ttl_seconds": 10,
+      "renew_interval_seconds": 3
+    },
+    "route_failover": {
+      "mode": "replace_route",
+      "route_table_ids": ["rtb-private-a"],
+      "destination_cidr": "0.0.0.0/0",
+      "target_type": "instance"
+    },
+    "public_identity": {
+      "mode": "shared_eip",
+      "allocation_id": "eipalloc-123"
+    }
+  },
+  "observability": {
+    "prometheus": {
+      "listen_address": "0.0.0.0",
+      "listen_port": 9108
+    },
+    "attribution": {
+      "owners": [
+        {
+          "name": "default",
+          "cidrs": ["10.0.0.0/8"]
+        }
+      ]
+    },
+    "outbound_probe": {
+      "enabled": true,
+      "url": "https://checkip.amazonaws.com",
+      "expected_ip": ""
+    }
+  },
+  "rollback": {
+    "previous_route_targets": {
+      "rtb-private-a": {
+        "destination_cidr": "0.0.0.0/0",
+        "target": "nat-previous"
+      }
+    }
+  }
+}

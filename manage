@@ -1,0 +1,155 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT_DIR"
+
+export GOCACHE="${GOCACHE:-$ROOT_DIR/tmp/go-build}"
+
+usage() {
+  cat <<'USAGE'
+BetterNAT repo harness
+
+Usage:
+  ./manage help
+  ./manage test
+  ./manage verify
+  ./manage build [all|cli|agent|provider]
+  ./manage smoke [doctor|status|datapath|failover|metrics]
+  ./manage docs check
+  ./manage deps check
+  ./manage deps upgrade
+
+Notes:
+  - Go build cache defaults to tmp/go-build inside the repo.
+  - Default test/build/smoke commands do not require cloud credentials.
+  - deps check requires network access.
+USAGE
+}
+
+run_go_test() {
+  go test ./...
+}
+
+build_target() {
+  local target="${1:-all}"
+  case "$target" in
+    all)
+      go build ./cmd/betternat ./cmd/betternat-agent ./cmd/terraform-provider-betternat
+      ;;
+    cli)
+      go build ./cmd/betternat
+      ;;
+    agent)
+      go build ./cmd/betternat-agent
+      ;;
+    provider)
+      go build ./cmd/terraform-provider-betternat
+      ;;
+    *)
+      echo "unknown build target: $target" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+}
+
+smoke_target() {
+  local target="${1:-doctor}"
+  case "$target" in
+    doctor)
+      go run ./cmd/betternat doctor --config examples/agent-config.yaml
+      ;;
+    status)
+      go run ./cmd/betternat status --config examples/agent-config.yaml
+      ;;
+    datapath)
+      go run ./cmd/betternat datapath status --config examples/agent-config.yaml
+      ;;
+    failover)
+      go run ./cmd/betternat failover status --config examples/agent-config.yaml
+      ;;
+    metrics)
+      go run ./cmd/betternat-agent --config examples/agent-config.json --once --prometheus
+      ;;
+    *)
+      echo "unknown smoke target: $target" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+}
+
+docs_check() {
+  test -f README.md
+  test -f AGENTS.md
+  test -f CODEX.md
+  test -f docs/README.md
+  test -f docs/architecture.md
+  test -f docs/spec-v0.md
+  test -f docs/deployment/AI_WORKFLOW.md
+  test -f docs/deployment/DEPENDENCY_POLICY.md
+}
+
+deps_check() {
+  go list -m -u all
+}
+
+deps_upgrade() {
+  go get -u ./...
+  go mod tidy
+}
+
+case "${1:-help}" in
+  help|-h|--help)
+    usage
+    ;;
+  test)
+    run_go_test
+    ;;
+  verify)
+    run_go_test
+    build_target all
+    smoke_target doctor
+    smoke_target failover
+    docs_check
+    ;;
+  build)
+    build_target "${2:-all}"
+    ;;
+  smoke)
+    smoke_target "${2:-doctor}"
+    ;;
+  docs)
+    case "${2:-check}" in
+      check)
+        docs_check
+        ;;
+      *)
+        echo "unknown docs command: ${2:-}" >&2
+        usage >&2
+        exit 2
+        ;;
+    esac
+    ;;
+  deps)
+    case "${2:-check}" in
+      check)
+        deps_check
+        ;;
+      upgrade)
+        deps_upgrade
+        ;;
+      *)
+        echo "unknown deps command: ${2:-}" >&2
+        usage >&2
+        exit 2
+        ;;
+    esac
+    ;;
+  *)
+    echo "unknown command: ${1:-}" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
