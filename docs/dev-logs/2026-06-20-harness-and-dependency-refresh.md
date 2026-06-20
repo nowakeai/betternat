@@ -76,3 +76,16 @@ Passed:
 ./manage test
 ./manage verify
 ```
+
+Additional Linux validation on an OrbStack Ubuntu 24.04 arm64 VM:
+
+```sh
+orbctl run -m ubuntu -w /mnt/mac/Users/revol/code/fuck-nat ./manage verify
+orbctl run -m ubuntu -w /mnt/mac/Users/revol/code/fuck-nat ./scripts/linux-smoke-nftables.sh
+```
+
+Results:
+
+- Linux/arm64 `./manage verify` passed.
+- `scripts/linux-smoke-nftables.sh` passed against real nftables and conntrack.
+- The VM used Go toolchain auto-download from Ubuntu's Go 1.22 package to `go1.25.0 linux/arm64`.

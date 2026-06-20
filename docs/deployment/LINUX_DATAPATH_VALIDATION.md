@@ -86,13 +86,19 @@ The test should:
 7. remove only BetterNAT-owned rules,
 8. delete all temporary namespaces and links.
 
-This test should become an environment-agnostic script such as:
+The portable smoke script is:
 
 ```sh
 scripts/linux-smoke-nftables.sh
 ```
 
 That script should not call OrbStack, Lima, Multipass, Docker Desktop, AWS, or any personal profile directly.
+
+Run it directly on any prepared Linux host:
+
+```sh
+./scripts/linux-smoke-nftables.sh
+```
 
 ### L2: LoxiLB Local Smoke
 
