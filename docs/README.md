@@ -18,6 +18,7 @@ This index is ordered by planning priority, not just by folder name.
 
 - [deployment/AI_WORKFLOW.md](deployment/AI_WORKFLOW.md) — AI-assisted workflow, validation ladder, documentation update rules, and product bias.
 - [deployment/DEPENDENCY_POLICY.md](deployment/DEPENDENCY_POLICY.md) — Dependency freshness, mature-component preference, and upgrade policy.
+- [deployment/LINUX_DATAPATH_VALIDATION.md](deployment/LINUX_DATAPATH_VALIDATION.md) — Environment-agnostic Linux validation plan for nftables, conntrack, and LoxiLB.
 
 ### Development Logs
 

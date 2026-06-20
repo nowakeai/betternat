@@ -11,6 +11,7 @@ New durable entrypoints:
 - `manage`
 - `docs/deployment/AI_WORKFLOW.md`
 - `docs/deployment/DEPENDENCY_POLICY.md`
+- `docs/deployment/LINUX_DATAPATH_VALIDATION.md`
 - `docs/dev-logs/README.md`
 
 Updated:
@@ -23,12 +24,18 @@ Updated:
 
 ## Harness Principles
 
-- Use `./manage` for recurring workflows.
+- Use `./manage` where it is convenient, without making it the only supported workflow.
+- Treat `./manage` as a convenience wrapper, not the only supported entrypoint.
+- Keep portable direct commands documented for core workflows.
 - Keep default validation network-free.
 - Use `tmp/go-build` for Go build cache.
 - Prefer mature components and official SDKs.
 - Prefer current supported dependency versions.
 - Keep docs under `docs/` and update `docs/README.md` for durable docs.
+
+Follow-up adjustment:
+
+- Linux datapath validation was split into an environment-agnostic doc. OrbStack is documented only as an example runner, not as the required developer environment.
 
 ## Dependency Refresh
 

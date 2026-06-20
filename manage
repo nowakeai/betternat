@@ -10,6 +10,9 @@ usage() {
   cat <<'USAGE'
 BetterNAT repo harness
 
+This is a convenience wrapper for common local checks. Direct Go/Linux/Terraform
+commands are first-class and should be documented for portable workflows.
+
 Usage:
   ./manage help
   ./manage test
@@ -89,6 +92,7 @@ docs_check() {
   test -f docs/spec-v0.md
   test -f docs/deployment/AI_WORKFLOW.md
   test -f docs/deployment/DEPENDENCY_POLICY.md
+  test -f docs/deployment/LINUX_DATAPATH_VALIDATION.md
 }
 
 deps_check() {

@@ -22,17 +22,7 @@ Start with:
 
 ## Development
 
-The repo-local harness is `./manage`:
-
-```sh
-./manage help
-./manage test
-./manage verify
-./manage smoke doctor
-./manage deps check
-```
-
-Use `./manage` for recurring local workflows. Direct Go commands are still useful for focused work.
+Use direct Go commands as the portable baseline.
 
 Run tests:
 
@@ -47,6 +37,18 @@ Build the Terraform provider:
 ```sh
 GOCACHE=$PWD/tmp/go-build go build ./cmd/terraform-provider-betternat
 ```
+
+The repo-local `./manage` script is an optional convenience wrapper:
+
+```sh
+./manage help
+./manage test
+./manage verify
+./manage smoke doctor
+./manage deps check
+```
+
+Do not treat `./manage` as the only supported path. Durable docs should include direct commands when the workflow must be portable across macOS, Linux, CI, and different VM tools.
 
 An example provider configuration lives in `examples/terraform/main.tf`. The provider computes `install_plan_json`, `agent_config_json`, `agent_config_hash`, `user_data`, route metadata, and rollback metadata, then uses the AWS SDK during Terraform apply to install the BetterNAT appliance stack.
 
@@ -104,4 +106,5 @@ Durable docs live under `docs/`.
 - `docs/README.md` is the documentation index.
 - `docs/deployment/AI_WORKFLOW.md` defines the harness and validation workflow.
 - `docs/deployment/DEPENDENCY_POLICY.md` defines dependency freshness and reuse policy.
+- `docs/deployment/LINUX_DATAPATH_VALIDATION.md` defines environment-agnostic Linux datapath validation.
 - `docs/dev-logs/` is for durable implementation notes and architecture pivots.

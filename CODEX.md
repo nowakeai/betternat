@@ -9,7 +9,7 @@ Repository bootstrap notes for Codex sessions.
 3. Read `docs/README.md`.
 4. Check current worktree state if Git metadata is available.
 5. Use `rg` to inspect relevant code paths before editing.
-6. For recurring workflows, check `./manage help` before inventing a one-off command.
+6. Prefer direct portable commands for canonical workflows; use `./manage help` for repo-local shortcuts.
 
 ## Project Snapshot
 
@@ -40,6 +40,17 @@ Repository bootstrap notes for Codex sessions.
 
 ## Local Commands
 
+Direct portable commands are the canonical form:
+
+```sh
+GOCACHE=$PWD/tmp/go-build go test ./...
+GOCACHE=$PWD/tmp/go-build go build ./cmd/betternat ./cmd/betternat-agent ./cmd/terraform-provider-betternat
+GOCACHE=$PWD/tmp/go-build go run ./cmd/betternat doctor --config examples/agent-config.yaml
+GOCACHE=$PWD/tmp/go-build go run ./cmd/betternat failover status --config examples/agent-config.yaml
+```
+
+`./manage` provides optional convenience wrappers:
+
 ```sh
 ./manage help
 ./manage test
@@ -51,17 +62,10 @@ Repository bootstrap notes for Codex sessions.
 ./manage deps upgrade
 ```
 
-Equivalent direct Go commands should keep build artifacts in the workspace:
-
-```sh
-GOCACHE=$PWD/tmp/go-build go test ./...
-GOCACHE=$PWD/tmp/go-build go build ./cmd/betternat ./cmd/betternat-agent ./cmd/terraform-provider-betternat
-```
-
 ## Environment Assumptions
 
 - macOS can run unit tests, provider builds, and static CLI smoke checks.
-- Linux is required for real LoxiLB/nftables datapath execution.
+- Linux is required for real LoxiLB/nftables datapath execution. Any suitable Linux host is acceptable; OrbStack is only one local option.
 - AWS integration tests must use isolated disposable resources and explicit cleanup.
 - Network-dependent dependency checks may require the local proxy configured outside the sandbox.
 
@@ -77,8 +81,8 @@ GOCACHE=$PWD/tmp/go-build go build ./cmd/betternat ./cmd/betternat-agent ./cmd/t
 ## Suggested Validation
 
 - Docs-only change: inspect links and run `./manage docs check` when applicable.
-- Go logic change: `./manage test`.
-- Provider/install change: `./manage verify`.
-- CLI behavior change: `./manage smoke doctor` plus the relevant targeted smoke.
+- Go logic change: `GOCACHE=$PWD/tmp/go-build go test ./...` or `./manage test`.
+- Provider/install change: direct test/build/smoke sequence or `./manage verify`.
+- CLI behavior change: direct `go run ./cmd/betternat ...` smoke plus the relevant targeted smoke.
 - Datapath change: unit tests locally, then Linux validation.
 - AWS route/EIP/install change: local fakes first, then isolated AWS spike with cleanup.

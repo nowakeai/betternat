@@ -52,15 +52,17 @@ Avoid:
 
 Use the lightest useful validation first:
 
-1. `./manage test`
-2. `./manage build all`
-3. `./manage smoke doctor`
-4. `./manage smoke failover`
-5. `./manage verify`
+1. `GOCACHE=$PWD/tmp/go-build go test ./...`
+2. `GOCACHE=$PWD/tmp/go-build go build ./cmd/betternat ./cmd/betternat-agent ./cmd/terraform-provider-betternat`
+3. `GOCACHE=$PWD/tmp/go-build go run ./cmd/betternat doctor --config examples/agent-config.yaml`
+4. `GOCACHE=$PWD/tmp/go-build go run ./cmd/betternat failover status --config examples/agent-config.yaml`
+5. Optional shortcut: `./manage verify`
 6. Linux datapath validation for real LoxiLB/nftables behavior.
 7. Isolated AWS integration validation for route/EIP/EC2 behavior.
 
-Equivalent direct commands:
+`./manage` is a convenience wrapper around common checks. It should not be the only documented path for a workflow.
+
+Common direct commands:
 
 ```sh
 GOCACHE=$PWD/tmp/go-build go test ./...
@@ -75,6 +77,7 @@ GOCACHE=$PWD/tmp/go-build go run ./cmd/betternat failover status --config exampl
 - Do not require network access for the default test loop.
 - macOS validation should rely on unit tests, fakes, provider builds, and static CLI smoke checks.
 - Real datapath validation requires Linux with LoxiLB/nftables/conntrack available.
+- Linux validation must be environment-agnostic. It may run on OrbStack, Lima, Multipass, Docker-in-VM, a bare Linux host, or EC2, but core scripts and docs must not require one developer-specific VM product.
 - Real AWS validation must use isolated test resources and explicit cleanup.
 
 ## Documentation Update Rules
@@ -95,6 +98,7 @@ Preferred destinations:
 - architecture and v0 behavior: `docs/architecture.md`, `docs/spec-v0.md`, `docs/architecture-diagram.md`
 - evidence and spikes: `docs/research/`
 - workflow, dependencies, releases, operations: `docs/deployment/`
+- Linux datapath validation: `docs/deployment/LINUX_DATAPATH_VALIDATION.md`
 - implementation notes and pivots: `docs/dev-logs/`
 
 When adding a durable doc, update `docs/README.md`.

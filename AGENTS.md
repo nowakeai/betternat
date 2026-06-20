@@ -40,16 +40,19 @@ This repository is BetterNAT: a self-owned, observable, highly available egress 
 - Use `rg` and focused file reads before editing.
 - Use `apply_patch` for manual file edits.
 - Validate behavior after meaningful changes instead of stopping at static inspection.
-- Prefer extending `./manage` for recurring workflows instead of adding scattered one-off scripts.
-- If a workflow is useful more than once, either wire it into `./manage` or document why it remains manual.
+- Prefer portable direct commands and scripts for core workflows.
+- Use `./manage` as a convenience wrapper for common local checks, not as the only supported entrypoint.
+- Do not bake a developer-specific environment such as OrbStack, Lima, Multipass, Docker Desktop, or a personal AWS profile into core harness behavior.
+- If a workflow is useful more than once, either document the portable command or add a small environment-agnostic script. Add `./manage` wrappers only when they remain clearly optional.
 
 ## Operations Harness
 
-- The canonical repo-local entrypoint is `./manage`.
-- Use `./manage help` to discover commands.
-- Use `./manage test` for the default local validation loop.
-- Use `./manage verify` before considering a broad implementation change complete.
-- Use `./manage deps check` for dependency freshness checks when network access is available.
+- Standard Go, Terraform, shell, and Linux commands are first-class entrypoints.
+- `./manage` is a repo-local convenience wrapper for common checks.
+- Use `./manage help` to discover convenience commands, but document direct portable commands in durable docs.
+- Use `GOCACHE=$PWD/tmp/go-build go test ./...` for the default local validation loop.
+- Use `./manage verify` or the equivalent direct command sequence before considering a broad implementation change complete.
+- Use `./manage deps check` or `go list -m -u all` for dependency freshness checks when network access is available.
 - Commands that create cloud resources must be explicit and must document cleanup behavior before they are added.
 
 ## Files And Ownership
@@ -75,7 +78,7 @@ Use the lightest useful validation first, then escalate when the touched area re
 1. `GOCACHE=$PWD/tmp/go-build go test ./...`
 2. `GOCACHE=$PWD/tmp/go-build go build ./cmd/betternat ./cmd/betternat-agent ./cmd/terraform-provider-betternat`
 3. Targeted CLI smoke checks, for example `./manage smoke doctor`.
-4. Linux-only datapath validation on a Linux host or EC2 appliance.
+4. Linux-only datapath validation on any suitable Linux host or EC2 appliance.
 5. AWS integration/spike validation only when the task requires cloud behavior and cleanup is explicit.
 
 ## Documentation Rules
