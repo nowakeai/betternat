@@ -145,8 +145,8 @@ GOCACHE=$PWD/tmp/go-build go test ./...
 For VM products that support executing a command from the host, pass the same direct command through the VM tool. For example, with OrbStack:
 
 ```sh
-orbctl run -m ubuntu -w /mnt/mac/Users/<user>/code/fuck-nat \
-  GOCACHE=/mnt/mac/Users/<user>/code/fuck-nat/tmp/go-build go test ./...
+orbctl run -m ubuntu -w <repo-on-linux> \
+  GOCACHE=<repo-on-linux>/tmp/go-build go test ./...
 ```
 
 The OrbStack command is only an example. Do not encode it into the core test script.

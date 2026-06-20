@@ -17,6 +17,7 @@ This index is ordered by planning priority, not just by folder name.
 ### Workflow And Harness
 
 - [deployment/AI_WORKFLOW.md](deployment/AI_WORKFLOW.md) — AI-assisted workflow, validation ladder, documentation update rules, and product bias.
+- [deployment/AWS_TEST_PLAN.md](deployment/AWS_TEST_PLAN.md) — AWS-only integration test plan for route replacement, EIP failover, DynamoDB lease, LoxiLB on EC2, public egress, rollback, and cleanup.
 - [deployment/DEPENDENCY_POLICY.md](deployment/DEPENDENCY_POLICY.md) — Dependency freshness, mature-component preference, and upgrade policy.
 - [deployment/LOCAL_VM_TEST_MATRIX.md](deployment/LOCAL_VM_TEST_MATRIX.md) — Complete local VM test matrix: single-VM, multi-VM, datapath, agent, HA simulation, and AWS boundaries.
 - [deployment/LINUX_DATAPATH_VALIDATION.md](deployment/LINUX_DATAPATH_VALIDATION.md) — Environment-agnostic Linux validation plan for nftables, conntrack, and LoxiLB.
@@ -32,6 +33,7 @@ Read these first when revisiting product or architecture direction:
 
 - [research/021-loxilb-spike-results.md](research/021-loxilb-spike-results.md) — Initial AWS LoxiLB egress NAT spike.
 - [research/022-loxilb-extended-spike-results.md](research/022-loxilb-extended-spike-results.md) — Extended LoxiLB validation: DNS/UDP, downloads, concurrent flows, failover, and persistence caveats.
+- [research/023-aws-integration-test-results.md](research/023-aws-integration-test-results.md) — AWS integration test: isolated VPC, LoxiLB on EC2, private egress, EIP/route failover, DynamoDB fencing, and cleanup.
 - [research/017-loxilb-evaluation.md](research/017-loxilb-evaluation.md) — LoxiLB as the primary BetterNAT datapath candidate.
 - [research/016-mvp-scope-milestones.md](research/016-mvp-scope-milestones.md) — MVP scope and milestone planning.
 - [research/019-target-workloads.md](research/019-target-workloads.md) — Target workloads and cost pain: crawlers, EKS image pulls, blockchain/RPC nodes, and high-response-volume downloads.
