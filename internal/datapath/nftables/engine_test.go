@@ -23,7 +23,7 @@ func TestReconcileAddsMissingMasqueradeRules(t *testing.T) {
 	if !runner.hasCall("nft add table inet betternat") {
 		t.Fatalf("missing add table call: %#v", runner.calls)
 	}
-	if !runner.hasCall("nft add rule inet betternat betternat_postrouting ip saddr 10.0.0.0/8 counter masquerade comment betternat:10.0.0.0/8") {
+	if !runner.hasCall("nft add rule inet betternat betternat_postrouting ip saddr 10.0.0.0/8 counter masquerade comment \"betternat:10.0.0.0/8\"") {
 		t.Fatalf("missing masquerade rule call: %#v", runner.calls)
 	}
 }

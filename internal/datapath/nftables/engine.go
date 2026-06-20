@@ -70,7 +70,7 @@ func (e *Engine) Reconcile(ctx context.Context, cfg config.DatapathConfig) error
 		if strings.Contains(string(ruleset), `comment "`+comment+`"`) {
 			continue
 		}
-		if _, err := e.runner.Run(ctx, "nft", "add", "rule", "inet", table, chain, "ip", "saddr", cidr, "counter", "masquerade", "comment", comment); err != nil {
+		if _, err := e.runner.Run(ctx, "nft", "add", "rule", "inet", table, chain, "ip", "saddr", cidr, "counter", "masquerade", "comment", strconv.Quote(comment)); err != nil {
 			return fmt.Errorf("nft add masquerade rule for %s: %w", cidr, err)
 		}
 	}
