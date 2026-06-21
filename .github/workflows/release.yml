@@ -87,17 +87,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          notes_file="docs/user/RELEASE_NOTES_${VERSION}.md"
-          if [[ ! -f "$notes_file" ]]; then
-            notes_file="$(mktemp)"
-            {
-              echo "# BetterNAT ${VERSION}"
-              echo
-              echo "Release assets are attached below. Verify downloads with SHA256SUMS."
-            } > "$notes_file"
-          fi
-
-          args=(--title "$VERSION" --notes-file "$notes_file")
+          args=(--title "$VERSION")
           if [[ "$PRERELEASE" == "true" ]]; then
             args+=(--prerelease)
           fi
@@ -105,7 +95,10 @@ jobs:
           if gh release view "$VERSION" >/dev/null 2>&1; then
             gh release edit "$VERSION" "${args[@]}"
           else
-            gh release create "$VERSION" "${args[@]}"
+            gh release create "$VERSION" \
+              --generate-notes \
+              --notes "Release assets are attached below. Verify downloads with SHA256SUMS." \
+              "${args[@]}"
           fi
 
       - name: Upload release assets
@@ -116,15 +109,15 @@ jobs:
         run: |
           gh release upload "$VERSION" "dist/$VERSION"/* --clobber
 
-      - name: Verify release asset URLs
+      - name: Verify release assets
         env:
+          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
 
-          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION}"
-          assets=(
+          expected=(
             "betternat-agent_${VERSION}_linux_arm64"
             "betternat-agent_${VERSION}_linux_amd64"
             "betternat_${VERSION}_linux_arm64"
@@ -134,6 +127,8 @@ jobs:
             "manifest.json"
           )
 
-          for asset in "${assets[@]}"; do
-            curl -fsSI "$base/$asset" >/dev/null
+          gh release view "$VERSION" --json assets --jq '.assets[].name' > /tmp/betternat-release-assets.txt
+
+          for asset in "${expected[@]}"; do
+            grep -Fx "$asset" /tmp/betternat-release-assets.txt >/dev/null
           done
