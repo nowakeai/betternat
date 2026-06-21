@@ -17,9 +17,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"github.com/betternat/betternat/internal/bootstrap"
-	"github.com/betternat/betternat/internal/installplan"
-	"github.com/betternat/betternat/internal/provider"
+	"github.com/nowakeai/betternat/internal/bootstrap"
+	"github.com/nowakeai/betternat/internal/installplan"
+	"github.com/nowakeai/betternat/internal/provider"
 )
 
 var _ resource.Resource = (*GatewayResource)(nil)

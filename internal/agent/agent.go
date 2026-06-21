@@ -11,16 +11,16 @@ import (
 	"os"
 	"time"
 
-	"github.com/betternat/betternat/internal/buildinfo"
-	"github.com/betternat/betternat/internal/cloud"
-	awscloud "github.com/betternat/betternat/internal/cloud/aws"
-	"github.com/betternat/betternat/internal/config"
-	"github.com/betternat/betternat/internal/datapath"
-	"github.com/betternat/betternat/internal/datapath/loxilb"
-	"github.com/betternat/betternat/internal/datapath/nftables"
-	"github.com/betternat/betternat/internal/ha"
-	dynamodblease "github.com/betternat/betternat/internal/lease/dynamodb"
-	"github.com/betternat/betternat/internal/metrics"
+	"github.com/nowakeai/betternat/internal/buildinfo"
+	"github.com/nowakeai/betternat/internal/cloud"
+	awscloud "github.com/nowakeai/betternat/internal/cloud/aws"
+	"github.com/nowakeai/betternat/internal/config"
+	"github.com/nowakeai/betternat/internal/datapath"
+	"github.com/nowakeai/betternat/internal/datapath/loxilb"
+	"github.com/nowakeai/betternat/internal/datapath/nftables"
+	"github.com/nowakeai/betternat/internal/ha"
+	dynamodblease "github.com/nowakeai/betternat/internal/lease/dynamodb"
+	"github.com/nowakeai/betternat/internal/metrics"
 )
 
 type Options struct {

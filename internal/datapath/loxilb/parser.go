@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/betternat/betternat/internal/datapath"
+	"github.com/nowakeai/betternat/internal/datapath"
 )
 
 type firewallResponse struct {

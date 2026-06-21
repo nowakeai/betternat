@@ -3,7 +3,7 @@ package agent
 import (
 	"testing"
 
-	"github.com/betternat/betternat/internal/config"
+	"github.com/nowakeai/betternat/internal/config"
 )
 
 func TestDefaultEngineFactorySelectsLoxiLB(t *testing.T) {

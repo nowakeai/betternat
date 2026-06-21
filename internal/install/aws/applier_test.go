@@ -13,7 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/smithy-go"
 
-	"github.com/betternat/betternat/internal/installplan"
+	"github.com/nowakeai/betternat/internal/installplan"
 )
 
 func TestApply(t *testing.T) {

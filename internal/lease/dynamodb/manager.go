@@ -10,7 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
-	"github.com/betternat/betternat/internal/lease"
+	"github.com/nowakeai/betternat/internal/lease"
 )
 
 type DynamoDBAPI interface {

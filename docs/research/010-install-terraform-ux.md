@@ -202,7 +202,7 @@ Provider configuration:
 terraform {
   required_providers {
     betternat = {
-      source  = "betternat/betternat"
+      source  = "nowakeai/betternat"
       version = "~> 0.1"
     }
   }

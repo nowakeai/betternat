@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/betternat/betternat/internal/cloud"
-	"github.com/betternat/betternat/internal/datapath"
-	"github.com/betternat/betternat/internal/iamcheck"
-	"github.com/betternat/betternat/internal/lease"
-	"github.com/betternat/betternat/internal/probe"
+	"github.com/nowakeai/betternat/internal/cloud"
+	"github.com/nowakeai/betternat/internal/datapath"
+	"github.com/nowakeai/betternat/internal/iamcheck"
+	"github.com/nowakeai/betternat/internal/lease"
+	"github.com/nowakeai/betternat/internal/probe"
 )
 
 type Status string

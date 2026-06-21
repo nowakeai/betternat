@@ -35,9 +35,9 @@ OUT_DIR="${BETTERNAT_RELEASE_DIR:-$ROOT_DIR/tmp/release/$VERSION}"
 mkdir -p "$OUT_DIR"
 
 LDFLAGS="-s -w"
-LDFLAGS="$LDFLAGS -X github.com/betternat/betternat/internal/buildinfo.Version=$VERSION"
-LDFLAGS="$LDFLAGS -X github.com/betternat/betternat/internal/buildinfo.Commit=$COMMIT"
-LDFLAGS="$LDFLAGS -X github.com/betternat/betternat/internal/buildinfo.Date=$BUILD_DATE"
+LDFLAGS="$LDFLAGS -X github.com/nowakeai/betternat/internal/buildinfo.Version=$VERSION"
+LDFLAGS="$LDFLAGS -X github.com/nowakeai/betternat/internal/buildinfo.Commit=$COMMIT"
+LDFLAGS="$LDFLAGS -X github.com/nowakeai/betternat/internal/buildinfo.Date=$BUILD_DATE"
 
 build_go() {
   local goos="$1"

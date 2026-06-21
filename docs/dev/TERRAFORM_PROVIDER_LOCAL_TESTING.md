@@ -54,7 +54,7 @@ Create a CLI config outside the repo, for example:
 ```hcl
 provider_installation {
   dev_overrides {
-    "betternat/betternat" = "<absolute-path-to-repo>"
+    "nowakeai/betternat" = "<absolute-path-to-repo>"
   }
 
   direct {}
@@ -162,7 +162,7 @@ Provider development override example:
 ```hcl
 provider_installation {
   dev_overrides {
-    "betternat/betternat" = "<repo-root>"
+    "nowakeai/betternat" = "<repo-root>"
   }
 
   direct {}

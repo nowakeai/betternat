@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/betternat/betternat/internal/config"
+	"github.com/nowakeai/betternat/internal/config"
 )
 
 func TestStaticCheckersOKWithWarningForMissingRollback(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/betternat/betternat/internal/datapath"
+	"github.com/nowakeai/betternat/internal/datapath"
 )
 
 // Exporter serves BetterNAT metrics.

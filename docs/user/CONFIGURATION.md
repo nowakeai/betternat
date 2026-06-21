@@ -6,6 +6,21 @@ Date: 2026-06-21
 
 Use `betternat_gateway` to deploy the alpha AWS gateway stack.
 
+Provider version is specified in Terraform/OpenTofu `required_providers`, not on the resource itself:
+
+```hcl
+terraform {
+  required_providers {
+    betternat = {
+      source  = "nowakeai/betternat"
+      version = "= 0.1.0-alpha.1"
+    }
+  }
+}
+```
+
+The gateway runtime version is separate from the provider version. In the first alpha, runtime version is controlled by the `agent_binary_url`, `agent_binary_sha256`, `cli_binary_url`, and `cli_binary_sha256` bootstrap fields. A future `betternat_version` field should let the provider derive those release artifacts automatically.
+
 ### Required
 
 | Name | Description |
@@ -29,6 +44,12 @@ Use `betternat_gateway` to deploy the alpha AWS gateway stack.
 | `cli_binary_sha256` | SHA256 checksum for the CLI artifact. |
 | `loxicmd_binary_url` | Optional URL for a host `loxicmd` binary. If empty, bootstrap installs a Docker wrapper. |
 | `loxicmd_binary_sha256` | Optional checksum for `loxicmd_binary_url`. |
+
+Planned P1 convenience field:
+
+| Name | Description |
+| --- | --- |
+| `betternat_version` | Future runtime version selector. The provider should use it to resolve BetterNAT agent/CLI release artifacts or AMIs. |
 
 Launch templates created by the provider require IMDSv2 and set the metadata hop limit to `1`.
 

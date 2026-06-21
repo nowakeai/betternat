@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/betternat/betternat/internal/datapath"
+	"github.com/nowakeai/betternat/internal/datapath"
 )
 
 func TestRenderPrometheus(t *testing.T) {

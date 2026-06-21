@@ -3,7 +3,7 @@ package datapath
 import (
 	"context"
 
-	"github.com/betternat/betternat/internal/config"
+	"github.com/nowakeai/betternat/internal/config"
 )
 
 // Engine reconciles and reports a local NAT datapath implementation.

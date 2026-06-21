@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/betternat/betternat/internal/config"
-	"github.com/betternat/betternat/internal/datapath"
-	"github.com/betternat/betternat/internal/localnet"
+	"github.com/nowakeai/betternat/internal/config"
+	"github.com/nowakeai/betternat/internal/datapath"
+	"github.com/nowakeai/betternat/internal/localnet"
 )
 
 type Engine struct {

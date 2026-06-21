@@ -8,7 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 
-	"github.com/betternat/betternat/internal/cloud"
+	"github.com/nowakeai/betternat/internal/cloud"
 )
 
 func TestReplaceRouteUsesInstanceTarget(t *testing.T) {

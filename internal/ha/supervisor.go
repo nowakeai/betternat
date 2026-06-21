@@ -6,8 +6,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/betternat/betternat/internal/config"
-	"github.com/betternat/betternat/internal/lease"
+	"github.com/nowakeai/betternat/internal/config"
+	"github.com/nowakeai/betternat/internal/lease"
 )
 
 type State string

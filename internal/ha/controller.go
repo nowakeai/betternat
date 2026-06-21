@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/betternat/betternat/internal/cloud"
-	"github.com/betternat/betternat/internal/config"
-	"github.com/betternat/betternat/internal/datapath"
-	"github.com/betternat/betternat/internal/lease"
-	"github.com/betternat/betternat/internal/probe"
+	"github.com/nowakeai/betternat/internal/cloud"
+	"github.com/nowakeai/betternat/internal/config"
+	"github.com/nowakeai/betternat/internal/datapath"
+	"github.com/nowakeai/betternat/internal/lease"
+	"github.com/nowakeai/betternat/internal/probe"
 )
 
 type Controller struct {

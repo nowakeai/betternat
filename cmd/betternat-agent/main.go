@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/betternat/betternat/internal/agent"
+	"github.com/nowakeai/betternat/internal/agent"
 )
 
 func main() {

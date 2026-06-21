@@ -9,7 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/iam/types"
 
-	"github.com/betternat/betternat/internal/iamcheck"
+	"github.com/nowakeai/betternat/internal/iamcheck"
 )
 
 type IAMAPI interface {

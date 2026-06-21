@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/betternat/betternat/internal/cloud"
-	"github.com/betternat/betternat/internal/config"
+	"github.com/nowakeai/betternat/internal/cloud"
+	"github.com/nowakeai/betternat/internal/config"
 )
 
 func TestSnapshotRoutes(t *testing.T) {

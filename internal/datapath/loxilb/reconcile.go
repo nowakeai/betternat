@@ -6,7 +6,7 @@ import (
 	"net"
 	"strconv"
 
-	"github.com/betternat/betternat/internal/config"
+	"github.com/nowakeai/betternat/internal/config"
 )
 
 type desiredRule struct {

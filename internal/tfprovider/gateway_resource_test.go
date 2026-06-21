@@ -9,8 +9,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	awsinstall "github.com/betternat/betternat/internal/install/aws"
-	"github.com/betternat/betternat/internal/installplan"
+	awsinstall "github.com/nowakeai/betternat/internal/install/aws"
+	"github.com/nowakeai/betternat/internal/installplan"
 )
 
 func TestDeriveGatewayState(t *testing.T) {

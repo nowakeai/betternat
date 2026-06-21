@@ -570,6 +570,12 @@ P1 items are not required to publish the first alpha, but they should be priorit
 - [ ] Document Terraform provider installation for users who are not building from source.
 - [ ] Decide whether provider binaries are distributed through GitHub Releases only or later through the Terraform Registry.
 - [ ] Add a release smoke test that deploys using GitHub Release URLs instead of temporary S3 URLs.
+- [ ] Create `github.com/nowakeai/terraform-provider-betternat` for Registry-compatible provider publishing.
+- [ ] Extract provider-consumed main-repo code out of `internal/` or otherwise make the provider repo self-contained.
+- [ ] Add provider-specific GoReleaser or equivalent workflow for Terraform Registry artifact format.
+- [ ] Configure provider checksum signing.
+- [ ] Test provider install through Terraform.
+- [ ] Test provider install through OpenTofu or document it as unsupported.
 
 ### Operations And Observability
 

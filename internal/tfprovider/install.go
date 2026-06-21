@@ -14,8 +14,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	awsinstall "github.com/betternat/betternat/internal/install/aws"
-	"github.com/betternat/betternat/internal/installplan"
+	awsinstall "github.com/nowakeai/betternat/internal/install/aws"
+	"github.com/nowakeai/betternat/internal/installplan"
 )
 
 type Installer interface {

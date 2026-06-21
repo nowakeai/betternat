@@ -20,7 +20,7 @@ import (
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
 	"github.com/aws/smithy-go"
 
-	"github.com/betternat/betternat/internal/installplan"
+	"github.com/nowakeai/betternat/internal/installplan"
 )
 
 type EC2API interface {

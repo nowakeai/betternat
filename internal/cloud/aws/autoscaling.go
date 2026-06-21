@@ -8,7 +8,7 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
 
-	"github.com/betternat/betternat/internal/cloud"
+	"github.com/nowakeai/betternat/internal/cloud"
 )
 
 type AutoScalingAPI interface {

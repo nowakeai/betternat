@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/betternat/betternat/internal/lease"
+	"github.com/nowakeai/betternat/internal/lease"
 )
 
 type StatusSnapshot struct {

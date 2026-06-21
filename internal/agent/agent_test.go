@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/betternat/betternat/internal/config"
-	"github.com/betternat/betternat/internal/datapath"
-	"github.com/betternat/betternat/internal/ha"
-	"github.com/betternat/betternat/internal/lease"
+	"github.com/nowakeai/betternat/internal/config"
+	"github.com/nowakeai/betternat/internal/datapath"
+	"github.com/nowakeai/betternat/internal/ha"
+	"github.com/nowakeai/betternat/internal/lease"
 )
 
 type fakeFactory struct {

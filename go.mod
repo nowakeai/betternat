@@ -1,4 +1,4 @@
-module github.com/betternat/betternat
+module github.com/nowakeai/betternat
 
 go 1.25.0
 

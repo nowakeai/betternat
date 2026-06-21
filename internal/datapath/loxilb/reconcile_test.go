@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/betternat/betternat/internal/config"
+	"github.com/nowakeai/betternat/internal/config"
 )
 
 type fakeRunner struct {
