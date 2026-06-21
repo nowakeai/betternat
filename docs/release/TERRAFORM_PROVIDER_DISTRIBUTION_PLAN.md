@@ -300,6 +300,19 @@ Current validation:
 ```text
 Terraform v1.15.6 local dev override validate: passed
 OpenTofu v1.12.3 local dev override validate: passed
+Terraform v1.15.6 filesystem mirror install + validate from provider release zip: passed
+OpenTofu v1.12.3 filesystem mirror install + validate from provider release zip: passed when source explicitly uses registry.terraform.io/nowakeai/betternat
+```
+
+Important OpenTofu source-address note:
+
+- Terraform resolves `source = "nowakeai/betternat"` as `registry.terraform.io/nowakeai/betternat`.
+- OpenTofu resolves `source = "nowakeai/betternat"` as `registry.opentofu.org/nowakeai/betternat`.
+- Current provider binary is served with address `registry.terraform.io/nowakeai/betternat`.
+- Until BetterNAT is published through an OpenTofu-native registry path, OpenTofu examples should use the explicit source:
+
+```hcl
+source = "registry.terraform.io/nowakeai/betternat"
 ```
 
 Before production:

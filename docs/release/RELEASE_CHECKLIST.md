@@ -579,7 +579,10 @@ P1 items are not required to publish the first alpha, but they should be priorit
 - [ ] Test provider install through Terraform.
 - [x] Test provider local dev override through Terraform.
 - [x] Test provider local dev override through OpenTofu.
-- [ ] Test provider install through OpenTofu registry-compatible release artifacts or document it as unsupported.
+- [x] Test provider filesystem mirror install through Terraform release zip.
+- [x] Test provider filesystem mirror install through OpenTofu release zip with explicit `registry.terraform.io/nowakeai/betternat` source.
+- [ ] Publish and test provider through Terraform Registry.
+- [ ] Publish and test provider through OpenTofu-native registry path or document explicit Terraform Registry source requirement.
 
 ### Operations And Observability
 
