@@ -21,7 +21,7 @@ code_references/
 .terraform.lock.hcl
 
 # Local binaries and coverage output.
-betternat
-betternat-agent
-terraform-provider-betternat
+/betternat
+/betternat-agent
+/terraform-provider-betternat
 coverage.out
