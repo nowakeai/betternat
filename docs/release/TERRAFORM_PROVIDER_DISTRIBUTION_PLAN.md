@@ -210,7 +210,7 @@ Current status:
 - Provider repo CI passes.
 - Provider repo test release creates Linux amd64/arm64 zip assets and `SHA256SUMS`.
 - Terraform local dev override validation passed with Terraform `v1.15.6`.
-- OpenTofu validation is still pending because `tofu` was not installed in the first local validation environment.
+- OpenTofu local dev override validation passed with OpenTofu `v1.12.3`.
 
 ### Phase 2: Extract Importable Product Packages
 
@@ -293,6 +293,13 @@ terraform validate examples/terraform
 terraform validate examples/terraform-aws-supplemental
 tofu validate examples/terraform
 tofu validate examples/terraform-aws-supplemental
+```
+
+Current validation:
+
+```text
+Terraform v1.15.6 local dev override validate: passed
+OpenTofu v1.12.3 local dev override validate: passed
 ```
 
 Before production:

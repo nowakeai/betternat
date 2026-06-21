@@ -578,7 +578,8 @@ P1 items are not required to publish the first alpha, but they should be priorit
 - [ ] Configure provider checksum signing.
 - [ ] Test provider install through Terraform.
 - [x] Test provider local dev override through Terraform.
-- [ ] Test provider install through OpenTofu or document it as unsupported.
+- [x] Test provider local dev override through OpenTofu.
+- [ ] Test provider install through OpenTofu registry-compatible release artifacts or document it as unsupported.
 
 ### Operations And Observability
 
