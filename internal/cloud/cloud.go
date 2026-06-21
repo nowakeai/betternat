@@ -20,6 +20,10 @@ type InstanceInfo struct {
 	SourceDestCheckEnabled bool
 }
 
+type InstancePreparer interface {
+	DisableSourceDestCheck(ctx context.Context, instanceID string) error
+}
+
 // Provider wraps cloud control-plane operations used by betternat-agent.
 type Provider interface {
 	ReplaceRoute(ctx context.Context, target RouteTarget) error

@@ -7,6 +7,7 @@ import (
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 
@@ -19,6 +20,7 @@ type EC2API interface {
 	DescribeRouteTables(ctx context.Context, params *ec2.DescribeRouteTablesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error)
 	DescribeAddresses(ctx context.Context, params *ec2.DescribeAddressesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeAddressesOutput, error)
 	DescribeInstanceAttribute(ctx context.Context, params *ec2.DescribeInstanceAttributeInput, optFns ...func(*ec2.Options)) (*ec2.DescribeInstanceAttributeOutput, error)
+	ModifyInstanceAttribute(ctx context.Context, params *ec2.ModifyInstanceAttributeInput, optFns ...func(*ec2.Options)) (*ec2.ModifyInstanceAttributeOutput, error)
 }
 
 type Provider struct {
@@ -33,8 +35,72 @@ func New(ctx context.Context, region string) (*Provider, error) {
 	return NewFromClient(ec2.NewFromConfig(cfg)), nil
 }
 
+func ResolveLocalInstanceID(ctx context.Context, region string) (string, error) {
+	cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(region))
+	if err != nil {
+		return "", fmt.Errorf("load aws config: %w", err)
+	}
+	output, err := imds.NewFromConfig(cfg).GetInstanceIdentityDocument(ctx, &imds.GetInstanceIdentityDocumentInput{})
+	if err != nil {
+		return "", fmt.Errorf("aws imds instance identity document: %w", err)
+	}
+	if output.InstanceID == "" {
+		return "", fmt.Errorf("aws imds instance identity document returned empty instance id")
+	}
+	return output.InstanceID, nil
+}
+
+func ResolveSharedEIPAllocationID(ctx context.Context, region string, gatewayID string, availabilityZone string) (string, error) {
+	if gatewayID == "" {
+		return "", fmt.Errorf("gateway id is required")
+	}
+	if availabilityZone == "" {
+		return "", fmt.Errorf("availability zone is required")
+	}
+	cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(region))
+	if err != nil {
+		return "", fmt.Errorf("load aws config: %w", err)
+	}
+	provider := NewFromClient(ec2.NewFromConfig(cfg))
+	return provider.ResolveSharedEIPAllocationID(ctx, gatewayID, availabilityZone)
+}
+
 func NewFromClient(client EC2API) *Provider {
 	return &Provider{ec2: client}
+}
+
+func (p *Provider) ResolveSharedEIPAllocationID(ctx context.Context, gatewayID string, availabilityZone string) (string, error) {
+	if p.ec2 == nil {
+		return "", fmt.Errorf("ec2 client is required")
+	}
+	if gatewayID == "" {
+		return "", fmt.Errorf("gateway id is required")
+	}
+	if availabilityZone == "" {
+		return "", fmt.Errorf("availability zone is required")
+	}
+	name := "betternat-" + gatewayID + "-" + availabilityZone
+	output, err := p.ec2.DescribeAddresses(ctx, &ec2.DescribeAddressesInput{
+		Filters: []types.Filter{
+			{Name: awssdk.String("tag:BetterNATGateway"), Values: []string{gatewayID}},
+			{Name: awssdk.String("tag:ManagedBy"), Values: []string{"betternat"}},
+			{Name: awssdk.String("tag:Name"), Values: []string{name}},
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("aws ec2 DescribeAddresses shared EIP: %w", err)
+	}
+	if len(output.Addresses) == 0 {
+		return "", fmt.Errorf("shared EIP %s not found", name)
+	}
+	if len(output.Addresses) > 1 {
+		return "", fmt.Errorf("shared EIP %s is ambiguous: %d matches", name, len(output.Addresses))
+	}
+	allocationID := awssdk.ToString(output.Addresses[0].AllocationId)
+	if allocationID == "" {
+		return "", fmt.Errorf("shared EIP %s returned empty allocation id", name)
+	}
+	return allocationID, nil
 }
 
 func (p *Provider) ReplaceRoute(ctx context.Context, target cloud.RouteTarget) error {
@@ -158,6 +224,22 @@ func (p *Provider) DescribeInstance(ctx context.Context, instanceID string) (clo
 		InstanceID:             instanceID,
 		SourceDestCheckEnabled: sourceDestCheck,
 	}, nil
+}
+
+func (p *Provider) DisableSourceDestCheck(ctx context.Context, instanceID string) error {
+	if p.ec2 == nil {
+		return fmt.Errorf("ec2 client is required")
+	}
+	if instanceID == "" {
+		return fmt.Errorf("instance id is required")
+	}
+	if _, err := p.ec2.ModifyInstanceAttribute(ctx, &ec2.ModifyInstanceAttributeInput{
+		InstanceId:      awssdk.String(instanceID),
+		SourceDestCheck: &types.AttributeBooleanValue{Value: awssdk.Bool(false)},
+	}); err != nil {
+		return fmt.Errorf("aws ec2 ModifyInstanceAttribute sourceDestCheck: %w", err)
+	}
+	return nil
 }
 
 func routeTarget(route types.Route) string {

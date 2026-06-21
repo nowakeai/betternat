@@ -40,6 +40,12 @@ Read these first when revisiting product or architecture direction:
 - [research/023-aws-integration-test-results.md](research/023-aws-integration-test-results.md) — AWS integration test: isolated VPC, LoxiLB on EC2, private egress, EIP/route failover, DynamoDB fencing, and cleanup.
 - [research/024-terraform-workflow-devops-tf-nat.md](research/024-terraform-workflow-devops-tf-nat.md) — devops-tf NAT Gateway workflow review and BetterNAT provider/module UX recommendations.
 - [research/025-fck-nat-reference-review.md](research/025-fck-nat-reference-review.md) — fck-nat reference review: AMI packaging, config contract, sysctl tuning, metrics, and what BetterNAT should or should not copy.
+- [research/026-aws-supplemental-test-results.md](research/026-aws-supplemental-test-results.md) — Terraform provider lifecycle, AL2023 cloud-init bootstrap, stable EIP association, LoxiLB/agent health, and cleanup.
+- [research/027-asg-self-healing-architecture.md](research/027-asg-self-healing-architecture.md) — ASG appliance-pool architecture for self-healing capacity, dynamic agent ownership, scale-out/scale-in, and production HA.
+- [research/028-asg-pool-vs-per-instance-asg.md](research/028-asg-pool-vs-per-instance-asg.md) — Decision record for one ASG pool per AZ instead of one ASG per appliance instance, including agent ownership and scaling semantics.
+- [research/029-aws-asg-provider-test-results.md](research/029-aws-asg-provider-test-results.md) — Real AWS ASG-first provider validation: Launch Template, ASG desired=2, EIP/route owner, source/destination check self-disable, and cleanup.
+- [research/030-automatic-ha-implementation-checklist.md](research/030-automatic-ha-implementation-checklist.md) — Engineering checklist for closing the runtime gap before complete automatic HA tests.
+- [research/031-aws-low-cost-supplemental-results.md](research/031-aws-low-cost-supplemental-results.md) — Low-cost AWS supplemental run results: ASG repair, agent-stop takeover, owner-termination gap, blocked scale test, and cleanup.
 - [research/017-loxilb-evaluation.md](research/017-loxilb-evaluation.md) — LoxiLB as the primary BetterNAT datapath candidate.
 - [research/016-mvp-scope-milestones.md](research/016-mvp-scope-milestones.md) — MVP scope and milestone planning.
 - [research/019-target-workloads.md](research/019-target-workloads.md) — Target workloads and cost pain: crawlers, EKS image pulls, blockchain/RPC nodes, and high-response-volume downloads.

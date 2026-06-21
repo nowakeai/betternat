@@ -159,7 +159,7 @@ The provider MUST create or manage:
 
 The provider MUST NOT perform runtime failover. Runtime failover belongs to `betternat-agent`.
 
-The current Go implementation represents provider work as a deterministic install plan. The AWS applier consumes that plan with the AWS SDK. If appliance instance IDs are not supplied by an outer installer, the applier MUST launch EC2 appliances from `ami_id`; otherwise it MUST fail before route mutation. `instance_type` defaults to `t3.small`.
+The current Go implementation represents provider work as a deterministic install plan. The AWS applier consumes that plan with the AWS SDK. By default the applier MUST create one Launch Template and one ASG appliance pool per AZ. Direct EC2 appliance IDs are allowed only as a lower-level compatibility/test path. `instance_type` defaults to `t3.small`.
 
 `use_spot` MAY be enabled for low-cost tests and interruption-tolerant deployments. It MUST default to `false` because production NAT appliances should not silently use interruptible capacity.
 
@@ -167,26 +167,28 @@ Before a BetterNAT AMI exists, v0 development tests MAY use a standard cloud Lin
 
 ## AWS Resource Model
 
-v0 AWS deployment is per-AZ active/standby.
+v0 AWS deployment is one appliance pool per AZ.
 
 Minimum single-AZ HA shape:
 
 ```text
 public subnet:
-  active appliance candidate
-  standby appliance candidate
+  ASG betternat-prod-us-west-2a
+    desired_capacity = 2
+    current owner appliance
+    warm candidate appliance
 
 private route table:
-  0.0.0.0/0 -> active appliance instance or ENI
+  0.0.0.0/0 -> current owner appliance instance or ENI
 
 public identity:
-  shared EIP associated to active appliance
+  shared EIP associated to current owner appliance
 
 lease:
   DynamoDB row per HA group
 ```
 
-Appliance instances MUST have source/destination check disabled.
+The current owner appliance MUST have source/destination check disabled before it owns the route. In the ASG model, every agent SHOULD also disable source/destination check for its own instance at boot so warm candidates are ready before takeover.
 
 LoxiLB itself SHOULD NOT receive AWS IAM permissions. AWS mutations are performed by `betternat-agent`.
 
@@ -593,11 +595,12 @@ v0 single-node acceptance:
 
 v0 HA acceptance:
 
-- Terraform creates active/standby appliances.
-- Standby has datapath ready before takeover.
+- Terraform creates one ASG appliance pool per AZ.
+- Default pool desired capacity is 2.
+- A non-owner candidate has datapath ready before takeover.
 - DynamoDB lease fences failover.
-- EIP reassociates to standby.
-- Private route table changes to standby.
+- EIP reassociates to the new owner.
+- Private route table changes to the new owner.
 - New connections use same public EIP after failover.
 - Agent exports failover event and duration metrics.
 - Active connection preservation is not required.

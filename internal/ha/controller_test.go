@@ -118,10 +118,124 @@ func TestActivateFailsWhenOutboundProbeMismatches(t *testing.T) {
 	}
 }
 
+func TestActivateReleasesLeaseWhenDatapathReconcileFails(t *testing.T) {
+	leaseManager := &fakeLease{}
+	controller := Controller{
+		Cloud:    &fakeCloud{},
+		Lease:    leaseManager,
+		Datapath: &fakeDatapath{reconcileErr: errors.New("datapath not ready")},
+	}
+
+	_, err := controller.Activate(context.Background(), validHAConfig(), "i-active")
+	if err == nil {
+		t.Fatal("expected activation failure")
+	}
+	if leaseManager.releaseCount != 1 {
+		t.Fatalf("expected failed activation to release lease, got %d", leaseManager.releaseCount)
+	}
+	if leaseManager.record.OwnerInstanceID != "" {
+		t.Fatalf("lease should be cleared after failed activation: %#v", leaseManager.record)
+	}
+}
+
+func TestActivateReleasesLeaseWhenRouteReplacementFails(t *testing.T) {
+	leaseManager := &fakeLease{}
+	controller := Controller{
+		Cloud: &fakeCloud{replaceErr: errors.New("replace route failed")},
+		Lease: leaseManager,
+	}
+
+	_, err := controller.Activate(context.Background(), validHAConfig(), "i-active")
+	if err == nil {
+		t.Fatal("expected activation failure")
+	}
+	if leaseManager.releaseCount != 1 {
+		t.Fatalf("expected failed activation to release lease, got %d", leaseManager.releaseCount)
+	}
+	if leaseManager.record.OwnerInstanceID != "" {
+		t.Fatalf("lease should be cleared after failed activation: %#v", leaseManager.record)
+	}
+}
+
+func TestActivateFailsWhenLeaseExpiresDuringActivation(t *testing.T) {
+	now := time.Unix(200, 0)
+	controller := Controller{
+		Cloud: &fakeCloud{},
+		Lease: &fakeLease{expiresAt: time.Unix(199, 0)},
+		Now:   func() time.Time { return now },
+	}
+
+	_, err := controller.Activate(context.Background(), validHAConfig(), "i-active")
+	if err == nil {
+		t.Fatal("expected expired lease error")
+	}
+}
+
+func TestEnsureOwnershipRepairsDrift(t *testing.T) {
+	cloudProvider := &fakeCloud{
+		routes: map[string]cloud.RouteTarget{
+			"rtb-a:0.0.0.0/0": {RouteTableID: "rtb-a", DestinationCIDR: "0.0.0.0/0", Target: "i-old"},
+			"rtb-b:0.0.0.0/0": {RouteTableID: "rtb-b", DestinationCIDR: "0.0.0.0/0", Target: "i-old"},
+		},
+		identity: cloud.PublicIdentity{AllocationID: "eipalloc-123", InstanceID: "i-old", PublicIP: "198.51.100.10"},
+	}
+	controller := Controller{Cloud: cloudProvider}
+
+	result, err := controller.EnsureOwnership(context.Background(), validHAConfig(), "i-active")
+	if err != nil {
+		t.Fatalf("ensure ownership: %v", err)
+	}
+	if result.PublicIdentity.InstanceID != "i-active" {
+		t.Fatalf("unexpected identity: %#v", result.PublicIdentity)
+	}
+	for _, route := range result.Routes {
+		if route.Target != "i-active" {
+			t.Fatalf("route was not repaired: %#v", result.Routes)
+		}
+	}
+	wantCalls := []string{
+		"describe-eip:eipalloc-123",
+		"associate:eipalloc-123:i-active",
+		"describe-route:rtb-a:0.0.0.0/0",
+		"replace:rtb-a:0.0.0.0/0:i-active",
+		"describe-route:rtb-a:0.0.0.0/0",
+		"describe-route:rtb-b:0.0.0.0/0",
+		"replace:rtb-b:0.0.0.0/0:i-active",
+		"describe-route:rtb-b:0.0.0.0/0",
+	}
+	if !equalStrings(cloudProvider.calls, wantCalls) {
+		t.Fatalf("unexpected calls: got %#v want %#v", cloudProvider.calls, wantCalls)
+	}
+}
+
+func TestEnsureOwnershipDoesNotMutateWhenAlreadyOwned(t *testing.T) {
+	cloudProvider := &fakeCloud{
+		routes: map[string]cloud.RouteTarget{
+			"rtb-a:0.0.0.0/0": {RouteTableID: "rtb-a", DestinationCIDR: "0.0.0.0/0", Target: "i-active"},
+			"rtb-b:0.0.0.0/0": {RouteTableID: "rtb-b", DestinationCIDR: "0.0.0.0/0", Target: "i-active"},
+		},
+		identity: cloud.PublicIdentity{AllocationID: "eipalloc-123", InstanceID: "i-active", PublicIP: "198.51.100.10"},
+	}
+	controller := Controller{Cloud: cloudProvider}
+
+	if _, err := controller.EnsureOwnership(context.Background(), validHAConfig(), "i-active"); err != nil {
+		t.Fatalf("ensure ownership: %v", err)
+	}
+	wantCalls := []string{
+		"describe-eip:eipalloc-123",
+		"describe-route:rtb-a:0.0.0.0/0",
+		"describe-route:rtb-b:0.0.0.0/0",
+	}
+	if !equalStrings(cloudProvider.calls, wantCalls) {
+		t.Fatalf("unexpected calls: got %#v want %#v", cloudProvider.calls, wantCalls)
+	}
+}
+
 type fakeCloud struct {
-	calls    []string
-	routes   map[string]cloud.RouteTarget
-	identity cloud.PublicIdentity
+	calls      []string
+	routes     map[string]cloud.RouteTarget
+	identity   cloud.PublicIdentity
+	replaceErr error
 }
 
 func (f *fakeCloud) ReplaceRoute(_ context.Context, target cloud.RouteTarget) error {
@@ -129,6 +243,9 @@ func (f *fakeCloud) ReplaceRoute(_ context.Context, target cloud.RouteTarget) er
 		f.routes = map[string]cloud.RouteTarget{}
 	}
 	f.calls = append(f.calls, "replace:"+target.RouteTableID+":"+target.DestinationCIDR+":"+target.Target)
+	if f.replaceErr != nil {
+		return f.replaceErr
+	}
 	f.routes[target.RouteTableID+":"+target.DestinationCIDR] = target
 	return nil
 }
@@ -173,16 +290,22 @@ func (f *fakeProbe) Run(context.Context) (probe.Result, error) {
 }
 
 type fakeLease struct {
-	record lease.Record
+	record       lease.Record
+	expiresAt    time.Time
+	releaseCount int
 }
 
 func (f *fakeLease) Acquire(_ context.Context, owner string) (lease.Record, error) {
+	expiresAt := f.expiresAt
+	if expiresAt.IsZero() {
+		expiresAt = time.Now().Add(time.Hour)
+	}
 	f.record = lease.Record{
 		HAGroupID:       "prod-egress-a",
 		OwnerInstanceID: owner,
 		Generation:      1,
-		ExpiresAt:       time.Unix(100, 0),
-		UpdatedAt:       time.Unix(90, 0),
+		ExpiresAt:       expiresAt,
+		UpdatedAt:       time.Now(),
 	}
 	return f.record, nil
 }
@@ -192,7 +315,9 @@ func (f *fakeLease) Renew(context.Context, lease.Record) (lease.Record, error) {
 }
 
 func (f *fakeLease) Release(context.Context, lease.Record) error {
-	return errors.New("not implemented")
+	f.releaseCount++
+	f.record = lease.Record{}
+	return nil
 }
 
 func (f *fakeLease) Current(context.Context) (lease.Record, error) {

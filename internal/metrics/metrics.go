@@ -17,22 +17,34 @@ type Exporter interface {
 
 // Snapshot is a point-in-time view of the local BetterNAT datapath.
 type Snapshot struct {
-	GatewayID         string
-	HAGroupID         string
-	Node              string
-	Version           string
-	Commit            string
-	AgentUp           bool
-	Active            bool
-	HAState           string
-	LeaseGeneration   uint64
-	Datapath          datapath.Status
-	Counters          datapath.Counters
-	Conntrack         datapath.ConntrackSummary
-	Owners            []OwnerCounter
-	Processed         TrafficCounter
-	FailoverEvents    []FailoverEventCounter
-	FailoverDurations []FailoverDuration
+	GatewayID               string
+	HAGroupID               string
+	Node                    string
+	Version                 string
+	Commit                  string
+	AgentUp                 bool
+	Active                  bool
+	HAState                 string
+	HAStatusAgeSeconds      float64
+	HAStatusStale           bool
+	LeaseGeneration         uint64
+	LeaseOwnerMatch         bool
+	LeaseHasOwner           bool
+	LeaseSecondsUntilExpiry float64
+	RouteTargetMatch        bool
+	RouteTargetChecked      bool
+	PublicIdentityMatch     bool
+	PublicIdentityChecked   bool
+	HATakeoverAttempts      uint64
+	HATakeoverSuccesses     uint64
+	HALeaseRenewErrors      uint64
+	Datapath                datapath.Status
+	Counters                datapath.Counters
+	Conntrack               datapath.ConntrackSummary
+	Owners                  []OwnerCounter
+	Processed               TrafficCounter
+	FailoverEvents          []FailoverEventCounter
+	FailoverDurations       []FailoverDuration
 }
 
 type OwnerCounter struct {
@@ -102,7 +114,56 @@ func RenderPrometheus(w io.Writer, snapshot Snapshot) error {
 			return err
 		}
 	}
+	if err := writeFloatMetric(w, "betternat_ha_status_age_seconds", agentLabels, snapshot.HAStatusAgeSeconds); err != nil {
+		return err
+	}
+	stale := uint64(0)
+	if snapshot.HAStatusStale {
+		stale = 1
+	}
+	if err := writeMetric(w, "betternat_ha_status_stale", agentLabels, stale); err != nil {
+		return err
+	}
 	if err := writeMetric(w, "betternat_lease_generation", agentLabels, snapshot.LeaseGeneration); err != nil {
+		return err
+	}
+	if snapshot.LeaseHasOwner {
+		ownerMatch := uint64(0)
+		if snapshot.LeaseOwnerMatch {
+			ownerMatch = 1
+		}
+		if err := writeMetric(w, "betternat_lease_owner_match", agentLabels, ownerMatch); err != nil {
+			return err
+		}
+		if err := writeFloatMetric(w, "betternat_lease_seconds_until_expiry", agentLabels, snapshot.LeaseSecondsUntilExpiry); err != nil {
+			return err
+		}
+	}
+	if snapshot.RouteTargetChecked {
+		match := uint64(0)
+		if snapshot.RouteTargetMatch {
+			match = 1
+		}
+		if err := writeMetric(w, "betternat_route_target_match", agentLabels, match); err != nil {
+			return err
+		}
+	}
+	if snapshot.PublicIdentityChecked {
+		match := uint64(0)
+		if snapshot.PublicIdentityMatch {
+			match = 1
+		}
+		if err := writeMetric(w, "betternat_public_identity_match", agentLabels, match); err != nil {
+			return err
+		}
+	}
+	if err := writeMetric(w, "betternat_takeover_attempts_total", agentLabels, snapshot.HATakeoverAttempts); err != nil {
+		return err
+	}
+	if err := writeMetric(w, "betternat_takeover_success_total", agentLabels, snapshot.HATakeoverSuccesses); err != nil {
+		return err
+	}
+	if err := writeMetric(w, "betternat_lease_renew_errors_total", agentLabels, snapshot.HALeaseRenewErrors); err != nil {
 		return err
 	}
 

@@ -10,6 +10,9 @@ import (
 
 	"github.com/betternat/betternat/internal/config"
 	"github.com/betternat/betternat/internal/cost"
+	"github.com/betternat/betternat/internal/datapath"
+	"github.com/betternat/betternat/internal/datapath/loxilb"
+	"github.com/betternat/betternat/internal/datapath/nftables"
 	"github.com/betternat/betternat/internal/doctor"
 )
 
@@ -20,6 +23,7 @@ Usage:
   betternat cost estimate --gb <processed-gb>
   betternat status --config <path>
   betternat datapath status --config <path>
+  betternat datapath ready --config <path>
   betternat failover status --config <path>
   betternat version
 `
@@ -29,7 +33,7 @@ func Run(ctx context.Context, args []string) error {
 	return run(ctx, args, os.Stdout)
 }
 
-func run(_ context.Context, args []string, out io.Writer) error {
+func run(ctx context.Context, args []string, out io.Writer) error {
 	if len(args) == 0 {
 		_, _ = fmt.Fprint(out, usage)
 		return nil
@@ -46,7 +50,7 @@ func run(_ context.Context, args []string, out io.Writer) error {
 	case "status":
 		return runStatus(args[1:], out)
 	case "datapath":
-		return runDatapath(args[1:], out)
+		return runDatapath(ctx, args[1:], out)
 	case "failover":
 		return runFailover(args[1:], out)
 	case "help", "-h", "--help":
@@ -146,9 +150,18 @@ type datapathStatusOutput struct {
 	SNATInterface  string   `json:"snat_interface"`
 }
 
-func runDatapath(args []string, out io.Writer) error {
-	if len(args) == 0 || args[0] != "status" {
-		return fmt.Errorf("datapath requires subcommand status")
+type datapathReadyOutput struct {
+	Engine               string   `json:"engine"`
+	Ready                bool     `json:"ready"`
+	Message              string   `json:"message"`
+	ExpectedPrivateCIDRs []string `json:"expected_private_cidrs"`
+	PresentSNATCIDRs     []string `json:"present_snat_cidrs"`
+	MissingSNATCIDRs     []string `json:"missing_snat_cidrs"`
+}
+
+func runDatapath(ctx context.Context, args []string, out io.Writer) error {
+	if len(args) == 0 {
+		return fmt.Errorf("datapath requires subcommand status or ready")
 	}
 	configPath, err := parseConfigPath(args[1:])
 	if err != nil {
@@ -158,13 +171,86 @@ func runDatapath(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return json.NewEncoder(out).Encode(datapathStatusOutput{
-		Engine:         cfg.Datapath.Engine,
-		FallbackEngine: cfg.Datapath.FallbackEngine,
-		PrivateCIDRs:   cfg.Datapath.PrivateCIDRs,
-		LoxiLBSNATTo:   cfg.Datapath.LoxiLB.SNATTo,
-		SNATInterface:  cfg.Datapath.LoxiLB.SNATInterface,
-	})
+	switch args[0] {
+	case "status":
+		return json.NewEncoder(out).Encode(datapathStatusOutput{
+			Engine:         cfg.Datapath.Engine,
+			FallbackEngine: cfg.Datapath.FallbackEngine,
+			PrivateCIDRs:   cfg.Datapath.PrivateCIDRs,
+			LoxiLBSNATTo:   cfg.Datapath.LoxiLB.SNATTo,
+			SNATInterface:  cfg.Datapath.LoxiLB.SNATInterface,
+		})
+	case "ready":
+		engine, err := newDatapathEngine(cfg.Datapath)
+		if err != nil {
+			return err
+		}
+		ready, err := datapathReadiness(ctx, cfg.Datapath, engine)
+		if encodeErr := json.NewEncoder(out).Encode(ready); encodeErr != nil {
+			return encodeErr
+		}
+		if err != nil {
+			return err
+		}
+		if !ready.Ready {
+			return fmt.Errorf("datapath is not ready: %s", ready.Message)
+		}
+		return nil
+	default:
+		return fmt.Errorf("unknown datapath subcommand %q", args[0])
+	}
+}
+
+func newDatapathEngine(cfg config.DatapathConfig) (datapath.Engine, error) {
+	switch cfg.Engine {
+	case "loxilb":
+		return loxilb.New(), nil
+	case "nftables":
+		return nftables.New(), nil
+	default:
+		return nil, fmt.Errorf("unsupported datapath engine %q", cfg.Engine)
+	}
+}
+
+func datapathReadiness(ctx context.Context, cfg config.DatapathConfig, engine datapath.Engine) (datapathReadyOutput, error) {
+	output := datapathReadyOutput{
+		Engine:               engine.Name(),
+		ExpectedPrivateCIDRs: append([]string(nil), cfg.PrivateCIDRs...),
+	}
+	status, err := engine.Status(ctx)
+	if err != nil {
+		output.Message = err.Error()
+		return output, err
+	}
+	output.Ready = status.Ready
+	output.Message = status.Message
+	if !status.Ready {
+		return output, nil
+	}
+	counters, err := engine.Counters(ctx)
+	if err != nil {
+		output.Ready = false
+		output.Message = err.Error()
+		return output, err
+	}
+	present := map[string]bool{}
+	for _, rule := range counters.Rules {
+		if rule.CIDR == "" {
+			continue
+		}
+		present[rule.CIDR] = true
+		output.PresentSNATCIDRs = append(output.PresentSNATCIDRs, rule.CIDR)
+	}
+	for _, cidr := range cfg.PrivateCIDRs {
+		if !present[cidr] {
+			output.MissingSNATCIDRs = append(output.MissingSNATCIDRs, cidr)
+		}
+	}
+	if len(output.MissingSNATCIDRs) > 0 {
+		output.Ready = false
+		output.Message = "missing expected SNAT rules"
+	}
+	return output, nil
 }
 
 func runCost(args []string, out io.Writer) error {

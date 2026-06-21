@@ -81,10 +81,11 @@ Notes:
 Use LocalStack to mock the AWS APIs used by BetterNAT's provider:
 
 - EC2,
+- Auto Scaling,
 - IAM,
 - DynamoDB.
 
-This is the best local approximation of a full Terraform `apply/read/destroy` cycle without touching AWS.
+This is a useful local approximation of the Terraform provider lifecycle without touching AWS, but it is not currently a full ASG lifecycle substitute on the available LocalStack Hobby environment.
 
 Expected coverage:
 
@@ -93,7 +94,8 @@ Expected coverage:
 - IAM role/profile create/delete calls,
 - DynamoDB lease table create/delete calls,
 - EC2 security group create/delete calls,
-- EC2 instance launch/terminate calls,
+- EC2 Launch Template create/delete calls,
+- Auto Scaling Group create/delete calls,
 - EIP allocate/describe/release calls,
 - route table `DescribeRouteTables` and `ReplaceRoute` behavior if LocalStack's current EC2 implementation supports the exact route target shape.
 
@@ -102,6 +104,7 @@ Known boundaries:
 - LocalStack does not prove real AWS control-plane latency.
 - It does not prove ENA/Nitro networking, source/destination-check behavior, LoxiLB datapath, or real private-subnet egress.
 - EC2 route/EIP edge cases may differ from AWS. Treat this as provider lifecycle testing, not production HA proof.
+- On the tested LocalStack Hobby environment, Auto Scaling responds in health output but `CreateAutoScalingGroup` and `UpdateAutoScalingGroup` return HTTP 501 license errors. ASG-first apply/destroy must therefore be validated by Go tests and disposable real AWS tests until a LocalStack tier with Auto Scaling coverage is available.
 
 Manual AWS provider endpoint shape:
 
@@ -114,6 +117,7 @@ provider "aws" {
   skip_metadata_api_check     = true
 
   endpoints {
+    autoscaling = "http://localhost:4566"
     dynamodb = "http://localhost:4566"
     ec2      = "http://localhost:4566"
     iam      = "http://localhost:4566"
@@ -169,11 +173,12 @@ In sandboxed local runs, Terraform provider plugins may need `TMPDIR=$PWD/tmp` s
 
 Current local result:
 
-- `terraform init -backend=false` for `examples/terraform` passes with the local BetterNAT provider dev override.
-- `terraform validate` and `terraform plan -refresh=false` for `examples/terraform` pass when run with `TMPDIR=$PWD/tmp`.
-- `terraform init -backend=false`, `terraform validate`, and `terraform plan -refresh=false` for `examples/terraform-localstack` pass.
-- Full LocalStack `apply/destroy` passes when `localstack/localstack:latest` is started with `LOCALSTACK_AUTH_TOKEN` from `.env`.
-- The LocalStack run exercised BetterNAT provider calls for IAM role/profile creation, DynamoDB lease table creation, EC2 security group creation, EC2 instance launch, source/destination check modification, EIP allocation, route snapshot, initial `ReplaceRoute`, readback through `DescribeRouteTables` and `DescribeAddresses`, destroy-time route rollback, instance termination, EIP release, DynamoDB table deletion, IAM cleanup, and security group deletion.
+- `terraform validate` passes for `examples/terraform`, `examples/terraform-localstack`, and `examples/terraform-aws-supplemental` with the local BetterNAT provider dev override.
+- `terraform plan` passes for `examples/terraform`; the plan shows ASG pool capacity defaults and explicit values as `min_size=1`, `desired_capacity=2`, and `max_size=3`.
+- LocalStack `apply` for `examples/terraform-localstack` reaches the BetterNAT provider ASG path, proving provider protocol loading and endpoint credential wiring.
+- LocalStack `apply` cannot complete ASG creation on the tested Hobby tier: `CreateAutoScalingGroup` returns HTTP 501 because Auto Scaling is not included in that license.
+- Terraform `destroy` successfully cleaned the AWS-provider-created LocalStack VPC, subnet, route table, route, and Internet Gateway after the failed BetterNAT resource create.
+- ASG-first apply/read/destroy is therefore ready for disposable AWS validation, not fully provable in the current LocalStack environment.
 
 LocalStack container command used:
 
@@ -182,7 +187,7 @@ docker run -d \
   --name betternat-localstack \
   --env-file .env \
   -p 127.0.0.1:4566:4566 \
-  -e SERVICES=ec2,iam,dynamodb,sts \
+  -e SERVICES=ec2,autoscaling,iam,dynamodb,sts \
   -e DEBUG=0 \
   localstack/localstack:latest
 ```
@@ -190,7 +195,7 @@ docker run -d \
 Cleanup command:
 
 ```bash
-docker rm -f betternat-localstack
+docker stop betternat-localstack
 ```
 
 Alternative:
@@ -211,12 +216,13 @@ Acceptance coverage should verify:
 - route snapshot before `ReplaceRoute`,
 - route target after apply,
 - EIP allocation and association,
-- EC2 source/destination check disabled,
+- ASG desired capacity reached,
+- owner instance source/destination check disabled,
 - provider `Read` sees route/EIP state,
 - destroy restores previous route,
-- destroy cleans appliances, EIPs, DynamoDB, IAM, and security group,
+- destroy deletes ASGs, launch templates, EIPs, DynamoDB, IAM, and security group,
 - no tagged BetterNAT test resources remain.
 
 ## Current Local Machine Note
 
-Terraform CLI is not installed in the current local environment. The repo can still run layer 1 today. Layer 2 needs Terraform or OpenTofu installed first.
+Terraform CLI is available in the current local environment. In sandboxed runs, Terraform provider plugin execution may need elevated local process permissions; otherwise both the BetterNAT provider and the AWS provider can fail schema loading with a plugin handshake error.

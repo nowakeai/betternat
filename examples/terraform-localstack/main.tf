@@ -19,10 +19,11 @@ provider "aws" {
   skip_requesting_account_id  = true
 
   endpoints {
-    dynamodb = "http://localhost:4566"
-    ec2      = "http://localhost:4566"
-    iam      = "http://localhost:4566"
-    sts      = "http://localhost:4566"
+    autoscaling = "http://localhost:4566"
+    dynamodb    = "http://localhost:4566"
+    ec2         = "http://localhost:4566"
+    iam         = "http://localhost:4566"
+    sts         = "http://localhost:4566"
   }
 }
 
@@ -79,8 +80,11 @@ resource "betternat_gateway" "egress" {
   region = "us-east-1"
   vpc_id = aws_vpc.main.id
 
-  ami_id        = "ami-localstack"
-  instance_type = "t3.small"
+  ami_id           = "ami-localstack"
+  instance_type    = "t3.small"
+  min_size         = 1
+  desired_capacity = 2
+  max_size         = 3
 
   public_subnet_ids = {
     us-east-1a = aws_subnet.public.id
@@ -93,6 +97,7 @@ resource "betternat_gateway" "egress" {
   private_cidrs = [aws_vpc.main.cidr_block]
 
   stable_egress_ip    = true
+  ha_profile          = "stable"
   rollback_on_destroy = true
 
   depends_on = [

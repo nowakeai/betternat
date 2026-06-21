@@ -41,7 +41,7 @@ func TestRenderAgentConfig(t *testing.T) {
 	if cfg.HA.Lease.Table != "betternat-prod-leases" || cfg.HA.Lease.Key != "prod-egress-us-west-2a" {
 		t.Fatalf("unexpected lease config: %#v", cfg.HA.Lease)
 	}
-	if cfg.HA.PublicIdentity.AllocationID != "eipalloc-123" {
+	if cfg.HA.PublicIdentity.Mode != "shared_eip" || cfg.HA.PublicIdentity.AllocationID != "eipalloc-123" {
 		t.Fatalf("unexpected public identity: %#v", cfg.HA.PublicIdentity)
 	}
 	if len(cfg.HA.RouteFailover.RouteTableIDs) != 2 {
@@ -49,6 +49,29 @@ func TestRenderAgentConfig(t *testing.T) {
 	}
 	if !cfg.Observability.OutboundProbe.Enabled || cfg.Observability.OutboundProbe.ExpectedIP != "203.0.113.10" {
 		t.Fatalf("unexpected outbound probe config: %#v", cfg.Observability.OutboundProbe)
+	}
+}
+
+func TestRenderAgentConfigWithoutStablePublicIdentity(t *testing.T) {
+	cfg, err := RenderAgentConfig(GatewaySpec{
+		Name:         "prod-egress",
+		Cloud:        "aws",
+		Region:       "us-west-2",
+		PrivateCIDRs: []string{"10.0.0.0/8"},
+		HA: HASpec{
+			Enabled:    true,
+			LeaseTable: "betternat-prod-leases",
+		},
+	}, ApplianceSpec{
+		HAGroupID:        "prod-egress-us-west-2a",
+		PrimaryInterface: "ens5",
+		RouteTableIDs:    []string{"rtb-a"},
+	})
+	if err != nil {
+		t.Fatalf("render config: %v", err)
+	}
+	if cfg.HA.PublicIdentity.Mode != "" || cfg.HA.PublicIdentity.AllocationID != "" {
+		t.Fatalf("non-stable egress should not configure public identity: %#v", cfg.HA.PublicIdentity)
 	}
 }
 

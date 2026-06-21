@@ -43,11 +43,14 @@ func TestBuild(t *testing.T) {
 	if plan.LeaseTableName != "betternat-prod-egress-leases" {
 		t.Fatalf("unexpected lease table: %#v", plan)
 	}
-	if len(plan.Appliances) != 4 {
-		t.Fatalf("expected 4 appliances, got %#v", plan.Appliances)
+	if len(plan.Pools) != 2 {
+		t.Fatalf("expected 2 pools, got %#v", plan.Pools)
 	}
-	if plan.Appliances[0].SourceDestCheck {
-		t.Fatalf("source/dest check should be disabled: %#v", plan.Appliances[0])
+	if plan.Pools[0].DesiredCapacity != 2 || plan.Pools[0].MinSize != 1 || plan.Pools[0].MaxSize != 3 {
+		t.Fatalf("unexpected default capacity: %#v", plan.Pools[0])
+	}
+	if plan.Pools[0].ASGName != "betternat-prod-egress-us-west-2a" {
+		t.Fatalf("unexpected asg name: %#v", plan.Pools[0])
 	}
 	if len(plan.EIPAllocationNames) != 2 {
 		t.Fatalf("expected eips per az: %#v", plan.EIPAllocationNames)
@@ -66,6 +69,9 @@ func TestBuild(t *testing.T) {
 	}
 	if plan.Tags["BetterNATGateway"] != "prod-egress" {
 		t.Fatalf("managed gateway tag should not be user-overridable: %#v", plan.Tags)
+	}
+	if !containsString(plan.RequiredIAMActions, "ec2:ModifyInstanceAttribute") {
+		t.Fatalf("runtime policy must allow agent source/dest check self-disable: %#v", plan.RequiredIAMActions)
 	}
 }
 
@@ -88,6 +94,15 @@ func TestBuildUseSpot(t *testing.T) {
 	if !plan.UseSpot {
 		t.Fatalf("use spot should be preserved: %#v", plan)
 	}
+}
+
+func containsString(values []string, needle string) bool {
+	for _, value := range values {
+		if value == needle {
+			return true
+		}
+	}
+	return false
 }
 
 func TestBuildCustomRouteDestination(t *testing.T) {

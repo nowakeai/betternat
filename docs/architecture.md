@@ -24,6 +24,8 @@ Earlier research documents that recommended nftables as the default datapath are
 - `docs/research/021-loxilb-spike-results.md`
 - `docs/research/022-loxilb-extended-spike-results.md`
 
+The current direct-EC2 provider path is a development and validation path. The target production HA shape is one ASG appliance pool per AZ with dynamic `betternat-agent` lease ownership. See `docs/research/027-asg-self-healing-architecture.md`.
+
 ## Product Goal
 
 BetterNAT is a self-owned, observable, highly available egress gateway for high-volume private cloud workloads.
@@ -103,12 +105,13 @@ It does not own:
 Implementation note for the current Go provider/applier split:
 
 - `terraform-provider-betternat` derives `agent_config_json`, `user_data`, and `install_plan_json`.
-- The AWS install applier consumes that install plan and uses the AWS SDK to create IAM, security group, DynamoDB lease table, EIPs, EC2 appliance instances, source/destination check settings, and initial route targets.
+- The AWS install applier consumes that install plan and uses the AWS SDK to create IAM, security group, DynamoDB lease table, EIPs, Launch Templates, one ASG appliance pool per AZ, current owner source/destination check settings, and initial route targets.
 - `ami_id` is required when the applier needs to launch appliance instances itself.
 - `instance_type` defaults to `t3.small` when not specified.
 - `use_spot` is available for low-cost tests and interruption-tolerant environments, but it defaults to `false`.
 - Before BetterNAT AMIs exist, AWS tests use an official Linux AMI plus cloud-init. The provider can pass a sensitive `agent_binary_url` so bootstrap downloads the current `betternat-agent` build at first boot.
 - Existing appliance instance IDs can still be supplied by an outer installer, which is useful for tests, bring-your-own-AMI flows, or phased migration.
+- Production self-healing should move instance ownership to Launch Templates and one ASG per AZ. In that model the provider manages the pool and stable AWS resources, while the agent dynamically elects the active owner from the ASG instances.
 
 Example target UX:
 

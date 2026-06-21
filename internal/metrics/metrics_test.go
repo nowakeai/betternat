@@ -10,16 +10,17 @@ import (
 
 func TestRenderPrometheus(t *testing.T) {
 	snapshot := Snapshot{
-		GatewayID:       `gw"one`,
-		HAGroupID:       "ha\\a",
-		Node:            "i-123",
-		Version:         "v0",
-		Commit:          "abc123",
-		AgentUp:         true,
-		Active:          true,
-		HAState:         "active",
-		LeaseGeneration: 42,
-		Datapath:        datapath.Status{Ready: true, Engine: "loxilb"},
+		GatewayID:          `gw"one`,
+		HAGroupID:          "ha\\a",
+		Node:               "i-123",
+		Version:            "v0",
+		Commit:             "abc123",
+		AgentUp:            true,
+		Active:             true,
+		HAState:            "active",
+		HAStatusAgeSeconds: 1.5,
+		LeaseGeneration:    42,
+		Datapath:           datapath.Status{Ready: true, Engine: "loxilb"},
 		Counters: datapath.Counters{
 			Rules: []datapath.RuleCounter{
 				{CIDR: "10.1.0.0/16", Packets: 20, Bytes: 2000},
@@ -54,6 +55,8 @@ func TestRenderPrometheus(t *testing.T) {
 	assertContains(t, text, `betternat_agent_build_info{commit="abc123",gateway="gw\"one",ha_group="ha\\a",node="i-123",version="v0"} 1`)
 	assertContains(t, text, `betternat_active{gateway="gw\"one",ha_group="ha\\a",node="i-123"} 1`)
 	assertContains(t, text, `betternat_ha_state{gateway="gw\"one",ha_group="ha\\a",node="i-123",state="active"} 1`)
+	assertContains(t, text, `betternat_ha_status_age_seconds{gateway="gw\"one",ha_group="ha\\a",node="i-123"} 1.500000`)
+	assertContains(t, text, `betternat_ha_status_stale{gateway="gw\"one",ha_group="ha\\a",node="i-123"} 0`)
 	assertContains(t, text, `betternat_lease_generation{gateway="gw\"one",ha_group="ha\\a",node="i-123"} 42`)
 	assertContains(t, text, `betternat_datapath_engine_info{engine="loxilb",gateway="gw\"one",ha_group="ha\\a"} 1`)
 	assertContains(t, text, `betternat_conntrack_entries{engine="loxilb",gateway="gw\"one",ha_group="ha\\a"} 7`)

@@ -10,6 +10,8 @@ import (
 	"time"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
+	astypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
@@ -23,11 +25,16 @@ import (
 
 type EC2API interface {
 	AllocateAddress(ctx context.Context, params *ec2.AllocateAddressInput, optFns ...func(*ec2.Options)) (*ec2.AllocateAddressOutput, error)
+	AuthorizeSecurityGroupEgress(ctx context.Context, params *ec2.AuthorizeSecurityGroupEgressInput, optFns ...func(*ec2.Options)) (*ec2.AuthorizeSecurityGroupEgressOutput, error)
+	AuthorizeSecurityGroupIngress(ctx context.Context, params *ec2.AuthorizeSecurityGroupIngressInput, optFns ...func(*ec2.Options)) (*ec2.AuthorizeSecurityGroupIngressOutput, error)
 	AssociateAddress(ctx context.Context, params *ec2.AssociateAddressInput, optFns ...func(*ec2.Options)) (*ec2.AssociateAddressOutput, error)
+	CreateLaunchTemplate(ctx context.Context, params *ec2.CreateLaunchTemplateInput, optFns ...func(*ec2.Options)) (*ec2.CreateLaunchTemplateOutput, error)
 	CreateSecurityGroup(ctx context.Context, params *ec2.CreateSecurityGroupInput, optFns ...func(*ec2.Options)) (*ec2.CreateSecurityGroupOutput, error)
 	CreateTags(ctx context.Context, params *ec2.CreateTagsInput, optFns ...func(*ec2.Options)) (*ec2.CreateTagsOutput, error)
+	DeleteLaunchTemplate(ctx context.Context, params *ec2.DeleteLaunchTemplateInput, optFns ...func(*ec2.Options)) (*ec2.DeleteLaunchTemplateOutput, error)
 	DeleteSecurityGroup(ctx context.Context, params *ec2.DeleteSecurityGroupInput, optFns ...func(*ec2.Options)) (*ec2.DeleteSecurityGroupOutput, error)
 	DescribeAddresses(ctx context.Context, params *ec2.DescribeAddressesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeAddressesOutput, error)
+	DescribeInstances(ctx context.Context, params *ec2.DescribeInstancesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error)
 	DescribeRouteTables(ctx context.Context, params *ec2.DescribeRouteTablesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error)
 	DescribeSecurityGroups(ctx context.Context, params *ec2.DescribeSecurityGroupsInput, optFns ...func(*ec2.Options)) (*ec2.DescribeSecurityGroupsOutput, error)
 	DisassociateAddress(ctx context.Context, params *ec2.DisassociateAddressInput, optFns ...func(*ec2.Options)) (*ec2.DisassociateAddressOutput, error)
@@ -36,6 +43,13 @@ type EC2API interface {
 	ReleaseAddress(ctx context.Context, params *ec2.ReleaseAddressInput, optFns ...func(*ec2.Options)) (*ec2.ReleaseAddressOutput, error)
 	RunInstances(ctx context.Context, params *ec2.RunInstancesInput, optFns ...func(*ec2.Options)) (*ec2.RunInstancesOutput, error)
 	TerminateInstances(ctx context.Context, params *ec2.TerminateInstancesInput, optFns ...func(*ec2.Options)) (*ec2.TerminateInstancesOutput, error)
+}
+
+type AutoScalingAPI interface {
+	CreateAutoScalingGroup(ctx context.Context, params *autoscaling.CreateAutoScalingGroupInput, optFns ...func(*autoscaling.Options)) (*autoscaling.CreateAutoScalingGroupOutput, error)
+	DeleteAutoScalingGroup(ctx context.Context, params *autoscaling.DeleteAutoScalingGroupInput, optFns ...func(*autoscaling.Options)) (*autoscaling.DeleteAutoScalingGroupOutput, error)
+	DescribeAutoScalingGroups(ctx context.Context, params *autoscaling.DescribeAutoScalingGroupsInput, optFns ...func(*autoscaling.Options)) (*autoscaling.DescribeAutoScalingGroupsOutput, error)
+	UpdateAutoScalingGroup(ctx context.Context, params *autoscaling.UpdateAutoScalingGroupInput, optFns ...func(*autoscaling.Options)) (*autoscaling.UpdateAutoScalingGroupOutput, error)
 }
 
 type DynamoDBAPI interface {
@@ -47,17 +61,20 @@ type IAMAPI interface {
 	CreateRole(ctx context.Context, params *iam.CreateRoleInput, optFns ...func(*iam.Options)) (*iam.CreateRoleOutput, error)
 	CreateInstanceProfile(ctx context.Context, params *iam.CreateInstanceProfileInput, optFns ...func(*iam.Options)) (*iam.CreateInstanceProfileOutput, error)
 	AddRoleToInstanceProfile(ctx context.Context, params *iam.AddRoleToInstanceProfileInput, optFns ...func(*iam.Options)) (*iam.AddRoleToInstanceProfileOutput, error)
+	AttachRolePolicy(ctx context.Context, params *iam.AttachRolePolicyInput, optFns ...func(*iam.Options)) (*iam.AttachRolePolicyOutput, error)
 	DeleteInstanceProfile(ctx context.Context, params *iam.DeleteInstanceProfileInput, optFns ...func(*iam.Options)) (*iam.DeleteInstanceProfileOutput, error)
 	DeleteRole(ctx context.Context, params *iam.DeleteRoleInput, optFns ...func(*iam.Options)) (*iam.DeleteRoleOutput, error)
 	DeleteRolePolicy(ctx context.Context, params *iam.DeleteRolePolicyInput, optFns ...func(*iam.Options)) (*iam.DeleteRolePolicyOutput, error)
+	DetachRolePolicy(ctx context.Context, params *iam.DetachRolePolicyInput, optFns ...func(*iam.Options)) (*iam.DetachRolePolicyOutput, error)
 	PutRolePolicy(ctx context.Context, params *iam.PutRolePolicyInput, optFns ...func(*iam.Options)) (*iam.PutRolePolicyOutput, error)
 	RemoveRoleFromInstanceProfile(ctx context.Context, params *iam.RemoveRoleFromInstanceProfileInput, optFns ...func(*iam.Options)) (*iam.RemoveRoleFromInstanceProfileOutput, error)
 }
 
 type Applier struct {
-	EC2      EC2API
-	DynamoDB DynamoDBAPI
-	IAM      IAMAPI
+	EC2         EC2API
+	AutoScaling AutoScalingAPI
+	DynamoDB    DynamoDBAPI
+	IAM         IAMAPI
 }
 
 type Inputs struct {
@@ -68,8 +85,11 @@ type Inputs struct {
 type Result struct {
 	AllocatedEIPs        map[string]string `json:"allocated_eips"`
 	AllocatedPublicIPs   map[string]string `json:"allocated_public_ips"`
+	AutoScalingGroups    map[string]string `json:"auto_scaling_groups"`
 	InitialRouteTargets  map[string]string `json:"initial_route_targets"`
 	LaunchedInstances    map[string]string `json:"launched_instances"`
+	LaunchTemplates      map[string]string `json:"launch_templates"`
+	OwnerInstances       map[string]string `json:"owner_instances"`
 	PreviousRouteTargets map[string]string `json:"previous_route_targets"`
 }
 
@@ -99,6 +119,9 @@ func (a Applier) Apply(ctx context.Context, plan installplan.Plan, inputs Inputs
 	if a.IAM == nil {
 		return Result{}, fmt.Errorf("iam client is required")
 	}
+	if len(plan.Pools) > 0 && a.AutoScaling == nil {
+		return Result{}, fmt.Errorf("autoscaling client is required")
+	}
 	if err := a.createIAM(ctx, plan); err != nil {
 		return Result{}, err
 	}
@@ -112,26 +135,52 @@ func (a Applier) Apply(ctx context.Context, plan installplan.Plan, inputs Inputs
 	result := Result{
 		AllocatedEIPs:        map[string]string{},
 		AllocatedPublicIPs:   map[string]string{},
+		AutoScalingGroups:    map[string]string{},
 		InitialRouteTargets:  map[string]string{},
 		LaunchedInstances:    map[string]string{},
+		LaunchTemplates:      map[string]string{},
+		OwnerInstances:       map[string]string{},
 		PreviousRouteTargets: map[string]string{},
 	}
 	instanceIDs := map[string]string{}
 	for name, id := range inputs.ApplianceInstanceIDs {
 		instanceIDs[name] = id
 	}
-	for _, appliance := range plan.Appliances {
-		instanceID := instanceIDs[appliance.Name]
-		if instanceID == "" {
-			instanceID, err = a.launchAppliance(ctx, plan, appliance, securityGroupID, inputs.UserData)
+	if len(plan.Pools) > 0 {
+		for _, pool := range plan.Pools {
+			launchTemplateID, err := a.createLaunchTemplate(ctx, plan, pool, securityGroupID, inputs.UserData)
 			if err != nil {
 				return Result{}, err
 			}
-			instanceIDs[appliance.Name] = instanceID
-			result.LaunchedInstances[appliance.Name] = instanceID
+			result.LaunchTemplates[pool.AvailabilityZone] = launchTemplateID
+			if err := a.createAutoScalingGroup(ctx, plan, pool, launchTemplateID); err != nil {
+				return Result{}, err
+			}
+			result.AutoScalingGroups[pool.AvailabilityZone] = pool.ASGName
+			ownerInstanceID, err := a.waitForPoolOwner(ctx, pool.ASGName)
+			if err != nil {
+				return Result{}, err
+			}
+			instanceIDs[pool.Name] = ownerInstanceID
+			result.OwnerInstances[pool.AvailabilityZone] = ownerInstanceID
+			if err := a.disableSourceDestCheck(ctx, ownerInstanceID); err != nil {
+				return Result{}, err
+			}
 		}
-		if err := a.disableSourceDestCheck(ctx, instanceID); err != nil {
-			return Result{}, err
+	} else {
+		for _, appliance := range plan.Appliances {
+			instanceID := instanceIDs[appliance.Name]
+			if instanceID == "" {
+				instanceID, err = a.launchAppliance(ctx, plan, appliance, securityGroupID, inputs.UserData)
+				if err != nil {
+					return Result{}, err
+				}
+				instanceIDs[appliance.Name] = instanceID
+				result.LaunchedInstances[appliance.Name] = instanceID
+			}
+			if err := a.disableSourceDestCheck(ctx, instanceID); err != nil {
+				return Result{}, err
+			}
 		}
 	}
 	for az, name := range plan.EIPAllocationNames {
@@ -139,8 +188,10 @@ func (a Applier) Apply(ctx context.Context, plan installplan.Plan, inputs Inputs
 		if err != nil {
 			return Result{}, err
 		}
-		activeName := plan.Name + "-" + az + "-active"
-		instanceID := instanceIDs[activeName]
+		instanceID := instanceIDs[plan.Name+"-"+az+"-active"]
+		if instanceID == "" {
+			instanceID = instanceIDs[plan.Name+"-"+az]
+		}
 		if instanceID == "" {
 			return Result{}, fmt.Errorf("missing active instance id for %s", az)
 		}
@@ -156,8 +207,10 @@ func (a Applier) Apply(ctx context.Context, plan installplan.Plan, inputs Inputs
 			return Result{}, fmt.Errorf("snapshot previous route %s: %w", route.RouteTableID, err)
 		}
 		result.PreviousRouteTargets[route.RouteTableID] = previousTarget
-		activeName := plan.Name + "-" + route.AvailabilityZone + "-active"
-		instanceID := instanceIDs[activeName]
+		instanceID := instanceIDs[plan.Name+"-"+route.AvailabilityZone+"-active"]
+		if instanceID == "" {
+			instanceID = instanceIDs[plan.Name+"-"+route.AvailabilityZone]
+		}
 		if instanceID == "" {
 			return Result{}, fmt.Errorf("missing active instance id for %s", route.AvailabilityZone)
 		}
@@ -173,6 +226,30 @@ func (a Applier) Apply(ctx context.Context, plan installplan.Plan, inputs Inputs
 	return result, nil
 }
 
+func (a Applier) UpdateCapacity(ctx context.Context, plan installplan.Plan) error {
+	if len(plan.Pools) == 0 {
+		return fmt.Errorf("capacity update requires ASG pools")
+	}
+	if a.AutoScaling == nil {
+		return fmt.Errorf("autoscaling client is required")
+	}
+	for _, pool := range plan.Pools {
+		if pool.ASGName == "" {
+			return fmt.Errorf("asg name is required for pool %s", pool.Name)
+		}
+		_, err := a.AutoScaling.UpdateAutoScalingGroup(ctx, &autoscaling.UpdateAutoScalingGroupInput{
+			AutoScalingGroupName: awssdk.String(pool.ASGName),
+			MinSize:              awssdk.Int32(pool.MinSize),
+			MaxSize:              awssdk.Int32(pool.MaxSize),
+			DesiredCapacity:      awssdk.Int32(pool.DesiredCapacity),
+		})
+		if err != nil {
+			return fmt.Errorf("update asg capacity %s: %w", pool.ASGName, err)
+		}
+	}
+	return nil
+}
+
 func (a Applier) RestoreRoutes(ctx context.Context, routes []RollbackRoute) error {
 	if a.EC2 == nil {
 		return fmt.Errorf("ec2 client is required")
@@ -183,10 +260,19 @@ func (a Applier) RestoreRoutes(ctx context.Context, routes []RollbackRoute) erro
 			return fmt.Errorf("build rollback route %s: %w", route.RouteTableID, err)
 		}
 		if _, err := a.EC2.ReplaceRoute(ctx, input); err != nil {
+			if isStaleRollbackTarget(err) {
+				continue
+			}
 			return fmt.Errorf("rollback route %s: %w", route.RouteTableID, err)
 		}
 	}
 	return nil
+}
+
+func isStaleRollbackTarget(err error) bool {
+	return isAPIError(err, "InvalidNetworkInterfaceID.NotFound") ||
+		isAPIError(err, "InvalidNatGatewayID.NotFound") ||
+		isAPIError(err, "InvalidInstanceID.NotFound")
 }
 
 func (a Applier) Cleanup(ctx context.Context, plan installplan.Plan, inputs CleanupInputs) error {
@@ -198,6 +284,12 @@ func (a Applier) Cleanup(ctx context.Context, plan installplan.Plan, inputs Clea
 	}
 	if a.IAM == nil {
 		return fmt.Errorf("iam client is required")
+	}
+	if len(plan.Pools) > 0 && a.AutoScaling == nil {
+		return fmt.Errorf("autoscaling client is required")
+	}
+	if err := a.deletePools(ctx, plan); err != nil {
+		return err
 	}
 	if err := a.terminateAppliances(ctx, inputs.InstanceIDs); err != nil {
 		return err
@@ -213,6 +305,59 @@ func (a Applier) Cleanup(ctx context.Context, plan installplan.Plan, inputs Clea
 	}
 	if err := a.deleteSecurityGroup(ctx, plan); err != nil {
 		return err
+	}
+	return nil
+}
+
+func (a Applier) deletePools(ctx context.Context, plan installplan.Plan) error {
+	for _, pool := range plan.Pools {
+		if pool.ASGName != "" {
+			if _, err := a.AutoScaling.UpdateAutoScalingGroup(ctx, &autoscaling.UpdateAutoScalingGroupInput{
+				AutoScalingGroupName: awssdk.String(pool.ASGName),
+				MinSize:              awssdk.Int32(0),
+				DesiredCapacity:      awssdk.Int32(0),
+			}); err != nil && !isAPIError(err, "ValidationError") {
+				return fmt.Errorf("scale down asg %s: %w", pool.ASGName, err)
+			}
+			if _, err := a.AutoScaling.DeleteAutoScalingGroup(ctx, &autoscaling.DeleteAutoScalingGroupInput{
+				AutoScalingGroupName: awssdk.String(pool.ASGName),
+				ForceDelete:          awssdk.Bool(true),
+			}); err != nil && !isAPIError(err, "ValidationError") {
+				return fmt.Errorf("delete asg %s: %w", pool.ASGName, err)
+			}
+		}
+		if pool.LaunchTemplateName != "" {
+			if err := a.deleteLaunchTemplate(ctx, pool.LaunchTemplateName); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (a Applier) deleteLaunchTemplate(ctx context.Context, name string) error {
+	input := &ec2.DeleteLaunchTemplateInput{LaunchTemplateName: awssdk.String(name)}
+	var lastErr error
+	for attempt := 0; attempt < 12; attempt++ {
+		if _, err := a.EC2.DeleteLaunchTemplate(ctx, input); err != nil {
+			if isAPIError(err, "InvalidLaunchTemplateName.NotFoundException") {
+				return nil
+			}
+			if isAPIError(err, "DependencyViolation") || isAPIError(err, "ResourceInUse") {
+				lastErr = err
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(5 * time.Second):
+					continue
+				}
+			}
+			return fmt.Errorf("delete launch template %s: %w", name, err)
+		}
+		return nil
+	}
+	if lastErr != nil {
+		return fmt.Errorf("delete launch template %s after dependency wait: %w", name, lastErr)
 	}
 	return nil
 }
@@ -340,6 +485,12 @@ func (a Applier) deleteIAM(ctx context.Context, plan installplan.Plan) error {
 			PolicyName: awssdk.String("betternat-runtime"),
 		}); err != nil && !isAPIError(err, "NoSuchEntity") {
 			return fmt.Errorf("delete role policy %s: %w", plan.IAMRoleName, err)
+		}
+		if _, err := a.IAM.DetachRolePolicy(ctx, &iam.DetachRolePolicyInput{
+			RoleName:  awssdk.String(plan.IAMRoleName),
+			PolicyArn: awssdk.String(ssmManagedInstanceCorePolicyARN),
+		}); err != nil && !isAPIError(err, "NoSuchEntity") {
+			return fmt.Errorf("detach ssm managed policy %s: %w", plan.IAMRoleName, err)
 		}
 		if _, err := a.IAM.DeleteRole(ctx, &iam.DeleteRoleInput{
 			RoleName: awssdk.String(plan.IAMRoleName),
@@ -473,7 +624,14 @@ func (a Applier) ensureSecurityGroup(ctx context.Context, plan installplan.Plan)
 	})
 	if err != nil {
 		if isAPIError(err, "InvalidGroup.Duplicate") {
-			return a.findSecurityGroup(ctx, plan)
+			groupID, findErr := a.findSecurityGroup(ctx, plan)
+			if findErr != nil {
+				return "", findErr
+			}
+			if ruleErr := a.ensureSecurityGroupRules(ctx, groupID, plan); ruleErr != nil {
+				return "", ruleErr
+			}
+			return groupID, nil
 		}
 		return "", fmt.Errorf("create security group %s: %w", plan.SecurityGroupName, err)
 	}
@@ -487,7 +645,47 @@ func (a Applier) ensureSecurityGroup(ctx context.Context, plan installplan.Plan)
 	}); err != nil {
 		return "", fmt.Errorf("tag security group %s: %w", groupID, err)
 	}
+	if err := a.ensureSecurityGroupRules(ctx, groupID, plan); err != nil {
+		return "", err
+	}
 	return groupID, nil
+}
+
+func (a Applier) ensureSecurityGroupRules(ctx context.Context, groupID string, plan installplan.Plan) error {
+	privateCIDRs := plan.PrivateCIDRs
+	if len(privateCIDRs) == 0 {
+		privateCIDRs = []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"}
+	}
+	for _, cidr := range privateCIDRs {
+		if cidr == "" {
+			continue
+		}
+		_, err := a.EC2.AuthorizeSecurityGroupIngress(ctx, &ec2.AuthorizeSecurityGroupIngressInput{
+			GroupId: awssdk.String(groupID),
+			IpPermissions: []ec2types.IpPermission{
+				{
+					IpProtocol: awssdk.String("-1"),
+					IpRanges:   []ec2types.IpRange{{CidrIp: awssdk.String(cidr), Description: awssdk.String("BetterNAT private subnet traffic")}},
+				},
+			},
+		})
+		if err != nil && !isAPIError(err, "InvalidPermission.Duplicate") {
+			return fmt.Errorf("authorize appliance ingress %s: %w", cidr, err)
+		}
+	}
+	_, err := a.EC2.AuthorizeSecurityGroupEgress(ctx, &ec2.AuthorizeSecurityGroupEgressInput{
+		GroupId: awssdk.String(groupID),
+		IpPermissions: []ec2types.IpPermission{
+			{
+				IpProtocol: awssdk.String("-1"),
+				IpRanges:   []ec2types.IpRange{{CidrIp: awssdk.String("0.0.0.0/0"), Description: awssdk.String("BetterNAT outbound traffic")}},
+			},
+		},
+	})
+	if err != nil && !isAPIError(err, "InvalidPermission.Duplicate") {
+		return fmt.Errorf("authorize appliance egress: %w", err)
+	}
+	return nil
 }
 
 func (a Applier) findSecurityGroup(ctx context.Context, plan installplan.Plan) (string, error) {
@@ -508,6 +706,133 @@ func (a Applier) findSecurityGroup(ctx context.Context, plan installplan.Plan) (
 		return "", fmt.Errorf("security group %s has empty group id", plan.SecurityGroupName)
 	}
 	return groupID, nil
+}
+
+func (a Applier) createLaunchTemplate(ctx context.Context, plan installplan.Plan, pool installplan.Pool, securityGroupID string, userData string) (string, error) {
+	if plan.AMIID == "" {
+		return "", fmt.Errorf("ami id is required to create launch template %q", pool.LaunchTemplateName)
+	}
+	data := &ec2types.RequestLaunchTemplateData{
+		ImageId:      awssdk.String(plan.AMIID),
+		InstanceType: ec2types.InstanceType(plan.InstanceType),
+		IamInstanceProfile: &ec2types.LaunchTemplateIamInstanceProfileSpecificationRequest{
+			Name: awssdk.String(plan.InstanceProfileName),
+		},
+		TagSpecifications: []ec2types.LaunchTemplateTagSpecificationRequest{
+			{
+				ResourceType: ec2types.ResourceTypeInstance,
+				Tags: append(ec2TagsWithName(plan.Tags, pool.Name),
+					ec2types.Tag{Key: awssdk.String("BetterNATApplianceAZ"), Value: awssdk.String(pool.AvailabilityZone)},
+					ec2types.Tag{Key: awssdk.String("BetterNATPool"), Value: awssdk.String(pool.Name)},
+				),
+			},
+		},
+	}
+	networkInterface := ec2types.LaunchTemplateInstanceNetworkInterfaceSpecificationRequest{
+		AssociatePublicIpAddress: awssdk.Bool(true),
+		DeleteOnTermination:      awssdk.Bool(true),
+		DeviceIndex:              awssdk.Int32(0),
+	}
+	if securityGroupID != "" {
+		networkInterface.Groups = []string{securityGroupID}
+	}
+	data.NetworkInterfaces = []ec2types.LaunchTemplateInstanceNetworkInterfaceSpecificationRequest{networkInterface}
+	if plan.UseSpot {
+		data.InstanceMarketOptions = &ec2types.LaunchTemplateInstanceMarketOptionsRequest{
+			MarketType: ec2types.MarketTypeSpot,
+			SpotOptions: &ec2types.LaunchTemplateSpotMarketOptionsRequest{
+				SpotInstanceType: ec2types.SpotInstanceTypeOneTime,
+			},
+		}
+	}
+	if userData != "" {
+		data.UserData = awssdk.String(base64.StdEncoding.EncodeToString([]byte(userData)))
+	}
+	output, err := a.EC2.CreateLaunchTemplate(ctx, &ec2.CreateLaunchTemplateInput{
+		LaunchTemplateName: awssdk.String(pool.LaunchTemplateName),
+		LaunchTemplateData: data,
+		TagSpecifications: []ec2types.TagSpecification{
+			{
+				ResourceType: ec2types.ResourceTypeLaunchTemplate,
+				Tags:         ec2TagsWithName(plan.Tags, pool.LaunchTemplateName),
+			},
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("create launch template %s: %w", pool.LaunchTemplateName, err)
+	}
+	launchTemplateID := awssdk.ToString(output.LaunchTemplate.LaunchTemplateId)
+	if launchTemplateID == "" {
+		return "", fmt.Errorf("create launch template %s returned empty id", pool.LaunchTemplateName)
+	}
+	return launchTemplateID, nil
+}
+
+func (a Applier) createAutoScalingGroup(ctx context.Context, plan installplan.Plan, pool installplan.Pool, launchTemplateID string) error {
+	input := &autoscaling.CreateAutoScalingGroupInput{
+		AutoScalingGroupName: awssdk.String(pool.ASGName),
+		MinSize:              awssdk.Int32(pool.MinSize),
+		MaxSize:              awssdk.Int32(pool.MaxSize),
+		DesiredCapacity:      awssdk.Int32(pool.DesiredCapacity),
+		VPCZoneIdentifier:    awssdk.String(pool.SubnetID),
+		LaunchTemplate: &astypes.LaunchTemplateSpecification{
+			LaunchTemplateId: awssdk.String(launchTemplateID),
+			Version:          awssdk.String("$Latest"),
+		},
+		Tags: autoScalingTags(plan.Tags, pool.Name),
+	}
+	var err error
+	for attempt := 0; attempt < 12; attempt++ {
+		_, err = a.AutoScaling.CreateAutoScalingGroup(ctx, input)
+		if err == nil {
+			return nil
+		}
+		if !isLaunchTemplatePropagationError(err) {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(10 * time.Second):
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("create asg %s: %w", pool.ASGName, err)
+	}
+	return nil
+}
+
+func (a Applier) waitForPoolOwner(ctx context.Context, asgName string) (string, error) {
+	var lastInstanceID string
+	for attempt := 0; attempt < 30; attempt++ {
+		output, err := a.AutoScaling.DescribeAutoScalingGroups(ctx, &autoscaling.DescribeAutoScalingGroupsInput{
+			AutoScalingGroupNames: []string{asgName},
+		})
+		if err != nil {
+			return "", fmt.Errorf("describe asg %s: %w", asgName, err)
+		}
+		for _, group := range output.AutoScalingGroups {
+			for _, instance := range group.Instances {
+				instanceID := awssdk.ToString(instance.InstanceId)
+				if instanceID == "" {
+					continue
+				}
+				lastInstanceID = instanceID
+				if instance.LifecycleState == astypes.LifecycleStateInService {
+					return instanceID, nil
+				}
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(10 * time.Second):
+		}
+	}
+	if lastInstanceID != "" {
+		return lastInstanceID, nil
+	}
+	return "", fmt.Errorf("asg %s did not produce an instance", asgName)
 }
 
 func (a Applier) launchAppliance(ctx context.Context, plan installplan.Plan, appliance installplan.Appliance, securityGroupID string, userData string) (string, error) {
@@ -584,6 +909,16 @@ func isInstanceProfilePropagationError(err error) bool {
 	return strings.Contains(message, "iamInstanceProfile") || strings.Contains(message, "IAM Instance Profile")
 }
 
+func isLaunchTemplatePropagationError(err error) bool {
+	if !isAPIError(err, "ValidationError") && !isAPIError(err, "InvalidParameterValue") {
+		return false
+	}
+	message := err.Error()
+	return strings.Contains(message, "iamInstanceProfile") ||
+		strings.Contains(message, "IAM Instance Profile") ||
+		strings.Contains(message, "valid fully-formed launch template")
+}
+
 func (a Applier) createIAM(ctx context.Context, plan installplan.Plan) error {
 	if _, err := a.IAM.CreateRole(ctx, &iam.CreateRoleInput{
 		RoleName:                 awssdk.String(plan.IAMRoleName),
@@ -603,6 +938,12 @@ func (a Applier) createIAM(ctx context.Context, plan installplan.Plan) error {
 	}); err != nil {
 		return fmt.Errorf("put iam role policy %s: %w", plan.IAMRoleName, err)
 	}
+	if _, err := a.IAM.AttachRolePolicy(ctx, &iam.AttachRolePolicyInput{
+		RoleName:  awssdk.String(plan.IAMRoleName),
+		PolicyArn: awssdk.String(ssmManagedInstanceCorePolicyARN),
+	}); err != nil {
+		return fmt.Errorf("attach ssm managed policy %s: %w", plan.IAMRoleName, err)
+	}
 	if _, err := a.IAM.CreateInstanceProfile(ctx, &iam.CreateInstanceProfileInput{
 		InstanceProfileName: awssdk.String(plan.InstanceProfileName),
 		Tags:                iamTags(plan.Tags),
@@ -615,12 +956,17 @@ func (a Applier) createIAM(ctx context.Context, plan installplan.Plan) error {
 		InstanceProfileName: awssdk.String(plan.InstanceProfileName),
 		RoleName:            awssdk.String(plan.IAMRoleName),
 	}); err != nil {
+		if isAPIError(err, "LimitExceeded") && strings.Contains(err.Error(), "InstanceSessionsPerInstanceProfile") {
+			return nil
+		}
 		return fmt.Errorf("add role to instance profile %s: %w", plan.InstanceProfileName, err)
 	}
 	return nil
 }
 
 const ec2AssumeRolePolicy = `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"ec2.amazonaws.com"},"Action":"sts:AssumeRole"}]}`
+
+const ssmManagedInstanceCorePolicyARN = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 
 func runtimePolicy(actions []string) string {
 	data, _ := json.Marshal(map[string]any{
@@ -744,6 +1090,25 @@ func iamTags(tags map[string]string) []iamtypes.Tag {
 		result = append(result, iamtypes.Tag{Key: awssdk.String(key), Value: awssdk.String(value)})
 	}
 	return result
+}
+
+func autoScalingTags(tags map[string]string, name string) []astypes.Tag {
+	result := make([]astypes.Tag, 0, len(tags)+1)
+	for key, value := range tags {
+		if key == "Name" {
+			continue
+		}
+		result = append(result, astypes.Tag{
+			Key:               awssdk.String(key),
+			Value:             awssdk.String(value),
+			PropagateAtLaunch: awssdk.Bool(true),
+		})
+	}
+	return append(result, astypes.Tag{
+		Key:               awssdk.String("Name"),
+		Value:             awssdk.String(name),
+		PropagateAtLaunch: awssdk.Bool(true),
+	})
 }
 
 func uniqueNonEmpty(values []string) []string {

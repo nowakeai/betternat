@@ -22,6 +22,13 @@ resource "betternat_gateway" "egress" {
   # override this to true when interruption risk is acceptable.
   use_spot = false
 
+  # BetterNAT runs as one appliance pool per AZ. desired_capacity=2 gives the
+  # standard owner + warm candidate shape; use 1 for cheapest non-HA mode or
+  # 3+ for extra standby capacity.
+  min_size         = 1
+  desired_capacity = 2
+  max_size         = 3
+
   public_subnet_ids = {
     us-west-2a = "subnet-public-a"
     us-west-2b = "subnet-public-b"
@@ -37,8 +44,11 @@ resource "betternat_gateway" "egress" {
   datapath_engine          = "loxilb"
   fallback_datapath_engine = "nftables"
   stable_egress_ip         = true
-  prometheus_enabled       = true
-  rollback_on_destroy      = true
+  # stable is the production default. Use balanced or fast only when faster
+  # recovery is worth a higher false-failover risk.
+  ha_profile          = "stable"
+  prometheus_enabled  = true
+  rollback_on_destroy = true
 }
 
 output "agent_config_hash" {

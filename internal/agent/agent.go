@@ -11,10 +11,14 @@ import (
 	"os"
 	"time"
 
+	"github.com/betternat/betternat/internal/cloud"
+	awscloud "github.com/betternat/betternat/internal/cloud/aws"
 	"github.com/betternat/betternat/internal/config"
 	"github.com/betternat/betternat/internal/datapath"
 	"github.com/betternat/betternat/internal/datapath/loxilb"
 	"github.com/betternat/betternat/internal/datapath/nftables"
+	"github.com/betternat/betternat/internal/ha"
+	dynamodblease "github.com/betternat/betternat/internal/lease/dynamodb"
 	"github.com/betternat/betternat/internal/metrics"
 )
 
@@ -27,6 +31,10 @@ type Options struct {
 
 type Runtime struct {
 	Factory              EngineFactory
+	HASupervisorFactory  HASupervisorFactory
+	InstancePreparer     cloud.InstancePreparer
+	ResolveInstanceID    func(context.Context, string) (string, error)
+	ResolveSharedEIP     func(context.Context, string, string, string) (string, error)
 	Stdout               io.Writer
 	MetricsListenAddress string
 	DisableMetricsServer bool
@@ -47,6 +55,38 @@ func (DefaultEngineFactory) NewEngine(cfg config.DatapathConfig) (datapath.Engin
 	default:
 		return nil, fmt.Errorf("unsupported datapath engine %q", cfg.Engine)
 	}
+}
+
+type HASupervisor interface {
+	Run(context.Context, config.Config, string, time.Duration) error
+}
+
+type HASupervisorFactory interface {
+	NewSupervisor(context.Context, config.Config, datapath.Engine, ha.StatusReporter) (HASupervisor, error)
+}
+
+type DefaultHASupervisorFactory struct{}
+
+func (DefaultHASupervisorFactory) NewSupervisor(ctx context.Context, cfg config.Config, engine datapath.Engine, reporter ha.StatusReporter) (HASupervisor, error) {
+	if err := validateHAConfig(cfg); err != nil {
+		return nil, err
+	}
+	cloudProvider, err := awscloud.New(ctx, cfg.Region)
+	if err != nil {
+		return nil, err
+	}
+	leaseManager, err := dynamodblease.New(ctx, cfg.Region, cfg.HA.Lease.Table, leaseKey(cfg), leaseTTL(cfg))
+	if err != nil {
+		return nil, err
+	}
+	return ha.Supervisor{
+		Controller: ha.Controller{
+			Cloud:    cloudProvider,
+			Lease:    leaseManager,
+			Datapath: engine,
+		},
+		Reporter: reporter,
+	}, nil
 }
 
 type RunResult struct {
@@ -83,6 +123,10 @@ func (r Runtime) Run(ctx context.Context, opts Options) error {
 		_, _ = fmt.Fprintln(output(r.Stdout), `{"status":"valid"}`)
 		return nil
 	}
+	cfg, err = r.prepareLocalInstance(ctx, cfg)
+	if err != nil {
+		return err
+	}
 	factory := r.Factory
 	if factory == nil {
 		factory = DefaultEngineFactory{}
@@ -97,7 +141,7 @@ func (r Runtime) Run(ctx context.Context, opts Options) error {
 			return err
 		}
 		if opts.Prometheus {
-			if err := renderPrometheusResult(output(r.Stdout), cfg, result); err != nil {
+			if err := renderPrometheusResult(output(r.Stdout), cfg, result, ha.StatusSnapshot{}); err != nil {
 				return err
 			}
 			return nil
@@ -111,7 +155,48 @@ func (r Runtime) Run(ctx context.Context, opts Options) error {
 	if r.MetricsListenAddress != "" {
 		metricsAddress = r.MetricsListenAddress
 	}
-	return runContinuous(ctx, cfg, engine, metricsAddress, !r.DisableMetricsServer)
+	haFactory := r.HASupervisorFactory
+	if haFactory == nil {
+		haFactory = DefaultHASupervisorFactory{}
+	}
+	return runContinuous(ctx, cfg, engine, metricsAddress, !r.DisableMetricsServer, haFactory)
+}
+
+func (r Runtime) prepareLocalInstance(ctx context.Context, cfg config.Config) (config.Config, error) {
+	if cfg.Cloud != "aws" || cfg.Local.InstanceID != "auto" {
+		return cfg, nil
+	}
+	resolve := r.ResolveInstanceID
+	if resolve == nil {
+		resolve = awscloud.ResolveLocalInstanceID
+	}
+	instanceID, err := resolve(ctx, cfg.Region)
+	if err != nil {
+		return config.Config{}, err
+	}
+	preparer := r.InstancePreparer
+	if preparer == nil {
+		preparer, err = awscloud.New(ctx, cfg.Region)
+		if err != nil {
+			return config.Config{}, err
+		}
+	}
+	if err := preparer.DisableSourceDestCheck(ctx, instanceID); err != nil {
+		return config.Config{}, err
+	}
+	cfg.Local.InstanceID = instanceID
+	if cfg.HA.PublicIdentity.Mode == "shared_eip" && cfg.HA.PublicIdentity.AllocationID == "auto" {
+		resolveEIP := r.ResolveSharedEIP
+		if resolveEIP == nil {
+			resolveEIP = awscloud.ResolveSharedEIPAllocationID
+		}
+		allocationID, err := resolveEIP(ctx, cfg.Region, cfg.GatewayID, cfg.Local.AvailabilityZone)
+		if err != nil {
+			return config.Config{}, err
+		}
+		cfg.HA.PublicIdentity.AllocationID = allocationID
+	}
+	return cfg, nil
 }
 
 func runOnce(ctx context.Context, cfg config.Config, engine datapath.Engine) (RunResult, error) {
@@ -140,14 +225,26 @@ func runOnce(ctx context.Context, cfg config.Config, engine datapath.Engine) (Ru
 	}, nil
 }
 
-func runContinuous(ctx context.Context, cfg config.Config, engine datapath.Engine, metricsAddress string, enableMetrics bool) error {
+func runContinuous(ctx context.Context, cfg config.Config, engine datapath.Engine, metricsAddress string, enableMetrics bool, haFactory HASupervisorFactory) error {
+	haStatus := ha.NewMemoryStatus()
 	if enableMetrics {
-		server, listener, err := startMetricsServer(ctx, metricsAddress, metricsHandler(cfg, engine))
+		server, listener, err := startMetricsServer(ctx, metricsAddress, metricsHandler(cfg, engine, haStatus))
 		if err != nil {
 			return err
 		}
 		defer shutdownServer(server)
 		defer listener.Close()
+	}
+
+	if cfg.HA.Enabled {
+		if haFactory == nil {
+			return fmt.Errorf("HA supervisor factory is required")
+		}
+		supervisor, err := haFactory.NewSupervisor(ctx, cfg, engine, haStatus)
+		if err != nil {
+			return err
+		}
+		return supervisor.Run(ctx, cfg, cfg.Local.InstanceID, 0)
 	}
 
 	interval := reconcileInterval(cfg)
@@ -166,23 +263,144 @@ func runContinuous(ctx context.Context, cfg config.Config, engine datapath.Engin
 	}
 }
 
-func renderPrometheusResult(w io.Writer, cfg config.Config, result RunResult) error {
+func validateHAConfig(cfg config.Config) error {
+	if !cfg.HA.Enabled {
+		return nil
+	}
+	if cfg.Cloud != "aws" {
+		return fmt.Errorf("ha.enabled requires cloud=aws")
+	}
+	if cfg.Region == "" {
+		return fmt.Errorf("ha.enabled requires region")
+	}
+	if cfg.Local.InstanceID == "" || cfg.Local.InstanceID == "auto" {
+		return fmt.Errorf("ha.enabled requires resolved local.instance_id")
+	}
+	if cfg.HA.Lease.Backend != "dynamodb" {
+		return fmt.Errorf("unsupported ha.lease.backend %q", cfg.HA.Lease.Backend)
+	}
+	if cfg.HA.Lease.Table == "" {
+		return fmt.Errorf("ha.lease.table is required")
+	}
+	if leaseKey(cfg) == "" {
+		return fmt.Errorf("ha.lease.key or ha_group_id is required")
+	}
+	if cfg.HA.RouteFailover.Mode == "" {
+		return fmt.Errorf("ha.route_failover.mode is required")
+	}
+	if cfg.HA.RouteFailover.Mode != "replace_route" {
+		return fmt.Errorf("unsupported ha.route_failover.mode %q", cfg.HA.RouteFailover.Mode)
+	}
+	if cfg.HA.RouteFailover.TargetType != "instance" {
+		return fmt.Errorf("unsupported ha.route_failover.target_type %q", cfg.HA.RouteFailover.TargetType)
+	}
+	if cfg.HA.RouteFailover.DestinationCIDR == "" {
+		return fmt.Errorf("ha.route_failover.destination_cidr is required")
+	}
+	if len(cfg.HA.RouteFailover.RouteTableIDs) == 0 {
+		return fmt.Errorf("ha.route_failover.route_table_ids is required")
+	}
+	if cfg.HA.PublicIdentity.Mode == "shared_eip" && cfg.HA.PublicIdentity.AllocationID == "" {
+		return fmt.Errorf("ha.public_identity.allocation_id is required for shared_eip")
+	}
+	if cfg.HA.PublicIdentity.Mode != "" && cfg.HA.PublicIdentity.Mode != "shared_eip" {
+		return fmt.Errorf("unsupported ha.public_identity.mode %q", cfg.HA.PublicIdentity.Mode)
+	}
+	return nil
+}
+
+func leaseKey(cfg config.Config) string {
+	if cfg.HA.Lease.Key != "" {
+		return cfg.HA.Lease.Key
+	}
+	return cfg.HAGroupID
+}
+
+func leaseTTL(cfg config.Config) time.Duration {
+	if cfg.HA.Lease.TTLSeconds > 0 {
+		return time.Duration(cfg.HA.Lease.TTLSeconds) * time.Second
+	}
+	return 15 * time.Second
+}
+
+func renderPrometheusResult(w io.Writer, cfg config.Config, result RunResult, haStatus ha.StatusSnapshot) error {
+	haState := "unknown"
+	if haStatus.State != "" {
+		haState = string(haStatus.State)
+	}
+	haStatusAge := 0.0
+	haStatusStale := false
+	if cfg.HA.Enabled {
+		if haStatus.UpdatedAt.IsZero() {
+			haStatusStale = true
+		} else {
+			haStatusAge = time.Since(haStatus.UpdatedAt).Seconds()
+			haStatusStale = time.Since(haStatus.UpdatedAt) > haStatusStaleAfter(cfg)
+		}
+		if haStatusStale {
+			haState = "STALE"
+		}
+	}
+	leaseHasOwner := haStatus.Lease.OwnerInstanceID != ""
+	leaseOwnerMatch := leaseHasOwner && haStatus.Lease.OwnerInstanceID == result.Node
+	routeTargetMatches := haStatus.RouteTargetMatches
+	publicIdentityMatches := haStatus.PublicIdentityMatches
+	if haStatusStale {
+		leaseOwnerMatch = false
+		routeTargetMatches = false
+		publicIdentityMatches = false
+	}
 	snapshot := metrics.Snapshot{
-		GatewayID: result.GatewayID,
-		HAGroupID: result.HAGroupID,
-		Node:      result.Node,
-		AgentUp:   true,
-		HAState:   "unknown",
-		Datapath:  result.Datapath,
-		Counters:  result.Counters,
-		Conntrack: result.Conntrack,
-		Owners:    ownerCounters(cfg.Observability.Attribution.Owners, result.Counters),
-		Processed: processedCounter(result.Counters),
+		GatewayID:               result.GatewayID,
+		HAGroupID:               result.HAGroupID,
+		Node:                    result.Node,
+		AgentUp:                 true,
+		Active:                  !haStatusStale && haStatus.State == ha.StateActive,
+		HAState:                 haState,
+		HAStatusAgeSeconds:      haStatusAge,
+		HAStatusStale:           haStatusStale,
+		LeaseGeneration:         haStatus.Lease.Generation,
+		LeaseOwnerMatch:         leaseOwnerMatch,
+		LeaseHasOwner:           leaseHasOwner,
+		LeaseSecondsUntilExpiry: haStatus.SecondsUntilLeaseExpiry,
+		RouteTargetMatch:        routeTargetMatches,
+		RouteTargetChecked:      haStatus.HasRouteTargetCheck,
+		PublicIdentityMatch:     publicIdentityMatches,
+		PublicIdentityChecked:   haStatus.HasPublicIdentityCheck,
+		HATakeoverAttempts:      haStatus.TakeoverAttempts,
+		HATakeoverSuccesses:     haStatus.TakeoverSuccesses,
+		HALeaseRenewErrors:      haStatus.LeaseRenewErrors,
+		Datapath:                result.Datapath,
+		Counters:                result.Counters,
+		Conntrack:               result.Conntrack,
+		Owners:                  ownerCounters(cfg.Observability.Attribution.Owners, result.Counters),
+		Processed:               processedCounter(result.Counters),
 	}
 	if err := metrics.RenderPrometheus(w, snapshot); err != nil {
 		return fmt.Errorf("encode prometheus metrics: %w", err)
 	}
 	return nil
+}
+
+func haStatusStaleAfter(cfg config.Config) time.Duration {
+	threshold := leaseTTL(cfg)
+	if renew := leaseRenewInterval(cfg); renew*2 > threshold {
+		threshold = renew * 2
+	}
+	if threshold <= 0 {
+		return 15 * time.Second
+	}
+	return threshold
+}
+
+func leaseRenewInterval(cfg config.Config) time.Duration {
+	if cfg.HA.Lease.RenewIntervalSeconds > 0 {
+		return time.Duration(cfg.HA.Lease.RenewIntervalSeconds) * time.Second
+	}
+	if cfg.HA.Lease.TTLSeconds > 0 {
+		return time.Duration(cfg.HA.Lease.TTLSeconds) * time.Second / 3
+	}
+	return 5 * time.Second
 }
 
 func startMetricsServer(ctx context.Context, address string, handler http.Handler) (*http.Server, net.Listener, error) {
@@ -209,7 +427,7 @@ func shutdownServer(server *http.Server) {
 	_ = server.Shutdown(ctx)
 }
 
-func metricsHandler(cfg config.Config, engine datapath.Engine) http.Handler {
+func metricsHandler(cfg config.Config, engine datapath.Engine, haStatus interface{ Snapshot() ha.StatusSnapshot }) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		result, err := collectSnapshot(r.Context(), cfg, engine)
@@ -218,9 +436,16 @@ func metricsHandler(cfg config.Config, engine datapath.Engine) http.Handler {
 			return
 		}
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
-		_ = renderPrometheusResult(w, cfg, result)
+		_ = renderPrometheusResult(w, cfg, result, currentHASnapshot(haStatus))
 	})
 	return mux
+}
+
+func currentHASnapshot(source interface{ Snapshot() ha.StatusSnapshot }) ha.StatusSnapshot {
+	if source == nil {
+		return ha.StatusSnapshot{}
+	}
+	return source.Snapshot()
 }
 
 func collectSnapshot(ctx context.Context, cfg config.Config, engine datapath.Engine) (RunResult, error) {

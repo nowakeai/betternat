@@ -112,10 +112,55 @@ func TestDescribeInstanceReadsSourceDestCheck(t *testing.T) {
 	}
 }
 
+func TestDisableSourceDestCheck(t *testing.T) {
+	client := &fakeEC2{}
+	provider := NewFromClient(client)
+
+	if err := provider.DisableSourceDestCheck(context.Background(), "i-123"); err != nil {
+		t.Fatalf("disable source/dest check: %v", err)
+	}
+	if awssdk.ToString(client.modifyInstanceAttributeInput.InstanceId) != "i-123" {
+		t.Fatalf("unexpected modify input: %#v", client.modifyInstanceAttributeInput)
+	}
+	if client.modifyInstanceAttributeInput.SourceDestCheck == nil || awssdk.ToBool(client.modifyInstanceAttributeInput.SourceDestCheck.Value) {
+		t.Fatalf("source/dest check should be disabled: %#v", client.modifyInstanceAttributeInput)
+	}
+}
+
+func TestResolveSharedEIPAllocationIDUsesBetterNATTags(t *testing.T) {
+	client := &fakeEC2{
+		addresses: []types.Address{{
+			AllocationId: awssdk.String("eipalloc-123"),
+		}},
+	}
+	provider := NewFromClient(client)
+
+	allocationID, err := provider.ResolveSharedEIPAllocationID(context.Background(), "prod-egress", "us-west-2a")
+	if err != nil {
+		t.Fatalf("resolve shared eip: %v", err)
+	}
+	if allocationID != "eipalloc-123" {
+		t.Fatalf("unexpected allocation id: %s", allocationID)
+	}
+	wantFilters := map[string]string{
+		"tag:BetterNATGateway": "prod-egress",
+		"tag:ManagedBy":        "betternat",
+		"tag:Name":             "betternat-prod-egress-us-west-2a",
+	}
+	for _, filter := range client.describeAddressesInput.Filters {
+		delete(wantFilters, awssdk.ToString(filter.Name))
+	}
+	if len(wantFilters) != 0 {
+		t.Fatalf("missing filters: %#v input=%#v", wantFilters, client.describeAddressesInput)
+	}
+}
+
 type fakeEC2 struct {
 	replaceRouteInput              *ec2.ReplaceRouteInput
 	associateInput                 *ec2.AssociateAddressInput
+	describeAddressesInput         *ec2.DescribeAddressesInput
 	describeInstanceAttributeInput *ec2.DescribeInstanceAttributeInput
+	modifyInstanceAttributeInput   *ec2.ModifyInstanceAttributeInput
 	routeTables                    []types.RouteTable
 	addresses                      []types.Address
 	sourceDestCheck                bool
@@ -135,7 +180,8 @@ func (f *fakeEC2) DescribeRouteTables(_ context.Context, _ *ec2.DescribeRouteTab
 	return &ec2.DescribeRouteTablesOutput{RouteTables: f.routeTables}, nil
 }
 
-func (f *fakeEC2) DescribeAddresses(_ context.Context, _ *ec2.DescribeAddressesInput, _ ...func(*ec2.Options)) (*ec2.DescribeAddressesOutput, error) {
+func (f *fakeEC2) DescribeAddresses(_ context.Context, params *ec2.DescribeAddressesInput, _ ...func(*ec2.Options)) (*ec2.DescribeAddressesOutput, error) {
+	f.describeAddressesInput = params
 	return &ec2.DescribeAddressesOutput{Addresses: f.addresses}, nil
 }
 
@@ -144,4 +190,9 @@ func (f *fakeEC2) DescribeInstanceAttribute(_ context.Context, params *ec2.Descr
 	return &ec2.DescribeInstanceAttributeOutput{
 		SourceDestCheck: &types.AttributeBooleanValue{Value: awssdk.Bool(f.sourceDestCheck)},
 	}, nil
+}
+
+func (f *fakeEC2) ModifyInstanceAttribute(_ context.Context, params *ec2.ModifyInstanceAttributeInput, _ ...func(*ec2.Options)) (*ec2.ModifyInstanceAttributeOutput, error) {
+	f.modifyInstanceAttributeInput = params
+	return &ec2.ModifyInstanceAttributeOutput{}, nil
 }

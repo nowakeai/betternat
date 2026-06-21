@@ -7,6 +7,8 @@ import (
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	awssdkconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
@@ -18,6 +20,7 @@ import (
 
 type Installer interface {
 	Install(ctx context.Context, plan installplan.Plan, inputs awsinstall.Inputs) (awsinstall.Result, error)
+	UpdateCapacity(ctx context.Context, plan installplan.Plan) error
 }
 
 type Rollbacker interface {
@@ -50,6 +53,10 @@ type awsInstaller struct {
 
 func (i awsInstaller) Install(ctx context.Context, plan installplan.Plan, inputs awsinstall.Inputs) (awsinstall.Result, error) {
 	return i.applier.Apply(ctx, plan, inputs)
+}
+
+func (i awsInstaller) UpdateCapacity(ctx context.Context, plan installplan.Plan) error {
+	return i.applier.UpdateCapacity(ctx, plan)
 }
 
 func (i awsInstaller) RestoreRoutes(ctx context.Context, routes []awsinstall.RollbackRoute) error {
@@ -145,7 +152,10 @@ func endpointReaderFactory(endpointURL string) ReaderFactory {
 }
 
 func endpointAWSLifecycle(ctx context.Context, region string, endpointURL string) (awsInstaller, error) {
-	cfg, err := awssdkconfig.LoadDefaultConfig(ctx, awssdkconfig.WithRegion(region))
+	cfg, err := awssdkconfig.LoadDefaultConfig(ctx,
+		awssdkconfig.WithRegion(region),
+		awssdkconfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider("test", "test", "")),
+	)
 	if err != nil {
 		return awsInstaller{}, fmt.Errorf("load aws config: %w", err)
 	}
@@ -154,18 +164,21 @@ func endpointAWSLifecycle(ctx context.Context, region string, endpointURL string
 
 func awsLifecycleFromConfig(cfg awssdk.Config, endpointURL string) (awsInstaller, error) {
 	ec2Options := []func(*ec2.Options){}
+	autoScalingOptions := []func(*autoscaling.Options){}
 	dynamoOptions := []func(*dynamodb.Options){}
 	iamOptions := []func(*iam.Options){}
 	if endpointURL != "" {
 		ec2Options = append(ec2Options, func(o *ec2.Options) { o.BaseEndpoint = &endpointURL })
+		autoScalingOptions = append(autoScalingOptions, func(o *autoscaling.Options) { o.BaseEndpoint = &endpointURL })
 		dynamoOptions = append(dynamoOptions, func(o *dynamodb.Options) { o.BaseEndpoint = &endpointURL })
 		iamOptions = append(iamOptions, func(o *iam.Options) { o.BaseEndpoint = &endpointURL })
 	}
 	return awsInstaller{
 		applier: awsinstall.Applier{
-			EC2:      ec2.NewFromConfig(cfg, ec2Options...),
-			DynamoDB: dynamodb.NewFromConfig(cfg, dynamoOptions...),
-			IAM:      iam.NewFromConfig(cfg, iamOptions...),
+			EC2:         ec2.NewFromConfig(cfg, ec2Options...),
+			AutoScaling: autoscaling.NewFromConfig(cfg, autoScalingOptions...),
+			DynamoDB:    dynamodb.NewFromConfig(cfg, dynamoOptions...),
+			IAM:         iam.NewFromConfig(cfg, iamOptions...),
 		},
 	}, nil
 }
@@ -190,6 +203,9 @@ func installGatewayState(ctx context.Context, state *GatewayResourceModel, facto
 	}
 	state.EgressPublicIPs = mustStringMap(result.AllocatedPublicIPs)
 	active, standby := launchedInstanceMaps(plan, result.LaunchedInstances)
+	for az, instanceID := range result.OwnerInstances {
+		active[az] = instanceID
+	}
 	state.ActiveInstanceIDs = mustStringMap(active)
 	state.StandbyInstanceIDs = mustStringMap(standby)
 	if len(result.PreviousRouteTargets) > 0 {
@@ -201,6 +217,21 @@ func installGatewayState(ctx context.Context, state *GatewayResourceModel, facto
 	}
 	state.Status = types.StringValue("created")
 	return nil
+}
+
+func updateGatewayCapacity(ctx context.Context, state GatewayResourceModel, factory InstallerFactory) error {
+	if factory == nil {
+		return fmt.Errorf("installer factory is not configured")
+	}
+	var plan installplan.Plan
+	if err := json.Unmarshal([]byte(state.InstallPlanJSON.ValueString()), &plan); err != nil {
+		return fmt.Errorf("decode install plan: %w", err)
+	}
+	installer, err := factory(ctx, state.Region.ValueString())
+	if err != nil {
+		return err
+	}
+	return installer.UpdateCapacity(ctx, plan)
 }
 
 func launchedInstanceMaps(plan installplan.Plan, launched map[string]string) (map[string]string, map[string]string) {
@@ -297,6 +328,18 @@ func readGatewayState(ctx context.Context, state *GatewayResourceModel, factory 
 	state.ControlPlaneStatusJSON = types.StringValue(string(statusBytes))
 	if len(result.EgressPublicIPs) > 0 {
 		state.EgressPublicIPs = mustStringMap(result.EgressPublicIPs)
+	}
+	if len(result.PublicIdentityInstanceIDs) > 0 {
+		active, err := mapStrings(ctx, state.ActiveInstanceIDs)
+		if err != nil {
+			return fmt.Errorf("active_instance_ids: %w", err)
+		}
+		for az, instanceID := range result.PublicIdentityInstanceIDs {
+			if instanceID != "" {
+				active[az] = instanceID
+			}
+		}
+		state.ActiveInstanceIDs = mustStringMap(active)
 	}
 	state.Status = types.StringValue(statusFromReadResult(plan, result))
 	return nil

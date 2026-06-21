@@ -11,6 +11,7 @@ type Input struct {
 	VPCID                string
 	PublicSubnetIDs      map[string]string
 	PrivateRouteTableIDs map[string][]string
+	PrivateCIDRs         []string
 	StableEgressIP       bool
 	LeaseTableName       string
 	AgentConfigHash      string
@@ -18,6 +19,9 @@ type Input struct {
 	AMIChannel           string
 	InstanceType         string
 	UseSpot              bool
+	MinSize              int32
+	DesiredCapacity      int32
+	MaxSize              int32
 	RouteDestinationCIDR string
 	RouteTargetType      string
 	Tags                 map[string]string
@@ -27,19 +31,35 @@ type Plan struct {
 	Name                string            `json:"name"`
 	Region              string            `json:"region"`
 	VPCID               string            `json:"vpc_id"`
+	PrivateCIDRs        []string          `json:"private_cidrs"`
 	AMIID               string            `json:"ami_id,omitempty"`
 	AMIChannel          string            `json:"ami_channel,omitempty"`
 	InstanceType        string            `json:"instance_type"`
 	UseSpot             bool              `json:"use_spot,omitempty"`
+	MinSize             int32             `json:"min_size"`
+	DesiredCapacity     int32             `json:"desired_capacity"`
+	MaxSize             int32             `json:"max_size"`
 	IAMRoleName         string            `json:"iam_role_name"`
 	InstanceProfileName string            `json:"instance_profile_name"`
 	SecurityGroupName   string            `json:"security_group_name"`
 	LeaseTableName      string            `json:"lease_table_name"`
 	EIPAllocationNames  map[string]string `json:"eip_allocation_names"`
+	Pools               []Pool            `json:"pools"`
 	Appliances          []Appliance       `json:"appliances"`
 	ManagedRoutes       []ManagedRoute    `json:"managed_routes"`
 	RequiredIAMActions  []string          `json:"required_iam_actions"`
 	Tags                map[string]string `json:"tags"`
+}
+
+type Pool struct {
+	Name               string `json:"name"`
+	AvailabilityZone   string `json:"availability_zone"`
+	SubnetID           string `json:"subnet_id"`
+	MinSize            int32  `json:"min_size"`
+	DesiredCapacity    int32  `json:"desired_capacity"`
+	MaxSize            int32  `json:"max_size"`
+	LaunchTemplateName string `json:"launch_template_name"`
+	ASGName            string `json:"asg_name"`
 }
 
 type Appliance struct {
@@ -96,14 +116,39 @@ func Build(input Input) (Plan, error) {
 	if routeTargetType != "instance" {
 		return Plan{}, fmt.Errorf("unsupported route target type %q", routeTargetType)
 	}
+	minSize := input.MinSize
+	if minSize == 0 {
+		minSize = 1
+	}
+	desiredCapacity := input.DesiredCapacity
+	if desiredCapacity == 0 {
+		desiredCapacity = 2
+	}
+	maxSize := input.MaxSize
+	if maxSize == 0 {
+		maxSize = 3
+	}
+	if minSize < 0 {
+		return Plan{}, fmt.Errorf("min_size cannot be negative")
+	}
+	if desiredCapacity < minSize {
+		return Plan{}, fmt.Errorf("desired_capacity cannot be less than min_size")
+	}
+	if maxSize < desiredCapacity {
+		return Plan{}, fmt.Errorf("max_size cannot be less than desired_capacity")
+	}
 	plan := Plan{
 		Name:                input.Name,
 		Region:              input.Region,
 		VPCID:               input.VPCID,
+		PrivateCIDRs:        append([]string{}, input.PrivateCIDRs...),
 		AMIID:               input.AMIID,
 		AMIChannel:          amiChannel,
 		InstanceType:        instanceType,
 		UseSpot:             input.UseSpot,
+		MinSize:             minSize,
+		DesiredCapacity:     desiredCapacity,
+		MaxSize:             maxSize,
 		IAMRoleName:         "betternat-" + input.Name + "-agent",
 		InstanceProfileName: "betternat-" + input.Name + "-agent",
 		SecurityGroupName:   "betternat-" + input.Name + "-appliance",
@@ -112,8 +157,10 @@ func Build(input Input) (Plan, error) {
 		RequiredIAMActions: []string{
 			"ec2:AssociateAddress",
 			"ec2:DescribeAddresses",
+			"ec2:DescribeInstances",
 			"ec2:DescribeInstanceAttribute",
 			"ec2:DescribeRouteTables",
+			"ec2:ModifyInstanceAttribute",
 			"ec2:ReplaceRoute",
 			"dynamodb:DeleteItem",
 			"dynamodb:GetItem",
@@ -144,10 +191,17 @@ func Build(input Input) (Plan, error) {
 		if _, ok := input.PrivateRouteTableIDs[az]; !ok {
 			return Plan{}, fmt.Errorf("missing private route tables for %s", az)
 		}
-		plan.Appliances = append(plan.Appliances,
-			Appliance{Name: input.Name + "-" + az + "-active", AvailabilityZone: az, SubnetID: subnetID, Role: "active", SourceDestCheck: false},
-			Appliance{Name: input.Name + "-" + az + "-standby", AvailabilityZone: az, SubnetID: subnetID, Role: "standby", SourceDestCheck: false},
-		)
+		poolName := input.Name + "-" + az
+		plan.Pools = append(plan.Pools, Pool{
+			Name:               poolName,
+			AvailabilityZone:   az,
+			SubnetID:           subnetID,
+			MinSize:            minSize,
+			DesiredCapacity:    desiredCapacity,
+			MaxSize:            maxSize,
+			LaunchTemplateName: "betternat-" + poolName,
+			ASGName:            "betternat-" + poolName,
+		})
 		if input.StableEgressIP {
 			plan.EIPAllocationNames[az] = "betternat-" + input.Name + "-" + az
 		}

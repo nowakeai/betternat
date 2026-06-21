@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/betternat/betternat/internal/config"
+	"github.com/betternat/betternat/internal/datapath"
 )
 
 func TestRunVersion(t *testing.T) {
@@ -114,6 +117,44 @@ func TestRunDatapathStatus(t *testing.T) {
 	}
 }
 
+func TestDatapathReadinessReportsExpectedRules(t *testing.T) {
+	engine := fakeReadinessEngine{
+		status:   datapath.Status{Engine: "fake", Ready: true, Message: "ready"},
+		counters: datapath.Counters{Rules: []datapath.RuleCounter{{CIDR: "10.0.0.0/8"}}},
+	}
+	result, err := datapathReadiness(context.Background(), config.DatapathConfig{
+		PrivateCIDRs: []string{"10.0.0.0/8"},
+	}, engine)
+	if err != nil {
+		t.Fatalf("readiness: %v", err)
+	}
+	if !result.Ready {
+		t.Fatalf("expected ready: %#v", result)
+	}
+	if len(result.MissingSNATCIDRs) != 0 {
+		t.Fatalf("unexpected missing rules: %#v", result)
+	}
+}
+
+func TestDatapathReadinessReportsMissingRules(t *testing.T) {
+	engine := fakeReadinessEngine{
+		status:   datapath.Status{Engine: "fake", Ready: true, Message: "ready"},
+		counters: datapath.Counters{Rules: []datapath.RuleCounter{{CIDR: "10.1.0.0/16"}}},
+	}
+	result, err := datapathReadiness(context.Background(), config.DatapathConfig{
+		PrivateCIDRs: []string{"10.0.0.0/8"},
+	}, engine)
+	if err != nil {
+		t.Fatalf("readiness: %v", err)
+	}
+	if result.Ready {
+		t.Fatalf("expected not ready: %#v", result)
+	}
+	if len(result.MissingSNATCIDRs) != 1 || result.MissingSNATCIDRs[0] != "10.0.0.0/8" {
+		t.Fatalf("unexpected missing rules: %#v", result)
+	}
+}
+
 func TestRunFailoverStatus(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "agent.yaml")
@@ -137,6 +178,31 @@ func TestRunFailoverStatus(t *testing.T) {
 		t.Fatalf("missing outbound probe status: %s", out.String())
 	}
 }
+
+type fakeReadinessEngine struct {
+	status   datapath.Status
+	counters datapath.Counters
+}
+
+func (f fakeReadinessEngine) Name() string { return "fake" }
+
+func (f fakeReadinessEngine) EnsureReady(context.Context, config.DatapathConfig) error { return nil }
+
+func (f fakeReadinessEngine) Reconcile(context.Context, config.DatapathConfig) error { return nil }
+
+func (f fakeReadinessEngine) Status(context.Context) (datapath.Status, error) {
+	return f.status, nil
+}
+
+func (f fakeReadinessEngine) Counters(context.Context) (datapath.Counters, error) {
+	return f.counters, nil
+}
+
+func (f fakeReadinessEngine) ConntrackSummary(context.Context) (datapath.ConntrackSummary, error) {
+	return datapath.ConntrackSummary{}, nil
+}
+
+func (f fakeReadinessEngine) Cleanup(context.Context) error { return nil }
 
 func validConfigJSON() string {
 	return `{

@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
+	astypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
@@ -58,6 +60,15 @@ func TestApply(t *testing.T) {
 	if awssdk.ToString(ec2Client.createSecurityGroupInput.VpcId) != "vpc-123" {
 		t.Fatalf("unexpected security group vpc: %#v", ec2Client.createSecurityGroupInput)
 	}
+	if len(ec2Client.authorizeIngressInputs) == 0 {
+		t.Fatal("expected appliance ingress rules")
+	}
+	if awssdk.ToString(ec2Client.authorizeIngressInputs[0].IpPermissions[0].IpRanges[0].CidrIp) != "10.0.0.0/8" {
+		t.Fatalf("unexpected appliance ingress: %#v", ec2Client.authorizeIngressInputs)
+	}
+	if ec2Client.authorizeEgressInput == nil {
+		t.Fatal("expected appliance egress rule")
+	}
 	if awssdk.ToString(iamClient.createRoleInput.RoleName) != "betternat-prod-egress-agent" {
 		t.Fatalf("unexpected role: %#v", iamClient.createRoleInput)
 	}
@@ -66,6 +77,9 @@ func TestApply(t *testing.T) {
 	}
 	if awssdk.ToString(iamClient.putRolePolicyInput.PolicyName) != "betternat-runtime" {
 		t.Fatalf("unexpected role policy: %#v", iamClient.putRolePolicyInput)
+	}
+	if awssdk.ToString(iamClient.attachRolePolicyInput.PolicyArn) != ssmManagedInstanceCorePolicyARN {
+		t.Fatalf("expected SSM managed policy attachment: %#v", iamClient.attachRolePolicyInput)
 	}
 	if awssdk.ToString(iamClient.addRoleToInstanceProfileInput.RoleName) != "betternat-prod-egress-agent" {
 		t.Fatalf("unexpected add role call: %#v", iamClient.addRoleToInstanceProfileInput)
@@ -213,6 +227,80 @@ func TestApplyLaunchesMissingApplianceInstances(t *testing.T) {
 	}
 }
 
+func TestApplyCreatesASGPool(t *testing.T) {
+	ec2Client := &fakeEC2{allocationID: "eipalloc-123", publicIP: "203.0.113.10", securityGroupID: "sg-123", launchTemplateID: "lt-123"}
+	asgClient := &fakeAutoScaling{instanceIDs: []string{"i-owner"}}
+	applier := Applier{EC2: ec2Client, AutoScaling: asgClient, DynamoDB: &fakeDynamoDB{}, IAM: &fakeIAM{}}
+	plan := installplan.Plan{
+		Name:                "prod-egress",
+		VPCID:               "vpc-123",
+		AMIID:               "ami-123",
+		InstanceType:        "t4g.small",
+		UseSpot:             true,
+		IAMRoleName:         "betternat-prod-egress-agent",
+		InstanceProfileName: "betternat-prod-egress-agent",
+		SecurityGroupName:   "betternat-prod-egress-appliance",
+		LeaseTableName:      "betternat-prod-egress-leases",
+		EIPAllocationNames: map[string]string{
+			"us-west-2a": "betternat-prod-egress-us-west-2a",
+		},
+		Pools: []installplan.Pool{
+			{
+				Name:               "prod-egress-us-west-2a",
+				AvailabilityZone:   "us-west-2a",
+				SubnetID:           "subnet-public-a",
+				MinSize:            1,
+				DesiredCapacity:    2,
+				MaxSize:            3,
+				LaunchTemplateName: "betternat-prod-egress-us-west-2a",
+				ASGName:            "betternat-prod-egress-us-west-2a",
+			},
+		},
+		ManagedRoutes: []installplan.ManagedRoute{
+			{RouteTableID: "rtb-a", AvailabilityZone: "us-west-2a", DestinationCIDR: "0.0.0.0/0"},
+		},
+		Tags: map[string]string{"ManagedBy": "betternat"},
+	}
+
+	result, err := applier.Apply(context.Background(), plan, Inputs{UserData: "#!/bin/bash\ntrue\n"})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if ec2Client.createLaunchTemplateInput == nil {
+		t.Fatal("expected launch template")
+	}
+	if awssdk.ToString(ec2Client.createLaunchTemplateInput.LaunchTemplateName) != "betternat-prod-egress-us-west-2a" {
+		t.Fatalf("unexpected launch template: %#v", ec2Client.createLaunchTemplateInput)
+	}
+	if len(ec2Client.runInputs) != 0 {
+		t.Fatalf("ASG path should not call RunInstances: %#v", ec2Client.runInputs)
+	}
+	if asgClient.createInput == nil {
+		t.Fatal("expected ASG create")
+	}
+	if awssdk.ToString(asgClient.createInput.AutoScalingGroupName) != "betternat-prod-egress-us-west-2a" {
+		t.Fatalf("unexpected asg: %#v", asgClient.createInput)
+	}
+	if awssdk.ToString(asgClient.createInput.VPCZoneIdentifier) != "subnet-public-a" {
+		t.Fatalf("unexpected asg subnet: %#v", asgClient.createInput)
+	}
+	if awssdk.ToString(ec2Client.associateAddressInput.InstanceId) != "i-owner" {
+		t.Fatalf("EIP should associate to pool owner: %#v", ec2Client.associateAddressInput)
+	}
+	if awssdk.ToString(ec2Client.replaceRouteInput.InstanceId) != "i-owner" {
+		t.Fatalf("route should point to pool owner: %#v", ec2Client.replaceRouteInput)
+	}
+	if result.OwnerInstances["us-west-2a"] != "i-owner" {
+		t.Fatalf("unexpected owner instances: %#v", result.OwnerInstances)
+	}
+	if result.AutoScalingGroups["us-west-2a"] != "betternat-prod-egress-us-west-2a" {
+		t.Fatalf("unexpected asgs: %#v", result.AutoScalingGroups)
+	}
+	if result.LaunchTemplates["us-west-2a"] != "lt-123" {
+		t.Fatalf("unexpected launch templates: %#v", result.LaunchTemplates)
+	}
+}
+
 func countEC2Tag(tags []ec2types.Tag, key string) int {
 	count := 0
 	for _, tag := range tags {
@@ -251,6 +339,20 @@ func TestRestoreRoutesRejectsUnknownTarget(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected unknown target error")
+	}
+}
+
+func TestRestoreRoutesSkipsStaleRollbackTarget(t *testing.T) {
+	ec2Client := &fakeEC2{
+		replaceRouteError: &smithy.GenericAPIError{Code: "InvalidNetworkInterfaceID.NotFound", Message: "missing eni"},
+	}
+	applier := Applier{EC2: ec2Client}
+
+	err := applier.RestoreRoutes(context.Background(), []RollbackRoute{
+		{RouteTableID: "rtb-a", DestinationCIDR: "0.0.0.0/0", Target: "eni-old"},
+	})
+	if err != nil {
+		t.Fatalf("stale rollback target should be skipped: %v", err)
 	}
 }
 
@@ -386,17 +488,70 @@ func TestApplyTreatsExistingResourcesAsIdempotent(t *testing.T) {
 	}
 }
 
+func TestUpdateCapacityUpdatesASGOnly(t *testing.T) {
+	asgClient := &fakeAutoScaling{}
+	applier := Applier{AutoScaling: asgClient}
+	plan := installplan.Plan{
+		Pools: []installplan.Pool{
+			{
+				Name:            "prod-egress-us-west-2a",
+				ASGName:         "betternat-prod-egress-us-west-2a",
+				MinSize:         1,
+				DesiredCapacity: 3,
+				MaxSize:         5,
+			},
+		},
+	}
+
+	if err := applier.UpdateCapacity(context.Background(), plan); err != nil {
+		t.Fatalf("update capacity: %v", err)
+	}
+	if asgClient.updateInput == nil {
+		t.Fatal("expected ASG update")
+	}
+	if awssdk.ToString(asgClient.updateInput.AutoScalingGroupName) != "betternat-prod-egress-us-west-2a" {
+		t.Fatalf("unexpected ASG name: %#v", asgClient.updateInput)
+	}
+	if awssdk.ToInt32(asgClient.updateInput.MinSize) != 1 || awssdk.ToInt32(asgClient.updateInput.DesiredCapacity) != 3 || awssdk.ToInt32(asgClient.updateInput.MaxSize) != 5 {
+		t.Fatalf("unexpected ASG capacity: %#v", asgClient.updateInput)
+	}
+}
+
+func TestCreateIAMIgnoresExistingRoleInInstanceProfile(t *testing.T) {
+	applier := Applier{
+		IAM: &fakeIAM{
+			createRoleError:            &smithy.GenericAPIError{Code: "EntityAlreadyExists", Message: "exists"},
+			createInstanceProfileError: &smithy.GenericAPIError{Code: "EntityAlreadyExists", Message: "exists"},
+			addRoleToInstanceProfileError: &smithy.GenericAPIError{
+				Code:    "LimitExceeded",
+				Message: "Cannot exceed quota for InstanceSessionsPerInstanceProfile: 1",
+			},
+		},
+	}
+
+	if err := applier.createIAM(context.Background(), installplan.Plan{
+		IAMRoleName:         "betternat-agent",
+		InstanceProfileName: "betternat-agent",
+		RequiredIAMActions:  []string{"ec2:ReplaceRoute"},
+	}); err != nil {
+		t.Fatalf("create iam should ignore existing role/profile relationship: %v", err)
+	}
+}
+
 type fakeIAM struct {
 	createRoleInput               *iam.CreateRoleInput
 	createInstanceProfileInput    *iam.CreateInstanceProfileInput
 	addRoleToInstanceProfileInput *iam.AddRoleToInstanceProfileInput
+	attachRolePolicyInput         *iam.AttachRolePolicyInput
 	putRolePolicyInput            *iam.PutRolePolicyInput
 	removeRoleInput               *iam.RemoveRoleFromInstanceProfileInput
+	detachRolePolicyInput         *iam.DetachRolePolicyInput
 	deleteInstanceProfileInput    *iam.DeleteInstanceProfileInput
 	deleteRolePolicyInput         *iam.DeleteRolePolicyInput
 	deleteRoleInput               *iam.DeleteRoleInput
 	createRoleError               error
 	createInstanceProfileError    error
+	addRoleToInstanceProfileError error
 }
 
 func (f *fakeIAM) CreateRole(_ context.Context, params *iam.CreateRoleInput, _ ...func(*iam.Options)) (*iam.CreateRoleOutput, error) {
@@ -411,7 +566,12 @@ func (f *fakeIAM) CreateInstanceProfile(_ context.Context, params *iam.CreateIns
 
 func (f *fakeIAM) AddRoleToInstanceProfile(_ context.Context, params *iam.AddRoleToInstanceProfileInput, _ ...func(*iam.Options)) (*iam.AddRoleToInstanceProfileOutput, error) {
 	f.addRoleToInstanceProfileInput = params
-	return &iam.AddRoleToInstanceProfileOutput{}, nil
+	return &iam.AddRoleToInstanceProfileOutput{}, f.addRoleToInstanceProfileError
+}
+
+func (f *fakeIAM) AttachRolePolicy(_ context.Context, params *iam.AttachRolePolicyInput, _ ...func(*iam.Options)) (*iam.AttachRolePolicyOutput, error) {
+	f.attachRolePolicyInput = params
+	return &iam.AttachRolePolicyOutput{}, nil
 }
 
 func (f *fakeIAM) PutRolePolicy(_ context.Context, params *iam.PutRolePolicyInput, _ ...func(*iam.Options)) (*iam.PutRolePolicyOutput, error) {
@@ -434,33 +594,55 @@ func (f *fakeIAM) DeleteRolePolicy(_ context.Context, params *iam.DeleteRolePoli
 	return &iam.DeleteRolePolicyOutput{}, nil
 }
 
+func (f *fakeIAM) DetachRolePolicy(_ context.Context, params *iam.DetachRolePolicyInput, _ ...func(*iam.Options)) (*iam.DetachRolePolicyOutput, error) {
+	f.detachRolePolicyInput = params
+	return &iam.DetachRolePolicyOutput{}, nil
+}
+
 func (f *fakeIAM) DeleteRole(_ context.Context, params *iam.DeleteRoleInput, _ ...func(*iam.Options)) (*iam.DeleteRoleOutput, error) {
 	f.deleteRoleInput = params
 	return &iam.DeleteRoleOutput{}, nil
 }
 
 type fakeEC2 struct {
-	allocationID             string
-	publicIP                 string
-	securityGroupID          string
-	describeGroupIDs         []string
-	runInstanceIDs           []string
-	addresses                []ec2types.Address
-	createSecurityGroupError error
-	allocateInput            *ec2.AllocateAddressInput
-	associateAddressInput    *ec2.AssociateAddressInput
-	createSecurityGroupInput *ec2.CreateSecurityGroupInput
-	deleteSecurityGroupInput *ec2.DeleteSecurityGroupInput
-	createTagsInputs         []*ec2.CreateTagsInput
-	describeAddressesInput   *ec2.DescribeAddressesInput
-	disassociateInput        *ec2.DisassociateAddressInput
-	modifyInputs             []*ec2.ModifyInstanceAttributeInput
-	replaceRouteInput        *ec2.ReplaceRouteInput
-	releaseAddressInput      *ec2.ReleaseAddressInput
-	describeSecurityInput    *ec2.DescribeSecurityGroupsInput
-	describeRouteTablesInput *ec2.DescribeRouteTablesInput
-	runInputs                []*ec2.RunInstancesInput
-	terminateInputs          []*ec2.TerminateInstancesInput
+	allocationID              string
+	launchTemplateID          string
+	publicIP                  string
+	securityGroupID           string
+	authorizeEgressInput      *ec2.AuthorizeSecurityGroupEgressInput
+	authorizeIngressInputs    []*ec2.AuthorizeSecurityGroupIngressInput
+	describeGroupIDs          []string
+	runInstanceIDs            []string
+	addresses                 []ec2types.Address
+	createSecurityGroupError  error
+	allocateInput             *ec2.AllocateAddressInput
+	associateAddressInput     *ec2.AssociateAddressInput
+	createLaunchTemplateInput *ec2.CreateLaunchTemplateInput
+	createSecurityGroupInput  *ec2.CreateSecurityGroupInput
+	deleteLaunchTemplateInput *ec2.DeleteLaunchTemplateInput
+	deleteSecurityGroupInput  *ec2.DeleteSecurityGroupInput
+	describeInstancesInput    *ec2.DescribeInstancesInput
+	createTagsInputs          []*ec2.CreateTagsInput
+	describeAddressesInput    *ec2.DescribeAddressesInput
+	disassociateInput         *ec2.DisassociateAddressInput
+	modifyInputs              []*ec2.ModifyInstanceAttributeInput
+	replaceRouteInput         *ec2.ReplaceRouteInput
+	replaceRouteError         error
+	releaseAddressInput       *ec2.ReleaseAddressInput
+	describeSecurityInput     *ec2.DescribeSecurityGroupsInput
+	describeRouteTablesInput  *ec2.DescribeRouteTablesInput
+	runInputs                 []*ec2.RunInstancesInput
+	terminateInputs           []*ec2.TerminateInstancesInput
+}
+
+func (f *fakeEC2) AuthorizeSecurityGroupEgress(_ context.Context, params *ec2.AuthorizeSecurityGroupEgressInput, _ ...func(*ec2.Options)) (*ec2.AuthorizeSecurityGroupEgressOutput, error) {
+	f.authorizeEgressInput = params
+	return &ec2.AuthorizeSecurityGroupEgressOutput{}, nil
+}
+
+func (f *fakeEC2) AuthorizeSecurityGroupIngress(_ context.Context, params *ec2.AuthorizeSecurityGroupIngressInput, _ ...func(*ec2.Options)) (*ec2.AuthorizeSecurityGroupIngressOutput, error) {
+	f.authorizeIngressInputs = append(f.authorizeIngressInputs, params)
+	return &ec2.AuthorizeSecurityGroupIngressOutput{}, nil
 }
 
 func (f *fakeEC2) AllocateAddress(_ context.Context, params *ec2.AllocateAddressInput, _ ...func(*ec2.Options)) (*ec2.AllocateAddressOutput, error) {
@@ -471,6 +653,15 @@ func (f *fakeEC2) AllocateAddress(_ context.Context, params *ec2.AllocateAddress
 func (f *fakeEC2) AssociateAddress(_ context.Context, params *ec2.AssociateAddressInput, _ ...func(*ec2.Options)) (*ec2.AssociateAddressOutput, error) {
 	f.associateAddressInput = params
 	return &ec2.AssociateAddressOutput{}, nil
+}
+
+func (f *fakeEC2) CreateLaunchTemplate(_ context.Context, params *ec2.CreateLaunchTemplateInput, _ ...func(*ec2.Options)) (*ec2.CreateLaunchTemplateOutput, error) {
+	f.createLaunchTemplateInput = params
+	return &ec2.CreateLaunchTemplateOutput{
+		LaunchTemplate: &ec2types.LaunchTemplate{
+			LaunchTemplateId: awssdk.String(f.launchTemplateID),
+		},
+	}, nil
 }
 
 func (f *fakeEC2) CreateSecurityGroup(_ context.Context, params *ec2.CreateSecurityGroupInput, _ ...func(*ec2.Options)) (*ec2.CreateSecurityGroupOutput, error) {
@@ -488,9 +679,19 @@ func (f *fakeEC2) DeleteSecurityGroup(_ context.Context, params *ec2.DeleteSecur
 	return &ec2.DeleteSecurityGroupOutput{}, nil
 }
 
+func (f *fakeEC2) DeleteLaunchTemplate(_ context.Context, params *ec2.DeleteLaunchTemplateInput, _ ...func(*ec2.Options)) (*ec2.DeleteLaunchTemplateOutput, error) {
+	f.deleteLaunchTemplateInput = params
+	return &ec2.DeleteLaunchTemplateOutput{}, nil
+}
+
 func (f *fakeEC2) DescribeAddresses(_ context.Context, params *ec2.DescribeAddressesInput, _ ...func(*ec2.Options)) (*ec2.DescribeAddressesOutput, error) {
 	f.describeAddressesInput = params
 	return &ec2.DescribeAddressesOutput{Addresses: f.addresses}, nil
+}
+
+func (f *fakeEC2) DescribeInstances(_ context.Context, params *ec2.DescribeInstancesInput, _ ...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error) {
+	f.describeInstancesInput = params
+	return &ec2.DescribeInstancesOutput{}, nil
 }
 
 func (f *fakeEC2) DescribeSecurityGroups(_ context.Context, params *ec2.DescribeSecurityGroupsInput, _ ...func(*ec2.Options)) (*ec2.DescribeSecurityGroupsOutput, error) {
@@ -528,7 +729,7 @@ func (f *fakeEC2) ModifyInstanceAttribute(_ context.Context, params *ec2.ModifyI
 
 func (f *fakeEC2) ReplaceRoute(_ context.Context, params *ec2.ReplaceRouteInput, _ ...func(*ec2.Options)) (*ec2.ReplaceRouteOutput, error) {
 	f.replaceRouteInput = params
-	return &ec2.ReplaceRouteOutput{}, nil
+	return &ec2.ReplaceRouteOutput{}, f.replaceRouteError
 }
 
 func (f *fakeEC2) ReleaseAddress(_ context.Context, params *ec2.ReleaseAddressInput, _ ...func(*ec2.Options)) (*ec2.ReleaseAddressOutput, error) {
@@ -562,6 +763,45 @@ func (f *fakeEC2) hasTaggedResource(resourceID string) bool {
 		}
 	}
 	return false
+}
+
+type fakeAutoScaling struct {
+	instanceIDs   []string
+	createInput   *autoscaling.CreateAutoScalingGroupInput
+	deleteInput   *autoscaling.DeleteAutoScalingGroupInput
+	describeInput *autoscaling.DescribeAutoScalingGroupsInput
+	updateInput   *autoscaling.UpdateAutoScalingGroupInput
+}
+
+func (f *fakeAutoScaling) CreateAutoScalingGroup(_ context.Context, params *autoscaling.CreateAutoScalingGroupInput, _ ...func(*autoscaling.Options)) (*autoscaling.CreateAutoScalingGroupOutput, error) {
+	f.createInput = params
+	return &autoscaling.CreateAutoScalingGroupOutput{}, nil
+}
+
+func (f *fakeAutoScaling) DeleteAutoScalingGroup(_ context.Context, params *autoscaling.DeleteAutoScalingGroupInput, _ ...func(*autoscaling.Options)) (*autoscaling.DeleteAutoScalingGroupOutput, error) {
+	f.deleteInput = params
+	return &autoscaling.DeleteAutoScalingGroupOutput{}, nil
+}
+
+func (f *fakeAutoScaling) DescribeAutoScalingGroups(_ context.Context, params *autoscaling.DescribeAutoScalingGroupsInput, _ ...func(*autoscaling.Options)) (*autoscaling.DescribeAutoScalingGroupsOutput, error) {
+	f.describeInput = params
+	instances := make([]astypes.Instance, 0, len(f.instanceIDs))
+	for _, instanceID := range f.instanceIDs {
+		instances = append(instances, astypes.Instance{
+			InstanceId:     awssdk.String(instanceID),
+			LifecycleState: astypes.LifecycleStateInService,
+		})
+	}
+	return &autoscaling.DescribeAutoScalingGroupsOutput{
+		AutoScalingGroups: []astypes.AutoScalingGroup{
+			{Instances: instances},
+		},
+	}, nil
+}
+
+func (f *fakeAutoScaling) UpdateAutoScalingGroup(_ context.Context, params *autoscaling.UpdateAutoScalingGroupInput, _ ...func(*autoscaling.Options)) (*autoscaling.UpdateAutoScalingGroupOutput, error) {
+	f.updateInput = params
+	return &autoscaling.UpdateAutoScalingGroupOutput{}, nil
 }
 
 type fakeDynamoDB struct {

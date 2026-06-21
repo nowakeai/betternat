@@ -3,6 +3,7 @@ package ha
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/betternat/betternat/internal/cloud"
 	"github.com/betternat/betternat/internal/config"
@@ -16,6 +17,7 @@ type Controller struct {
 	Lease    lease.Manager
 	Datapath datapath.Engine
 	Probe    ProbeRunner
+	Now      lease.Clock
 }
 
 type ActivationResult struct {
@@ -48,61 +50,67 @@ func (c Controller) Activate(ctx context.Context, cfg config.Config, localInstan
 	if err != nil {
 		return ActivationResult{}, fmt.Errorf("acquire HA lease: %w", err)
 	}
+	fail := func(format string, args ...any) (ActivationResult, error) {
+		activationErr := fmt.Errorf(format, args...)
+		if releaseErr := c.Lease.Release(ctx, record); releaseErr != nil {
+			return ActivationResult{}, fmt.Errorf("%w; release HA lease after failed activation: %v", activationErr, releaseErr)
+		}
+		return ActivationResult{}, activationErr
+	}
 	if c.Datapath != nil {
 		if err := c.Datapath.Reconcile(ctx, cfg.Datapath); err != nil {
-			return ActivationResult{}, fmt.Errorf("reconcile datapath before activation: %w", err)
+			return fail("reconcile datapath before activation: %w", err)
 		}
+	}
+	if err := c.VerifyLease(ctx, record, localInstanceID); err != nil {
+		return fail("verify HA lease before cloud activation: %w", err)
 	}
 
 	result := ActivationResult{Lease: record}
 	if cfg.HA.PublicIdentity.Mode == "shared_eip" {
 		if cfg.HA.PublicIdentity.AllocationID == "" {
-			return ActivationResult{}, fmt.Errorf("ha.public_identity.allocation_id is required for shared_eip")
+			return fail("ha.public_identity.allocation_id is required for shared_eip")
 		}
 		identity, err := c.Cloud.AssociateEIP(ctx, cfg.HA.PublicIdentity.AllocationID, localInstanceID)
 		if err != nil {
-			return ActivationResult{}, fmt.Errorf("associate EIP %q: %w", cfg.HA.PublicIdentity.AllocationID, err)
+			return fail("associate EIP %q: %w", cfg.HA.PublicIdentity.AllocationID, err)
 		}
 		result.PublicIdentity = identity
 	} else if cfg.HA.PublicIdentity.Mode != "" {
-		return ActivationResult{}, fmt.Errorf("unsupported public identity mode %q", cfg.HA.PublicIdentity.Mode)
+		return fail("unsupported public identity mode %q", cfg.HA.PublicIdentity.Mode)
 	}
 
 	routes, err := routeTargets(cfg, localInstanceID)
 	if err != nil {
-		return ActivationResult{}, err
+		return fail("%w", err)
 	}
 	for _, target := range routes {
 		if err := c.Cloud.ReplaceRoute(ctx, target); err != nil {
-			return ActivationResult{}, fmt.Errorf("replace route %s %s: %w", target.RouteTableID, target.DestinationCIDR, err)
+			return fail("replace route %s %s: %w", target.RouteTableID, target.DestinationCIDR, err)
 		}
 		result.Routes = append(result.Routes, target)
 	}
 	for _, target := range result.Routes {
 		actual, err := c.Cloud.DescribeRoute(ctx, target.RouteTableID, target.DestinationCIDR)
 		if err != nil {
-			return ActivationResult{}, fmt.Errorf("verify route %s %s: %w", target.RouteTableID, target.DestinationCIDR, err)
+			return fail("verify route %s %s: %w", target.RouteTableID, target.DestinationCIDR, err)
 		}
 		if actual.Target != target.Target {
-			return ActivationResult{}, fmt.Errorf("route %s %s target is %q, expected %q", target.RouteTableID, target.DestinationCIDR, actual.Target, target.Target)
+			return fail("route %s %s target is %q, expected %q", target.RouteTableID, target.DestinationCIDR, actual.Target, target.Target)
 		}
 	}
 	if cfg.HA.PublicIdentity.Mode == "shared_eip" {
 		actual, err := c.Cloud.DescribePublicIdentity(ctx, cfg.HA.PublicIdentity.AllocationID)
 		if err != nil {
-			return ActivationResult{}, fmt.Errorf("verify public identity %q: %w", cfg.HA.PublicIdentity.AllocationID, err)
+			return fail("verify public identity %q: %w", cfg.HA.PublicIdentity.AllocationID, err)
 		}
 		if actual.InstanceID != localInstanceID {
-			return ActivationResult{}, fmt.Errorf("public identity %q is on %q, expected %q", cfg.HA.PublicIdentity.AllocationID, actual.InstanceID, localInstanceID)
+			return fail("public identity %q is on %q, expected %q", cfg.HA.PublicIdentity.AllocationID, actual.InstanceID, localInstanceID)
 		}
 		result.PublicIdentity = actual
 	}
-	current, err := c.Lease.Current(ctx)
-	if err != nil {
-		return ActivationResult{}, fmt.Errorf("verify HA lease: %w", err)
-	}
-	if current.OwnerInstanceID != localInstanceID || current.Generation != record.Generation {
-		return ActivationResult{}, fmt.Errorf("HA lease changed during activation")
+	if err := c.VerifyLease(ctx, record, localInstanceID); err != nil {
+		return fail("verify HA lease after cloud activation: %w", err)
 	}
 	if cfg.Observability.OutboundProbe.Enabled {
 		runner := c.Probe
@@ -114,12 +122,96 @@ func (c Controller) Activate(ctx context.Context, cfg config.Config, localInstan
 		}
 		probeResult, err := runner.Run(ctx)
 		if err != nil {
-			return ActivationResult{}, fmt.Errorf("outbound source IP probe: %w", err)
+			return fail("outbound source IP probe: %w", err)
 		}
 		if !probeResult.Matched {
-			return ActivationResult{}, fmt.Errorf("outbound source IP probe observed %s, expected %s", probeResult.ObservedIP, probeResult.ExpectedIP)
+			return fail("outbound source IP probe observed %s, expected %s", probeResult.ObservedIP, probeResult.ExpectedIP)
 		}
 		result.Probe = probeResult
+	}
+	return result, nil
+}
+
+func (c Controller) VerifyLease(ctx context.Context, record lease.Record, localInstanceID string) error {
+	if c.Lease == nil {
+		return fmt.Errorf("lease manager is required")
+	}
+	current, err := c.Lease.Current(ctx)
+	if err != nil {
+		return fmt.Errorf("read HA lease: %w", err)
+	}
+	if current.OwnerInstanceID != localInstanceID || current.Generation != record.Generation {
+		return fmt.Errorf("HA lease changed during activation")
+	}
+	if !c.now().Before(current.ExpiresAt) {
+		return fmt.Errorf("HA lease expired at %s", current.ExpiresAt.UTC().Format(time.RFC3339))
+	}
+	return nil
+}
+
+func (c Controller) now() time.Time {
+	if c.Now != nil {
+		return c.Now()
+	}
+	return time.Now()
+}
+
+func (c Controller) EnsureOwnership(ctx context.Context, cfg config.Config, localInstanceID string) (ActivationResult, error) {
+	if !cfg.HA.Enabled {
+		return ActivationResult{}, nil
+	}
+	if localInstanceID == "" || localInstanceID == "auto" {
+		return ActivationResult{}, fmt.Errorf("local instance id is required for HA ownership")
+	}
+	if c.Cloud == nil {
+		return ActivationResult{}, fmt.Errorf("cloud provider is required for HA ownership")
+	}
+
+	result := ActivationResult{}
+	if cfg.HA.PublicIdentity.Mode == "shared_eip" {
+		if cfg.HA.PublicIdentity.AllocationID == "" {
+			return ActivationResult{}, fmt.Errorf("ha.public_identity.allocation_id is required for shared_eip")
+		}
+		identity, err := c.Cloud.DescribePublicIdentity(ctx, cfg.HA.PublicIdentity.AllocationID)
+		if err != nil {
+			return ActivationResult{}, fmt.Errorf("describe public identity %q: %w", cfg.HA.PublicIdentity.AllocationID, err)
+		}
+		if identity.InstanceID != localInstanceID {
+			identity, err = c.Cloud.AssociateEIP(ctx, cfg.HA.PublicIdentity.AllocationID, localInstanceID)
+			if err != nil {
+				return ActivationResult{}, fmt.Errorf("associate EIP %q: %w", cfg.HA.PublicIdentity.AllocationID, err)
+			}
+		}
+		if identity.InstanceID != localInstanceID {
+			return ActivationResult{}, fmt.Errorf("public identity %q is on %q, expected %q", cfg.HA.PublicIdentity.AllocationID, identity.InstanceID, localInstanceID)
+		}
+		result.PublicIdentity = identity
+	} else if cfg.HA.PublicIdentity.Mode != "" {
+		return ActivationResult{}, fmt.Errorf("unsupported public identity mode %q", cfg.HA.PublicIdentity.Mode)
+	}
+
+	routes, err := routeTargets(cfg, localInstanceID)
+	if err != nil {
+		return ActivationResult{}, err
+	}
+	for _, target := range routes {
+		actual, err := c.Cloud.DescribeRoute(ctx, target.RouteTableID, target.DestinationCIDR)
+		if err != nil {
+			return ActivationResult{}, fmt.Errorf("describe route %s %s: %w", target.RouteTableID, target.DestinationCIDR, err)
+		}
+		if actual.Target != target.Target {
+			if err := c.Cloud.ReplaceRoute(ctx, target); err != nil {
+				return ActivationResult{}, fmt.Errorf("replace route %s %s: %w", target.RouteTableID, target.DestinationCIDR, err)
+			}
+			actual, err = c.Cloud.DescribeRoute(ctx, target.RouteTableID, target.DestinationCIDR)
+			if err != nil {
+				return ActivationResult{}, fmt.Errorf("verify route %s %s: %w", target.RouteTableID, target.DestinationCIDR, err)
+			}
+		}
+		if actual.Target != target.Target {
+			return ActivationResult{}, fmt.Errorf("route %s %s target is %q, expected %q", target.RouteTableID, target.DestinationCIDR, actual.Target, target.Target)
+		}
+		result.Routes = append(result.Routes, actual)
 	}
 	return result, nil
 }

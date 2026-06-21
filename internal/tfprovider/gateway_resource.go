@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sort"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -53,6 +54,9 @@ type GatewayResourceModel struct {
 	AMIChannel               types.String `tfsdk:"ami_channel"`
 	InstanceType             types.String `tfsdk:"instance_type"`
 	UseSpot                  types.Bool   `tfsdk:"use_spot"`
+	MinSize                  types.Int64  `tfsdk:"min_size"`
+	DesiredCapacity          types.Int64  `tfsdk:"desired_capacity"`
+	MaxSize                  types.Int64  `tfsdk:"max_size"`
 	AgentBinaryURL           types.String `tfsdk:"agent_binary_url"`
 	LoxiCMDBinaryURL         types.String `tfsdk:"loxicmd_binary_url"`
 	PublicSubnetIDs          types.Map    `tfsdk:"public_subnet_ids"`
@@ -61,6 +65,9 @@ type GatewayResourceModel struct {
 	DatapathEngine           types.String `tfsdk:"datapath_engine"`
 	FallbackDatapathEngine   types.String `tfsdk:"fallback_datapath_engine"`
 	StableEgressIP           types.Bool   `tfsdk:"stable_egress_ip"`
+	HAProfile                types.String `tfsdk:"ha_profile"`
+	HALeaseTTLSeconds        types.Int64  `tfsdk:"ha_lease_ttl_seconds"`
+	HARenewIntervalSeconds   types.Int64  `tfsdk:"ha_renew_interval_seconds"`
 	PrometheusEnabled        types.Bool   `tfsdk:"prometheus_enabled"`
 	RouteMode                types.String `tfsdk:"route_mode"`
 	RouteDestinationCIDR     types.String `tfsdk:"route_destination_cidr"`
@@ -140,6 +147,18 @@ func (r *GatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Computed: true,
 				Default:  booldefault.StaticBool(false),
 			},
+			"min_size": schema.Int64Attribute{
+				Optional: true,
+				Computed: true,
+			},
+			"desired_capacity": schema.Int64Attribute{
+				Optional: true,
+				Computed: true,
+			},
+			"max_size": schema.Int64Attribute{
+				Optional: true,
+				Computed: true,
+			},
 			"agent_binary_url": schema.StringAttribute{
 				Optional:  true,
 				Sensitive: true,
@@ -174,6 +193,22 @@ func (r *GatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Optional: true,
 				Computed: true,
 				Default:  booldefault.StaticBool(true),
+			},
+			"ha_profile": schema.StringAttribute{
+				MarkdownDescription: "High availability timing profile. Use stable for production defaults, balanced for moderate failover speed, or fast for test/low-latency environments.",
+				Optional:            true,
+				Computed:            true,
+				Default:             stringdefault.StaticString("stable"),
+			},
+			"ha_lease_ttl_seconds": schema.Int64Attribute{
+				MarkdownDescription: "Advanced override for the HA lease TTL in seconds. Leave unset to use ha_profile defaults.",
+				Optional:            true,
+				Computed:            true,
+			},
+			"ha_renew_interval_seconds": schema.Int64Attribute{
+				MarkdownDescription: "Advanced override for the HA lease renew interval in seconds. Leave unset to use ha_profile defaults.",
+				Optional:            true,
+				Computed:            true,
 			},
 			"prometheus_enabled": schema.BoolAttribute{
 				Optional: true,
@@ -289,7 +324,9 @@ func (r *GatewayResource) Read(ctx context.Context, req resource.ReadRequest, re
 
 func (r *GatewayResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan GatewayResourceModel
+	var state GatewayResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -297,14 +334,27 @@ func (r *GatewayResource) Update(ctx context.Context, req resource.UpdateRequest
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if err := installGatewayState(ctx, &plan, r.installerFactory); err != nil {
-		if cleanupErr := cleanupGatewayResources(ctx, plan, r.cleanerFactory); cleanupErr != nil {
-			resp.Diagnostics.AddWarning("Cleanup failed BetterNAT gateway update", cleanupErr.Error())
+	if !gatewayReplacementRequired(state, plan) {
+		plan.EgressPublicIPs = state.EgressPublicIPs
+		plan.ActiveInstanceIDs = state.ActiveInstanceIDs
+		plan.StandbyInstanceIDs = state.StandbyInstanceIDs
+		plan.RollbackRouteTargetsJSON = state.RollbackRouteTargetsJSON
+		plan.ControlPlaneStatusJSON = state.ControlPlaneStatusJSON
+		plan.Status = state.Status
+		if err := updateGatewayCapacity(ctx, plan, r.installerFactory); err != nil {
+			resp.Diagnostics.AddError("Update BetterNAT gateway capacity", err.Error())
+			return
 		}
-		resp.Diagnostics.AddError("Update BetterNAT gateway", err.Error())
+		if err := readGatewayState(ctx, &plan, r.readerFactory); err != nil {
+			resp.Diagnostics.AddWarning("Read BetterNAT gateway state", err.Error())
+		}
+		resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 		return
 	}
-	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+	resp.Diagnostics.AddError(
+		"BetterNAT gateway replacement required",
+		"Only min_size, desired_capacity, and max_size can be updated in-place in this provider version. Changes to agent_binary_url, loxicmd_binary_url, AMI, instance type, subnets, routes, private CIDRs, datapath settings, stable egress IP mode, HA timing, tags, or other installation inputs require replacing the betternat_gateway resource, for example with terraform apply -replace=betternat_gateway.<name>.",
+	)
 }
 
 func (r *GatewayResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -343,6 +393,52 @@ func applyGatewayPlan(ctx context.Context, plan *GatewayResourceModel) diag.Diag
 	}
 	*plan = derived
 	return diags
+}
+
+func capacityOnlyUpdate(state GatewayResourceModel, plan GatewayResourceModel) bool {
+	if state.InstallPlanJSON.IsNull() || state.InstallPlanJSON.IsUnknown() || plan.InstallPlanJSON.IsNull() || plan.InstallPlanJSON.IsUnknown() {
+		return false
+	}
+	var oldPlan installplan.Plan
+	var newPlan installplan.Plan
+	if err := json.Unmarshal([]byte(state.InstallPlanJSON.ValueString()), &oldPlan); err != nil {
+		return false
+	}
+	if err := json.Unmarshal([]byte(plan.InstallPlanJSON.ValueString()), &newPlan); err != nil {
+		return false
+	}
+	if len(oldPlan.Pools) == 0 || len(newPlan.Pools) == 0 || len(oldPlan.Pools) != len(newPlan.Pools) {
+		return false
+	}
+	normalizeCapacity := func(p *installplan.Plan) {
+		p.MinSize = 0
+		p.DesiredCapacity = 0
+		p.MaxSize = 0
+		for i := range p.Pools {
+			p.Pools[i].MinSize = 0
+			p.Pools[i].DesiredCapacity = 0
+			p.Pools[i].MaxSize = 0
+		}
+	}
+	normalizeCapacity(&oldPlan)
+	normalizeCapacity(&newPlan)
+	return reflect.DeepEqual(oldPlan, newPlan)
+}
+
+func gatewayReplacementRequired(state GatewayResourceModel, plan GatewayResourceModel) bool {
+	if !capacityOnlyUpdate(state, plan) {
+		return true
+	}
+	if state.UserData.IsNull() || state.UserData.IsUnknown() || plan.UserData.IsNull() || plan.UserData.IsUnknown() {
+		return true
+	}
+	if state.UserData.ValueString() != plan.UserData.ValueString() {
+		return true
+	}
+	if state.AgentConfigHash.IsNull() || state.AgentConfigHash.IsUnknown() || plan.AgentConfigHash.IsNull() || plan.AgentConfigHash.IsUnknown() {
+		return true
+	}
+	return state.AgentConfigHash.ValueString() != plan.AgentConfigHash.ValueString()
 }
 
 func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (GatewayResourceModel, error) {
@@ -400,9 +496,17 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 		}
 	}
 	stableEgressIP := boolDefault(plan.StableEgressIP, true)
+	haProfile := stringDefault(plan.HAProfile, "stable")
+	haTTLSeconds, haRenewSeconds, err := haTiming(plan.HALeaseTTLSeconds, plan.HARenewIntervalSeconds, haProfile)
+	if err != nil {
+		return GatewayResourceModel{}, err
+	}
 	prometheusEnabled := boolDefault(plan.PrometheusEnabled, true)
 	instanceType := stringDefault(plan.InstanceType, "t3.small")
 	useSpot := boolDefault(plan.UseSpot, false)
+	minSize := int64Default(plan.MinSize, 1)
+	desiredCapacity := int64Default(plan.DesiredCapacity, 2)
+	maxSize := int64Default(plan.MaxSize, 3)
 	amiChannel := stringDefault(plan.AMIChannel, "stable")
 	routeMode := stringDefault(plan.RouteMode, "replace_route")
 	routeDestinationCIDR := stringDefault(plan.RouteDestinationCIDR, "0.0.0.0/0")
@@ -435,6 +539,8 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 		HA: provider.HASpec{
 			Enabled:               true,
 			LeaseTable:            leaseTable,
+			TTLSeconds:            int(haTTLSeconds),
+			RenewSeconds:          int(haRenewSeconds),
 			SharedEIPAllocationID: "auto",
 			RouteMode:             routeMode,
 			RouteDestinationCIDR:  routeDestinationCIDR,
@@ -487,6 +593,7 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 		VPCID:                plan.VPCID.ValueString(),
 		PublicSubnetIDs:      publicSubnetsByAZ,
 		PrivateRouteTableIDs: routeTablesByAZ,
+		PrivateCIDRs:         privateCIDRs,
 		StableEgressIP:       stableEgressIP,
 		LeaseTableName:       leaseTable,
 		AgentConfigHash:      hex.EncodeToString(configHash[:]),
@@ -494,6 +601,9 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 		AMIChannel:           amiChannel,
 		InstanceType:         instanceType,
 		UseSpot:              useSpot,
+		MinSize:              int32(minSize),
+		DesiredCapacity:      int32(desiredCapacity),
+		MaxSize:              int32(maxSize),
 		RouteDestinationCIDR: routeDestinationCIDR,
 		RouteTargetType:      routeTargetType,
 		Tags:                 tags,
@@ -513,7 +623,13 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	result.FallbackDatapathEngine = types.StringValue(fallbackEngine)
 	result.InstanceType = types.StringValue(instanceType)
 	result.UseSpot = types.BoolValue(useSpot)
+	result.MinSize = types.Int64Value(minSize)
+	result.DesiredCapacity = types.Int64Value(desiredCapacity)
+	result.MaxSize = types.Int64Value(maxSize)
 	result.StableEgressIP = types.BoolValue(stableEgressIP)
+	result.HAProfile = types.StringValue(haProfile)
+	result.HALeaseTTLSeconds = types.Int64Value(haTTLSeconds)
+	result.HARenewIntervalSeconds = types.Int64Value(haRenewSeconds)
 	result.PrometheusEnabled = types.BoolValue(prometheusEnabled)
 	result.RouteMode = types.StringValue(routeMode)
 	result.RouteDestinationCIDR = types.StringValue(routeDestinationCIDR)
@@ -533,6 +649,37 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	result.ControlPlaneStatusJSON = types.StringValue("{}")
 	result.Status = types.StringValue("planned")
 	return result, nil
+}
+
+func haTiming(ttlValue types.Int64, renewValue types.Int64, profile string) (int64, int64, error) {
+	var ttl int64
+	var renew int64
+	switch profile {
+	case "stable":
+		ttl, renew = 30, 5
+	case "balanced":
+		ttl, renew = 20, 4
+	case "fast":
+		ttl, renew = 10, 3
+	default:
+		return 0, 0, fmt.Errorf("unsupported ha_profile %q", profile)
+	}
+	if !ttlValue.IsNull() && !ttlValue.IsUnknown() {
+		ttl = ttlValue.ValueInt64()
+	}
+	if !renewValue.IsNull() && !renewValue.IsUnknown() {
+		renew = renewValue.ValueInt64()
+	}
+	if ttl <= 0 {
+		return 0, 0, fmt.Errorf("ha_lease_ttl_seconds must be greater than 0")
+	}
+	if renew <= 0 {
+		return 0, 0, fmt.Errorf("ha_renew_interval_seconds must be greater than 0")
+	}
+	if renew >= ttl {
+		return 0, 0, fmt.Errorf("ha_renew_interval_seconds must be less than ha_lease_ttl_seconds")
+	}
+	return ttl, renew, nil
 }
 
 func plannedRollbackJSON(routeTablesByAZ map[string][]string, destinationCIDR string) (string, error) {
@@ -582,6 +729,13 @@ func boolDefault(value types.Bool, fallback bool) bool {
 		return fallback
 	}
 	return value.ValueBool()
+}
+
+func int64Default(value types.Int64, fallback int64) int64 {
+	if value.IsNull() || value.IsUnknown() {
+		return fallback
+	}
+	return value.ValueInt64()
 }
 
 func listStrings(ctx context.Context, value types.List) ([]string, error) {

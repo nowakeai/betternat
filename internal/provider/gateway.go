@@ -75,6 +75,14 @@ func RenderAgentConfig(gateway GatewaySpec, appliance ApplianceSpec) (config.Con
 	}
 	primaryInterface := defaultString(appliance.PrimaryInterface, snatInterface)
 
+	publicIdentity := config.PublicIdentityConfig{}
+	if gateway.HA.SharedEIPAllocationID != "" {
+		publicIdentity = config.PublicIdentityConfig{
+			Mode:         "shared_eip",
+			AllocationID: gateway.HA.SharedEIPAllocationID,
+		}
+	}
+
 	cfg := config.Config{
 		Version:   "v0",
 		GatewayID: gateway.Name,
@@ -118,10 +126,7 @@ func RenderAgentConfig(gateway GatewaySpec, appliance ApplianceSpec) (config.Con
 				DestinationCIDR: defaultString(appliance.RouteDestinationCIDR, defaultString(gateway.HA.RouteDestinationCIDR, "0.0.0.0/0")),
 				TargetType:      defaultString(gateway.HA.RouteTargetType, "instance"),
 			},
-			PublicIdentity: config.PublicIdentityConfig{
-				Mode:         "shared_eip",
-				AllocationID: gateway.HA.SharedEIPAllocationID,
-			},
+			PublicIdentity: publicIdentity,
 		},
 		Observability: config.ObservabilityConfig{
 			Prometheus: config.PrometheusConfig{

@@ -29,6 +29,31 @@ variable "instance_type" {
   default = "t4g.small"
 }
 
+variable "min_size" {
+  type    = number
+  default = 1
+}
+
+variable "desired_capacity" {
+  type    = number
+  default = 2
+}
+
+variable "max_size" {
+  type    = number
+  default = 3
+}
+
+variable "stable_egress_ip" {
+  type    = bool
+  default = true
+}
+
+variable "ha_profile" {
+  type    = string
+  default = "fast"
+}
+
 variable "agent_binary_url" {
   type      = string
   sensitive = true
@@ -145,10 +170,73 @@ resource "aws_route_table_association" "private" {
   route_table_id = aws_route_table.private.id
 }
 
-resource "aws_route" "initial_private_default" {
-  route_table_id         = aws_route_table.private.id
-  destination_cidr_block = "0.0.0.0/0"
-  gateway_id             = aws_internet_gateway.main.id
+resource "terraform_data" "initial_private_default" {
+  triggers_replace = {
+    route_table_id = aws_route_table.private.id
+    gateway_id     = aws_internet_gateway.main.id
+    region         = var.region
+  }
+
+  provisioner "local-exec" {
+    command = "aws ec2 create-route --region ${self.triggers_replace.region} --route-table-id ${self.triggers_replace.route_table_id} --destination-cidr-block 0.0.0.0/0 --gateway-id ${self.triggers_replace.gateway_id} || aws ec2 replace-route --region ${self.triggers_replace.region} --route-table-id ${self.triggers_replace.route_table_id} --destination-cidr-block 0.0.0.0/0 --gateway-id ${self.triggers_replace.gateway_id}"
+  }
+
+  depends_on = [
+    aws_internet_gateway.main,
+    aws_route_table_association.private,
+  ]
+}
+
+resource "aws_security_group" "private_client" {
+  name        = "${var.run_id}-private-client"
+  description = "BetterNAT supplemental private client"
+  vpc_id      = aws_vpc.main.id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = merge(local.tags, {
+    Name = "${var.run_id}-private-client"
+  })
+}
+
+resource "aws_iam_role" "private_client" {
+  name = "${var.run_id}-private-client"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+
+  tags = merge(local.tags, {
+    Name = "${var.run_id}-private-client"
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "private_client_ssm" {
+  role       = aws_iam_role.private_client.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_instance_profile" "private_client" {
+  name = "${var.run_id}-private-client"
+  role = aws_iam_role.private_client.name
+
+  tags = merge(local.tags, {
+    Name = "${var.run_id}-private-client"
+  })
 }
 
 resource "betternat_gateway" "egress" {
@@ -156,9 +244,12 @@ resource "betternat_gateway" "egress" {
   region = var.region
   vpc_id = aws_vpc.main.id
 
-  ami_id        = data.aws_ami.al2023_arm64.id
-  instance_type = var.instance_type
-  use_spot      = true
+  ami_id           = data.aws_ami.al2023_arm64.id
+  instance_type    = var.instance_type
+  use_spot         = true
+  min_size         = var.min_size
+  desired_capacity = var.desired_capacity
+  max_size         = var.max_size
 
   agent_binary_url   = var.agent_binary_url
   loxicmd_binary_url = var.loxicmd_binary_url
@@ -173,14 +264,33 @@ resource "betternat_gateway" "egress" {
 
   private_cidrs = [aws_vpc.main.cidr_block]
 
-  stable_egress_ip    = true
+  stable_egress_ip    = var.stable_egress_ip
+  ha_profile          = var.ha_profile
   rollback_on_destroy = true
 
   tags = local.tags
 
   depends_on = [
     aws_route.public_default,
-    aws_route.initial_private_default,
+    terraform_data.initial_private_default,
+  ]
+}
+
+resource "aws_instance" "private_client" {
+  ami                         = data.aws_ami.al2023_arm64.id
+  instance_type               = "t4g.nano"
+  subnet_id                   = aws_subnet.private.id
+  vpc_security_group_ids      = [aws_security_group.private_client.id]
+  iam_instance_profile        = aws_iam_instance_profile.private_client.name
+  associate_public_ip_address = false
+
+  tags = merge(local.tags, {
+    Name = "${var.run_id}-private-client"
+  })
+
+  depends_on = [
+    betternat_gateway.egress,
+    aws_iam_role_policy_attachment.private_client_ssm,
   ]
 }
 
@@ -194,6 +304,14 @@ output "private_route_table_id" {
 
 output "private_subnet_id" {
   value = aws_subnet.private.id
+}
+
+output "asg_name" {
+  value = "betternat-${var.run_id}-${var.az}"
+}
+
+output "private_client_instance_id" {
+  value = aws_instance.private_client.id
 }
 
 output "betternat_status" {
@@ -210,4 +328,16 @@ output "active_instance_ids" {
 
 output "standby_instance_ids" {
   value = betternat_gateway.egress.standby_instance_ids
+}
+
+output "aws_cli_context" {
+  value = {
+    region                 = var.region
+    az                     = var.az
+    run_id                 = var.run_id
+    asg_name               = "betternat-${var.run_id}-${var.az}"
+    private_route_table_id = aws_route_table.private.id
+    private_client_id      = aws_instance.private_client.id
+    stable_egress_ip       = var.stable_egress_ip
+  }
 }
