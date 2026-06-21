@@ -718,6 +718,11 @@ func (a Applier) createLaunchTemplate(ctx context.Context, plan installplan.Plan
 		IamInstanceProfile: &ec2types.LaunchTemplateIamInstanceProfileSpecificationRequest{
 			Name: awssdk.String(plan.InstanceProfileName),
 		},
+		MetadataOptions: &ec2types.LaunchTemplateInstanceMetadataOptionsRequest{
+			HttpEndpoint:            ec2types.LaunchTemplateInstanceMetadataEndpointStateEnabled,
+			HttpTokens:              ec2types.LaunchTemplateHttpTokensStateRequired,
+			HttpPutResponseHopLimit: awssdk.Int32(1),
+		},
 		TagSpecifications: []ec2types.LaunchTemplateTagSpecificationRequest{
 			{
 				ResourceType: ec2types.ResourceTypeInstance,

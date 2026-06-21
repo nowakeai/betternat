@@ -58,7 +58,11 @@ type GatewayResourceModel struct {
 	DesiredCapacity          types.Int64  `tfsdk:"desired_capacity"`
 	MaxSize                  types.Int64  `tfsdk:"max_size"`
 	AgentBinaryURL           types.String `tfsdk:"agent_binary_url"`
+	AgentBinarySHA256        types.String `tfsdk:"agent_binary_sha256"`
+	CLIBinaryURL             types.String `tfsdk:"cli_binary_url"`
+	CLIBinarySHA256          types.String `tfsdk:"cli_binary_sha256"`
 	LoxiCMDBinaryURL         types.String `tfsdk:"loxicmd_binary_url"`
+	LoxiCMDBinarySHA256      types.String `tfsdk:"loxicmd_binary_sha256"`
 	PublicSubnetIDs          types.Map    `tfsdk:"public_subnet_ids"`
 	PrivateRouteTableIDs     types.Map    `tfsdk:"private_route_table_ids"`
 	PrivateCIDRs             types.List   `tfsdk:"private_cidrs"`
@@ -163,9 +167,26 @@ func (r *GatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Optional:  true,
 				Sensitive: true,
 			},
+			"agent_binary_sha256": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "Optional SHA256 checksum for agent_binary_url. When set, cloud-init verifies the downloaded agent before execution.",
+			},
+			"cli_binary_url": schema.StringAttribute{
+				Optional:            true,
+				Sensitive:           true,
+				MarkdownDescription: "Optional URL for the BetterNAT CLI binary installed on each appliance. Set this for bootstrap-based alpha installs so betternat doctor can run locally.",
+			},
+			"cli_binary_sha256": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "Optional SHA256 checksum for cli_binary_url. When set, cloud-init verifies the downloaded CLI before installation.",
+			},
 			"loxicmd_binary_url": schema.StringAttribute{
 				Optional:  true,
 				Sensitive: true,
+			},
+			"loxicmd_binary_sha256": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "Optional SHA256 checksum for loxicmd_binary_url. When set, cloud-init verifies the downloaded loxicmd before execution.",
 			},
 			"public_subnet_ids": schema.MapAttribute{
 				ElementType: types.StringType,
@@ -575,9 +596,13 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	}
 	configHash := sha256.Sum256(configBytes)
 	userData, err := bootstrap.RenderUserData(bootstrap.Spec{
-		AgentConfig:      string(configBytes),
-		AgentBinaryURL:   stringDefault(plan.AgentBinaryURL, ""),
-		LoxiCMDBinaryURL: stringDefault(plan.LoxiCMDBinaryURL, ""),
+		AgentConfig:         string(configBytes),
+		AgentBinaryURL:      stringDefault(plan.AgentBinaryURL, ""),
+		AgentBinarySHA256:   stringDefault(plan.AgentBinarySHA256, ""),
+		CLIBinaryURL:        stringDefault(plan.CLIBinaryURL, ""),
+		CLIBinarySHA256:     stringDefault(plan.CLIBinarySHA256, ""),
+		LoxiCMDBinaryURL:    stringDefault(plan.LoxiCMDBinaryURL, ""),
+		LoxiCMDBinarySHA256: stringDefault(plan.LoxiCMDBinarySHA256, ""),
 	})
 	if err != nil {
 		return GatewayResourceModel{}, err

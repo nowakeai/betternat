@@ -8,7 +8,6 @@ import (
 func TestRenderUserData(t *testing.T) {
 	script, err := RenderUserData(Spec{
 		AgentConfig: "version: v0\ngateway_id: prod-egress\n",
-		LoxiLBImage: "ghcr.io/loxilb-io/loxilb:v0.99.7",
 	})
 	if err != nil {
 		t.Fatalf("render user data: %v", err)
@@ -17,9 +16,11 @@ func TestRenderUserData(t *testing.T) {
 	assertContains(t, script, "chmod 0600 '/etc/betternat/agent.json'")
 	assertContains(t, script, "install_package docker")
 	assertContains(t, script, "net.ipv4.ip_forward = 1")
+	assertContains(t, script, "for rp_filter in /proc/sys/net/ipv4/conf/*/rp_filter; do")
+	assertContains(t, script, "if [ -e /proc/sys/net/netfilter/nf_conntrack_max ]; then")
 	assertContains(t, script, "net.netfilter.nf_conntrack_max = 1048576")
 	assertContains(t, script, "docker run -d")
-	assertContains(t, script, "ghcr.io/loxilb-io/loxilb:v0.99.7")
+	assertContains(t, script, "ghcr.io/loxilb-io/loxilb@sha256:dacc9b21688d4042b768f2cbc5968360b8753cf92f926ee288346153a23f3052")
 	assertContains(t, script, `exec docker exec loxilb loxicmd "\$@"`)
 	assertContains(t, script, "ExecStart=/usr/local/bin/betternat-agent --config /etc/betternat/agent.json")
 	assertContains(t, script, "systemctl enable --now betternat-agent.service")
@@ -27,17 +28,26 @@ func TestRenderUserData(t *testing.T) {
 
 func TestRenderUserDataWithBinaryURLs(t *testing.T) {
 	script, err := RenderUserData(Spec{
-		AgentConfig:      `{"version":"v0","gateway_id":"prod-egress"}`,
-		AgentBinaryURL:   "https://example.invalid/betternat-agent?date=20260620T123230Z&signature=abc",
-		LoxiCMDBinaryURL: "https://example.invalid/loxicmd?download=1&token=abc",
+		AgentConfig:         `{"version":"v0","gateway_id":"prod-egress"}`,
+		AgentBinaryURL:      "https://example.invalid/betternat-agent?date=20260620T123230Z&signature=abc",
+		AgentBinarySHA256:   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		CLIBinaryURL:        "https://example.invalid/betternat?date=20260620T123230Z&signature=abc",
+		CLIBinarySHA256:     "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+		LoxiCMDBinaryURL:    "https://example.invalid/loxicmd?download=1&token=abc",
+		LoxiCMDBinarySHA256: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 	})
 	if err != nil {
 		t.Fatalf("render user data: %v", err)
 	}
 
 	assertContains(t, script, "curl -fsSL 'https://example.invalid/betternat-agent?date=20260620T123230Z&signature=abc' -o '/usr/local/bin/betternat-agent'")
+	assertContains(t, script, "echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' '/usr/local/bin/betternat-agent' | sha256sum -c -")
 	assertContains(t, script, "chmod 0755 '/usr/local/bin/betternat-agent'")
+	assertContains(t, script, "curl -fsSL 'https://example.invalid/betternat?date=20260620T123230Z&signature=abc' -o '/usr/local/bin/betternat'")
+	assertContains(t, script, "echo 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc' '/usr/local/bin/betternat' | sha256sum -c -")
+	assertContains(t, script, "chmod 0755 '/usr/local/bin/betternat'")
 	assertContains(t, script, "curl -fsSL 'https://example.invalid/loxicmd?download=1&token=abc' -o '/usr/local/bin/loxicmd'")
+	assertContains(t, script, "echo 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' '/usr/local/bin/loxicmd' | sha256sum -c -")
 	assertContains(t, script, "chmod 0755 '/usr/local/bin/loxicmd'")
 }
 

@@ -11,6 +11,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/betternat/betternat/internal/buildinfo"
 	"github.com/betternat/betternat/internal/cloud"
 	awscloud "github.com/betternat/betternat/internal/cloud/aws"
 	"github.com/betternat/betternat/internal/config"
@@ -27,6 +28,7 @@ type Options struct {
 	Once         bool
 	ValidateOnly bool
 	Prometheus   bool
+	Version      bool
 }
 
 type Runtime struct {
@@ -112,6 +114,10 @@ func Run(ctx context.Context, args []string) error {
 }
 
 func (r Runtime) Run(ctx context.Context, opts Options) error {
+	if opts.Version {
+		_, _ = fmt.Fprintln(output(r.Stdout), buildinfo.Current("betternat-agent").String())
+		return nil
+	}
 	if opts.ConfigPath == "" {
 		return fmt.Errorf("config path is required")
 	}
@@ -376,6 +382,8 @@ func renderPrometheusResult(w io.Writer, cfg config.Config, result RunResult, ha
 		Owners:                  ownerCounters(cfg.Observability.Attribution.Owners, result.Counters),
 		Processed:               processedCounter(result.Counters),
 	}
+	snapshot.Version = buildinfo.Version
+	snapshot.Commit = buildinfo.Commit
 	if err := metrics.RenderPrometheus(w, snapshot); err != nil {
 		return fmt.Errorf("encode prometheus metrics: %w", err)
 	}
@@ -555,9 +563,14 @@ func parseArgs(args []string) (Options, error) {
 			opts.ValidateOnly = true
 		case "--prometheus":
 			opts.Prometheus = true
+		case "--version", "version":
+			opts.Version = true
 		default:
 			return Options{}, fmt.Errorf("unknown agent argument %q", args[i])
 		}
+	}
+	if opts.Version {
+		return opts, nil
 	}
 	if opts.ConfigPath == "" {
 		return Options{}, fmt.Errorf("agent runtime requires --config <path>")

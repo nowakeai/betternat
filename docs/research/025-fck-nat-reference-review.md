@@ -283,7 +283,7 @@ Once AMI build exists, repeat the same tests and compare:
 
 ## Recommended Backlog Items
 
-1. Add `docs/deployment/AMI_RELEASE_PLAN.md`.
+1. Add `docs/release/AMI_RELEASE_PLAN.md`.
 2. Add Packer skeleton for BetterNAT AMI.
 3. Add `/etc/betternat/agent.json` and systemd unit contract to docs.
 4. Add AMI channel resolver to Terraform provider.

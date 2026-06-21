@@ -272,6 +272,19 @@ func TestApplyCreatesASGPool(t *testing.T) {
 	if awssdk.ToString(ec2Client.createLaunchTemplateInput.LaunchTemplateName) != "betternat-prod-egress-us-west-2a" {
 		t.Fatalf("unexpected launch template: %#v", ec2Client.createLaunchTemplateInput)
 	}
+	metadata := ec2Client.createLaunchTemplateInput.LaunchTemplateData.MetadataOptions
+	if metadata == nil {
+		t.Fatal("expected launch template metadata options")
+	}
+	if metadata.HttpTokens != ec2types.LaunchTemplateHttpTokensStateRequired {
+		t.Fatalf("IMDSv2 should be required: %#v", metadata)
+	}
+	if metadata.HttpEndpoint != ec2types.LaunchTemplateInstanceMetadataEndpointStateEnabled {
+		t.Fatalf("IMDS endpoint should be enabled: %#v", metadata)
+	}
+	if awssdk.ToInt32(metadata.HttpPutResponseHopLimit) != 1 {
+		t.Fatalf("metadata hop limit should be 1: %#v", metadata)
+	}
 	if len(ec2Client.runInputs) != 0 {
 		t.Fatalf("ASG path should not call RunInstances: %#v", ec2Client.runInputs)
 	}

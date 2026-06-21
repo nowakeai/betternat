@@ -97,8 +97,11 @@ Preferred destinations:
 
 - architecture and v0 behavior: `docs/architecture.md`, `docs/spec-v0.md`, `docs/architecture-diagram.md`
 - evidence and spikes: `docs/research/`
-- workflow, dependencies, releases, operations: `docs/deployment/`
-- Linux datapath validation: `docs/deployment/LINUX_DATAPATH_VALIDATION.md`
+- user install and operations docs: `docs/user/`
+- release gates, packaging, and publication docs: `docs/release/`
+- repeatable test plans and runbooks: `docs/testing/`
+- contributor workflow, dependency policy, and local validation: `docs/dev/`
+- Linux datapath validation: `docs/dev/LINUX_DATAPATH_VALIDATION.md`
 - implementation notes and pivots: `docs/dev-logs/`
 
 When adding a durable doc, update `docs/README.md`.

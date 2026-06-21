@@ -149,6 +149,40 @@ func (c SourceDestCheckChecker) Check(ctx context.Context) CheckResult {
 	return CheckResult{Name: "source_dest_check", Status: StatusOK, Message: "source/destination check is disabled"}
 }
 
+type ASGInspector interface {
+	DescribeASG(ctx context.Context, name string) (cloud.ASGInfo, error)
+}
+
+type ASGChecker struct {
+	Inspector ASGInspector
+	Name      string
+	HAEnabled bool
+}
+
+func (c ASGChecker) Check(ctx context.Context) CheckResult {
+	if c.Inspector == nil {
+		return CheckResult{Name: "asg", Status: StatusCritical, Message: "asg inspector is not configured"}
+	}
+	info, err := c.Inspector.DescribeASG(ctx, c.Name)
+	if err != nil {
+		return CheckResult{Name: "asg", Status: StatusCritical, Message: fmt.Sprintf("describe asg failed: %v", err)}
+	}
+	healthy := 0
+	for _, instance := range info.Instances {
+		if instance.LifecycleState == "InService" && instance.HealthStatus == "Healthy" {
+			healthy++
+		}
+	}
+	message := fmt.Sprintf("healthy %d/%d instances in %s", healthy, info.DesiredCapacity, info.Name)
+	if int32(healthy) < info.DesiredCapacity {
+		return CheckResult{Name: "asg", Status: StatusCritical, Message: message}
+	}
+	if c.HAEnabled && info.DesiredCapacity < 2 {
+		return CheckResult{Name: "asg", Status: StatusWarning, Message: message + "; HA has no standby capacity"}
+	}
+	return CheckResult{Name: "asg", Status: StatusOK, Message: message}
+}
+
 type LeaseChecker struct {
 	Lease         lease.Manager
 	ExpectedOwner string

@@ -10,8 +10,8 @@ It is intentionally environment-agnostic. A "local VM" can be OrbStack, Lima, Mu
 
 Use this alongside:
 
-- `docs/deployment/LINUX_DATAPATH_VALIDATION.md`
-- `docs/deployment/AI_WORKFLOW.md`
+- `docs/dev/LINUX_DATAPATH_VALIDATION.md`
+- `docs/dev/AI_WORKFLOW.md`
 - `docs/architecture.md`
 - `docs/spec-v0.md`
 

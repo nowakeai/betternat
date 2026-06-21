@@ -9,9 +9,9 @@ New durable entrypoints:
 - `AGENTS.md`
 - `CODEX.md`
 - `manage`
-- `docs/deployment/AI_WORKFLOW.md`
-- `docs/deployment/DEPENDENCY_POLICY.md`
-- `docs/deployment/LINUX_DATAPATH_VALIDATION.md`
+- `docs/dev/AI_WORKFLOW.md`
+- `docs/dev/DEPENDENCY_POLICY.md`
+- `docs/dev/LINUX_DATAPATH_VALIDATION.md`
 - `docs/dev-logs/README.md`
 
 Updated:

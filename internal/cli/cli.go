@@ -7,19 +7,27 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
+	"github.com/betternat/betternat/internal/buildinfo"
+	"github.com/betternat/betternat/internal/cloud"
+	awscloud "github.com/betternat/betternat/internal/cloud/aws"
 	"github.com/betternat/betternat/internal/config"
 	"github.com/betternat/betternat/internal/cost"
 	"github.com/betternat/betternat/internal/datapath"
 	"github.com/betternat/betternat/internal/datapath/loxilb"
 	"github.com/betternat/betternat/internal/datapath/nftables"
 	"github.com/betternat/betternat/internal/doctor"
+	awsiamcheck "github.com/betternat/betternat/internal/iamcheck/aws"
+	"github.com/betternat/betternat/internal/lease"
+	dynamodblease "github.com/betternat/betternat/internal/lease/dynamodb"
+	"github.com/betternat/betternat/internal/probe"
 )
 
 const usage = `BetterNAT CLI
 
 Usage:
-  betternat doctor --config <path>
+  betternat doctor [--live] --config <path>
   betternat cost estimate --gb <processed-gb>
   betternat status --config <path>
   betternat datapath status --config <path>
@@ -41,7 +49,7 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 
 	switch args[0] {
 	case "version":
-		_, _ = fmt.Fprintln(out, "betternat dev")
+		_, _ = fmt.Fprintln(out, buildinfo.Current("betternat").String())
 		return nil
 	case "doctor":
 		return runDoctor(args[1:], out)
@@ -201,7 +209,7 @@ func runDatapath(ctx context.Context, args []string, out io.Writer) error {
 	}
 }
 
-func newDatapathEngine(cfg config.DatapathConfig) (datapath.Engine, error) {
+var newDatapathEngine = func(cfg config.DatapathConfig) (datapath.Engine, error) {
 	switch cfg.Engine {
 	case "loxilb":
 		return loxilb.New(), nil
@@ -277,11 +285,11 @@ func runCost(args []string, out io.Writer) error {
 }
 
 func runDoctor(args []string, out io.Writer) error {
-	configPath, err := parseConfigPath(args)
+	opts, err := parseDoctorArgs(args)
 	if err != nil {
 		return err
 	}
-	cfg, err := config.LoadFile(configPath)
+	cfg, err := config.LoadFile(opts.configPath)
 	if err != nil {
 		report := doctor.Report{Status: doctor.StatusCritical}
 		report.Checks = []doctor.CheckResult{{
@@ -289,10 +297,231 @@ func runDoctor(args []string, out io.Writer) error {
 			Status:  doctor.StatusCritical,
 			Message: err.Error(),
 		}}
-		return json.NewEncoder(out).Encode(report)
+		if encodeErr := json.NewEncoder(out).Encode(report); encodeErr != nil {
+			return encodeErr
+		}
+		return fmt.Errorf("doctor status critical")
 	}
-	report := doctor.Run(context.Background(), doctor.StaticCheckers(cfg))
-	return json.NewEncoder(out).Encode(report)
+	checkers := doctor.StaticCheckers(cfg)
+	if opts.live {
+		liveCheckers, err := liveDoctorCheckers(context.Background(), cfg)
+		if err != nil {
+			checkers = append(checkers, doctor.StaticErrorChecker{Name: "live_setup", Message: err.Error()})
+		} else {
+			checkers = append(checkers, liveCheckers...)
+		}
+	}
+	report := doctor.Run(context.Background(), checkers)
+	if err := json.NewEncoder(out).Encode(report); err != nil {
+		return err
+	}
+	if report.Status == doctor.StatusCritical {
+		return fmt.Errorf("doctor status critical")
+	}
+	return nil
+}
+
+type doctorOptions struct {
+	configPath string
+	live       bool
+}
+
+func parseDoctorArgs(args []string) (doctorOptions, error) {
+	opts := doctorOptions{}
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--config":
+			if i+1 >= len(args) {
+				return doctorOptions{}, fmt.Errorf("--config requires a path")
+			}
+			opts.configPath = args[i+1]
+			i++
+		case "--live":
+			opts.live = true
+		default:
+			return doctorOptions{}, fmt.Errorf("unknown doctor argument %q", args[i])
+		}
+	}
+	if opts.configPath == "" {
+		return doctorOptions{}, fmt.Errorf("--config <path> is required")
+	}
+	return opts, nil
+}
+
+type liveCloudProvider interface {
+	cloud.Provider
+	doctor.InstanceInspector
+}
+
+var (
+	newLiveCloudProvider = func(ctx context.Context, region string) (liveCloudProvider, error) {
+		return awscloud.New(ctx, region)
+	}
+	newLiveASGInspector = func(ctx context.Context, region string) (doctor.ASGInspector, error) {
+		return awscloud.NewASGProvider(ctx, region)
+	}
+	newLiveIAMEvaluator = func(ctx context.Context, region string, policySourceARN string) (doctor.IAMChecker, error) {
+		evaluator, err := awsiamcheck.New(ctx, region, policySourceARN)
+		if err != nil {
+			return doctor.IAMChecker{}, err
+		}
+		return doctor.IAMChecker{Evaluator: evaluator}, nil
+	}
+	newLiveLeaseManager = func(ctx context.Context, region string, table string, haGroupID string, ttl time.Duration) (lease.Manager, error) {
+		return dynamodblease.New(ctx, region, table, haGroupID, ttl)
+	}
+	resolveLocalInstanceID      = awscloud.ResolveLocalInstanceID
+	resolveCurrentRoleARN       = awsiamcheck.ResolveCurrentRoleARN
+	resolveSharedEIPAllocation  = awscloud.ResolveSharedEIPAllocationID
+	liveDoctorPrometheusClient  doctor.HTTPClient
+	liveDoctorSourceProbeClient probe.HTTPClient
+)
+
+func liveDoctorCheckers(ctx context.Context, cfg config.Config) ([]doctor.Checker, error) {
+	engine, err := newDatapathEngine(cfg.Datapath)
+	if err != nil {
+		return nil, err
+	}
+	checkers := []doctor.Checker{doctor.DatapathChecker{Engine: engine}}
+
+	localInstanceID := cfg.Local.InstanceID
+	if localInstanceID == "auto" {
+		localInstanceID, err = resolveLocalInstanceID(ctx, cfg.Region)
+		if err != nil {
+			checkers = append(checkers, doctor.StaticErrorChecker{Name: "local_instance", Message: err.Error()})
+		}
+	}
+
+	if cfg.Cloud != "aws" {
+		checkers = append(checkers, doctor.StaticWarningChecker{Name: "cloud", Message: "live doctor currently supports cloud=aws only"})
+		return checkers, nil
+	}
+
+	cloudProvider, err := newLiveCloudProvider(ctx, cfg.Region)
+	if err != nil {
+		checkers = append(checkers, doctor.StaticErrorChecker{Name: "cloud", Message: err.Error()})
+		return checkers, nil
+	}
+
+	policySourceARN, err := resolveCurrentRoleARN(ctx, cfg.Region)
+	if err != nil {
+		checkers = append(checkers, doctor.StaticWarningChecker{Name: "iam", Message: err.Error()})
+	} else {
+		iamChecker, err := newLiveIAMEvaluator(ctx, cfg.Region, policySourceARN)
+		if err != nil {
+			checkers = append(checkers, doctor.StaticErrorChecker{Name: "iam", Message: err.Error()})
+		} else {
+			checkers = append(checkers, iamChecker)
+		}
+	}
+
+	if cfg.Local.AvailabilityZone == "" || cfg.Local.AvailabilityZone == "auto" {
+		checkers = append(checkers, doctor.StaticWarningChecker{Name: "asg", Message: "local availability zone is not resolved"})
+	} else {
+		asgInspector, err := newLiveASGInspector(ctx, cfg.Region)
+		if err != nil {
+			checkers = append(checkers, doctor.StaticErrorChecker{Name: "asg", Message: err.Error()})
+		} else {
+			checkers = append(checkers, doctor.ASGChecker{
+				Inspector: asgInspector,
+				Name:      doctorASGName(cfg),
+				HAEnabled: cfg.HA.Enabled,
+			})
+		}
+	}
+
+	expectedOwner := ""
+	if cfg.HA.Enabled && cfg.HA.Lease.Backend == "dynamodb" && cfg.HA.Lease.Table != "" {
+		leaseManager, err := newLiveLeaseManager(ctx, cfg.Region, cfg.HA.Lease.Table, doctorLeaseKey(cfg), doctorLeaseTTL(cfg))
+		if err != nil {
+			checkers = append(checkers, doctor.StaticErrorChecker{Name: "lease_setup", Message: err.Error()})
+		} else {
+			record, err := leaseManager.Current(ctx)
+			if err != nil {
+				checkers = append(checkers, doctor.LeaseChecker{Lease: leaseManager})
+			} else {
+				expectedOwner = record.OwnerInstanceID
+				checkers = append(checkers, doctor.StaticOKChecker{Name: "lease", Message: fmt.Sprintf("lease owner %s generation %d", record.OwnerInstanceID, record.Generation)})
+			}
+		}
+	}
+
+	for _, routeTableID := range cfg.HA.RouteFailover.RouteTableIDs {
+		checkers = append(checkers, doctor.RouteChecker{
+			Cloud:           cloudProvider,
+			RouteTableID:    routeTableID,
+			DestinationCIDR: cfg.HA.RouteFailover.DestinationCIDR,
+			ExpectedTarget:  expectedOwner,
+		})
+	}
+
+	allocationID := cfg.HA.PublicIdentity.AllocationID
+	if cfg.HA.PublicIdentity.Mode == "shared_eip" && allocationID == "auto" {
+		if cfg.Local.AvailabilityZone == "" || cfg.Local.AvailabilityZone == "auto" {
+			checkers = append(checkers, doctor.StaticWarningChecker{Name: "public_identity", Message: "shared EIP allocation id is auto and availability zone is not resolved"})
+		} else {
+			allocationID, err = resolveSharedEIPAllocation(ctx, cfg.Region, cfg.GatewayID, cfg.Local.AvailabilityZone)
+			if err != nil {
+				checkers = append(checkers, doctor.StaticErrorChecker{Name: "public_identity", Message: err.Error()})
+			}
+		}
+	}
+	if cfg.HA.PublicIdentity.Mode == "shared_eip" && allocationID != "" && allocationID != "auto" {
+		checkers = append(checkers, doctor.PublicIdentityChecker{
+			Cloud:              cloudProvider,
+			AllocationID:       allocationID,
+			ExpectedInstanceID: expectedOwner,
+		})
+	}
+
+	if localInstanceID != "" && localInstanceID != "auto" {
+		checkers = append(checkers, doctor.SourceDestCheckChecker{Inspector: cloudProvider, InstanceID: localInstanceID})
+	}
+
+	checkers = append(checkers, doctor.PrometheusChecker{
+		URL:    prometheusURL(cfg),
+		Client: liveDoctorPrometheusClient,
+	})
+
+	if cfg.Observability.OutboundProbe.Enabled {
+		checkers = append(checkers, doctor.SourceIPProbeChecker{Probe: probe.SourceIPProbe{
+			URL:        cfg.Observability.OutboundProbe.URL,
+			ExpectedIP: cfg.Observability.OutboundProbe.ExpectedIP,
+			Client:     liveDoctorSourceProbeClient,
+		}})
+	}
+
+	return checkers, nil
+}
+
+func prometheusURL(cfg config.Config) string {
+	port := cfg.Observability.Prometheus.ListenPort
+	if port == 0 {
+		return ""
+	}
+	address := cfg.Observability.Prometheus.ListenAddress
+	if address == "" || address == "0.0.0.0" || address == "::" {
+		address = "127.0.0.1"
+	}
+	return fmt.Sprintf("http://%s:%d/metrics", address, port)
+}
+
+func doctorASGName(cfg config.Config) string {
+	return fmt.Sprintf("betternat-%s-%s", cfg.GatewayID, cfg.Local.AvailabilityZone)
+}
+
+func doctorLeaseKey(cfg config.Config) string {
+	if cfg.HA.Lease.Key != "" {
+		return cfg.HA.Lease.Key
+	}
+	return cfg.HAGroupID
+}
+
+func doctorLeaseTTL(cfg config.Config) time.Duration {
+	if cfg.HA.Lease.TTLSeconds > 0 {
+		return time.Duration(cfg.HA.Lease.TTLSeconds) * time.Second
+	}
+	return 15 * time.Second
 }
 
 func parseConfigPath(args []string) (string, error) {
@@ -304,7 +533,7 @@ func parseConfigPath(args []string) (string, error) {
 			}
 			return args[i+1], nil
 		default:
-			return "", fmt.Errorf("unknown doctor argument %q", args[i])
+			return "", fmt.Errorf("unknown argument %q", args[i])
 		}
 	}
 	return "", fmt.Errorf("--config <path> is required")

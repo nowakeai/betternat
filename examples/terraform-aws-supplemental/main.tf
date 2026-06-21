@@ -59,10 +59,31 @@ variable "agent_binary_url" {
   sensitive = true
 }
 
+variable "agent_binary_sha256" {
+  type    = string
+  default = ""
+}
+
+variable "cli_binary_url" {
+  type      = string
+  default   = ""
+  sensitive = true
+}
+
+variable "cli_binary_sha256" {
+  type    = string
+  default = ""
+}
+
 variable "loxicmd_binary_url" {
   type      = string
   default   = ""
   sensitive = true
+}
+
+variable "loxicmd_binary_sha256" {
+  type    = string
+  default = ""
 }
 
 provider "aws" {
@@ -251,8 +272,12 @@ resource "betternat_gateway" "egress" {
   desired_capacity = var.desired_capacity
   max_size         = var.max_size
 
-  agent_binary_url   = var.agent_binary_url
-  loxicmd_binary_url = var.loxicmd_binary_url
+  agent_binary_url      = var.agent_binary_url
+  agent_binary_sha256   = var.agent_binary_sha256
+  cli_binary_url        = var.cli_binary_url
+  cli_binary_sha256     = var.cli_binary_sha256
+  loxicmd_binary_url    = var.loxicmd_binary_url
+  loxicmd_binary_sha256 = var.loxicmd_binary_sha256
 
   public_subnet_ids = {
     (var.az) = aws_subnet.public.id

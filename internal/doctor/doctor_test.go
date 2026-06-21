@@ -62,6 +62,59 @@ func TestIAMCheckerReportsMissingActions(t *testing.T) {
 	}
 }
 
+func TestASGCheckerOK(t *testing.T) {
+	result := ASGChecker{
+		Inspector: fakeASGInspector{info: cloud.ASGInfo{
+			Name:            "betternat-prod-us-west-2a",
+			DesiredCapacity: 2,
+			Instances: []cloud.ASGInstance{
+				{InstanceID: "i-a", LifecycleState: "InService", HealthStatus: "Healthy"},
+				{InstanceID: "i-b", LifecycleState: "InService", HealthStatus: "Healthy"},
+			},
+		}},
+		Name:      "betternat-prod-us-west-2a",
+		HAEnabled: true,
+	}.Check(context.Background())
+	if result.Status != StatusOK {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+}
+
+func TestASGCheckerReportsUnhealthyCapacity(t *testing.T) {
+	result := ASGChecker{
+		Inspector: fakeASGInspector{info: cloud.ASGInfo{
+			Name:            "betternat-prod-us-west-2a",
+			DesiredCapacity: 2,
+			Instances: []cloud.ASGInstance{
+				{InstanceID: "i-a", LifecycleState: "InService", HealthStatus: "Healthy"},
+				{InstanceID: "i-b", LifecycleState: "Pending", HealthStatus: "Healthy"},
+			},
+		}},
+		Name:      "betternat-prod-us-west-2a",
+		HAEnabled: true,
+	}.Check(context.Background())
+	if result.Status != StatusCritical {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+}
+
+func TestASGCheckerWarnsWithoutStandbyCapacity(t *testing.T) {
+	result := ASGChecker{
+		Inspector: fakeASGInspector{info: cloud.ASGInfo{
+			Name:            "betternat-prod-us-west-2a",
+			DesiredCapacity: 1,
+			Instances: []cloud.ASGInstance{
+				{InstanceID: "i-a", LifecycleState: "InService", HealthStatus: "Healthy"},
+			},
+		}},
+		Name:      "betternat-prod-us-west-2a",
+		HAEnabled: true,
+	}.Check(context.Background())
+	if result.Status != StatusWarning {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+}
+
 func TestRouteChecker(t *testing.T) {
 	result := RouteChecker{
 		Cloud:           fakeCloud{route: cloud.RouteTarget{Target: "i-active"}},
@@ -212,6 +265,14 @@ type fakeIAMEvaluator struct {
 
 func (f fakeIAMEvaluator) Evaluate(_ context.Context, actions []string) (iamcheck.Result, error) {
 	return iamcheck.Result{Allowed: actions, Missing: f.missing}, nil
+}
+
+type fakeASGInspector struct {
+	info cloud.ASGInfo
+}
+
+func (f fakeASGInspector) DescribeASG(context.Context, string) (cloud.ASGInfo, error) {
+	return f.info, nil
 }
 
 type fakeCloud struct {

@@ -11,6 +11,33 @@ type StaticConfigChecker struct {
 	Config config.Config
 }
 
+type StaticOKChecker struct {
+	Name    string
+	Message string
+}
+
+func (c StaticOKChecker) Check(context.Context) CheckResult {
+	return CheckResult{Name: c.Name, Status: StatusOK, Message: c.Message}
+}
+
+type StaticWarningChecker struct {
+	Name    string
+	Message string
+}
+
+func (c StaticWarningChecker) Check(context.Context) CheckResult {
+	return CheckResult{Name: c.Name, Status: StatusWarning, Message: c.Message}
+}
+
+type StaticErrorChecker struct {
+	Name    string
+	Message string
+}
+
+func (c StaticErrorChecker) Check(context.Context) CheckResult {
+	return CheckResult{Name: c.Name, Status: StatusCritical, Message: c.Message}
+}
+
 func (c StaticConfigChecker) Check(context.Context) CheckResult {
 	if err := c.Config.Validate(); err != nil {
 		return CheckResult{Name: "config", Status: StatusCritical, Message: err.Error()}

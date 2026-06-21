@@ -58,15 +58,15 @@ export HTTPS_PROXY="http://127.0.0.1:10808"
 export NO_PROXY="169.254.169.254,localhost,127.0.0.1"
 ```
 
-Build a temporary Linux arm64 agent binary:
+Build temporary release artifacts:
 
 ```sh
-mkdir -p tmp/aws-supplemental
-GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
-  go build -o tmp/aws-supplemental/betternat-agent ./cmd/betternat-agent
+BETTERNAT_VERSION=v0.1.0-alpha.test \
+BETTERNAT_RELEASE_DIR="$PWD/tmp/aws-supplemental-release" \
+  scripts/release-build.sh
 ```
 
-Upload it to a temporary private S3 location and generate a short-lived presigned URL:
+Upload the Linux arm64 agent and CLI to a temporary private S3 location and generate short-lived presigned URLs:
 
 ```sh
 export BETTERNAT_ARTIFACT_BUCKET="$BETTERNAT_RUN_ID-artifacts"
@@ -74,13 +74,33 @@ aws s3 mb "s3://$BETTERNAT_ARTIFACT_BUCKET" \
   --profile "$AWS_PROFILE" \
   --region "$AWS_REGION"
 
-aws s3 cp tmp/aws-supplemental/betternat-agent \
+aws s3 cp tmp/aws-supplemental-release/betternat-agent_v0.1.0-alpha.test_linux_arm64 \
   "s3://$BETTERNAT_ARTIFACT_BUCKET/betternat-agent-linux-arm64" \
   --profile "$AWS_PROFILE" \
   --region "$AWS_REGION"
 
+aws s3 cp tmp/aws-supplemental-release/betternat_v0.1.0-alpha.test_linux_arm64 \
+  "s3://$BETTERNAT_ARTIFACT_BUCKET/betternat-linux-arm64" \
+  --profile "$AWS_PROFILE" \
+  --region "$AWS_REGION"
+
+export BETTERNAT_AGENT_BINARY_SHA256="$(
+  shasum -a 256 tmp/aws-supplemental-release/betternat-agent_v0.1.0-alpha.test_linux_arm64 | awk '{print $1}'
+)"
+
+export BETTERNAT_CLI_BINARY_SHA256="$(
+  shasum -a 256 tmp/aws-supplemental-release/betternat_v0.1.0-alpha.test_linux_arm64 | awk '{print $1}'
+)"
+
 export BETTERNAT_AGENT_BINARY_URL="$(
   aws s3 presign "s3://$BETTERNAT_ARTIFACT_BUCKET/betternat-agent-linux-arm64" \
+    --expires-in 3600 \
+    --profile "$AWS_PROFILE" \
+    --region "$AWS_REGION"
+)"
+
+export BETTERNAT_CLI_BINARY_URL="$(
+  aws s3 presign "s3://$BETTERNAT_ARTIFACT_BUCKET/betternat-linux-arm64" \
     --expires-in 3600 \
     --profile "$AWS_PROFILE" \
     --region "$AWS_REGION"
@@ -174,7 +194,10 @@ terraform -chdir=examples/terraform-aws-supplemental plan \
   -var "run_id=$BETTERNAT_RUN_ID" \
   -var "region=$AWS_REGION" \
   -var "az=$BETTERNAT_AZ" \
-  -var "agent_binary_url=$BETTERNAT_AGENT_BINARY_URL"
+  -var "agent_binary_url=$BETTERNAT_AGENT_BINARY_URL" \
+  -var "agent_binary_sha256=$BETTERNAT_AGENT_BINARY_SHA256" \
+  -var "cli_binary_url=$BETTERNAT_CLI_BINARY_URL" \
+  -var "cli_binary_sha256=$BETTERNAT_CLI_BINARY_SHA256"
 ```
 
 Apply:
@@ -184,7 +207,10 @@ terraform -chdir=examples/terraform-aws-supplemental apply \
   -var "run_id=$BETTERNAT_RUN_ID" \
   -var "region=$AWS_REGION" \
   -var "az=$BETTERNAT_AZ" \
-  -var "agent_binary_url=$BETTERNAT_AGENT_BINARY_URL"
+  -var "agent_binary_url=$BETTERNAT_AGENT_BINARY_URL" \
+  -var "agent_binary_sha256=$BETTERNAT_AGENT_BINARY_SHA256" \
+  -var "cli_binary_url=$BETTERNAT_CLI_BINARY_URL" \
+  -var "cli_binary_sha256=$BETTERNAT_CLI_BINARY_SHA256"
 ```
 
 Optional route-only fixture apply:
@@ -195,6 +221,9 @@ terraform -chdir=examples/terraform-aws-supplemental apply \
   -var "region=$AWS_REGION" \
   -var "az=$BETTERNAT_AZ" \
   -var "agent_binary_url=$BETTERNAT_AGENT_BINARY_URL" \
+  -var "agent_binary_sha256=$BETTERNAT_AGENT_BINARY_SHA256" \
+  -var "cli_binary_url=$BETTERNAT_CLI_BINARY_URL" \
+  -var "cli_binary_sha256=$BETTERNAT_CLI_BINARY_SHA256" \
   -var "stable_egress_ip=false"
 ```
 
@@ -214,6 +243,9 @@ ami_id        = data.aws_ami.al2023_arm64.id
 instance_type = "t4g.small"
 use_spot      = true
 agent_binary_url = var.agent_binary_url
+agent_binary_sha256 = var.agent_binary_sha256
+cli_binary_url = var.cli_binary_url
+cli_binary_sha256 = var.cli_binary_sha256
 stable_egress_ip    = true
 rollback_on_destroy = true
 tags = {
@@ -443,6 +475,9 @@ terraform -chdir=examples/terraform-aws-supplemental apply \
   -var "region=$AWS_REGION" \
   -var "az=$BETTERNAT_AZ" \
   -var "agent_binary_url=$BETTERNAT_AGENT_BINARY_URL" \
+  -var "agent_binary_sha256=$BETTERNAT_AGENT_BINARY_SHA256" \
+  -var "cli_binary_url=$BETTERNAT_CLI_BINARY_URL" \
+  -var "cli_binary_sha256=$BETTERNAT_CLI_BINARY_SHA256" \
   -var "desired_capacity=3" \
   -var "max_size=3"
 ```
@@ -461,6 +496,9 @@ terraform -chdir=examples/terraform-aws-supplemental apply \
   -var "region=$AWS_REGION" \
   -var "az=$BETTERNAT_AZ" \
   -var "agent_binary_url=$BETTERNAT_AGENT_BINARY_URL" \
+  -var "agent_binary_sha256=$BETTERNAT_AGENT_BINARY_SHA256" \
+  -var "cli_binary_url=$BETTERNAT_CLI_BINARY_URL" \
+  -var "cli_binary_sha256=$BETTERNAT_CLI_BINARY_SHA256" \
   -var "desired_capacity=2" \
   -var "max_size=3"
 ```
@@ -595,7 +633,10 @@ terraform -chdir=examples/terraform-aws-supplemental destroy \
   -var "run_id=$BETTERNAT_RUN_ID" \
   -var "region=$AWS_REGION" \
   -var "az=$BETTERNAT_AZ" \
-  -var "agent_binary_url=$BETTERNAT_AGENT_BINARY_URL"
+  -var "agent_binary_url=$BETTERNAT_AGENT_BINARY_URL" \
+  -var "agent_binary_sha256=$BETTERNAT_AGENT_BINARY_SHA256" \
+  -var "cli_binary_url=$BETTERNAT_CLI_BINARY_URL" \
+  -var "cli_binary_sha256=$BETTERNAT_CLI_BINARY_SHA256"
 ```
 
 ## Timing Evidence

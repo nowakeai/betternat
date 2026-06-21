@@ -1,0 +1,139 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, for example v0.1.0-alpha.1"
+        required: true
+        type: string
+      prerelease:
+        description: "Mark the GitHub release as a prerelease"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish release assets
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            version="${{ inputs.version }}"
+            prerelease="${{ inputs.prerelease }}"
+          else
+            version="${GITHUB_REF_NAME}"
+            if [[ "$version" == *"-alpha"* || "$version" == *"-beta"* || "$version" == *"-rc"* ]]; then
+              prerelease="true"
+            else
+              prerelease="false"
+            fi
+          fi
+
+          if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "invalid release version: $version" >&2
+            exit 1
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
+      - name: Test
+        run: go test ./...
+
+      - name: Check whitespace
+        run: git diff --check
+
+      - name: Build release artifacts
+        env:
+          BETTERNAT_VERSION: ${{ steps.version.outputs.version }}
+          BETTERNAT_RELEASE_DIR: dist/${{ steps.version.outputs.version }}
+        run: scripts/release-build.sh
+
+      - name: Verify checksums
+        working-directory: dist/${{ steps.version.outputs.version }}
+        run: sha256sum -c SHA256SUMS
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          notes_file="docs/user/RELEASE_NOTES_${VERSION}.md"
+          if [[ ! -f "$notes_file" ]]; then
+            notes_file="$(mktemp)"
+            {
+              echo "# BetterNAT ${VERSION}"
+              echo
+              echo "Release assets are attached below. Verify downloads with SHA256SUMS."
+            } > "$notes_file"
+          fi
+
+          args=(--title "$VERSION" --notes-file "$notes_file")
+          if [[ "$PRERELEASE" == "true" ]]; then
+            args+=(--prerelease)
+          fi
+
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release edit "$VERSION" "${args[@]}"
+          else
+            gh release create "$VERSION" "${args[@]}"
+          fi
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          gh release upload "$VERSION" "dist/$VERSION"/* --clobber
+
+      - name: Verify release asset URLs
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION}"
+          assets=(
+            "betternat-agent_${VERSION}_linux_arm64"
+            "betternat-agent_${VERSION}_linux_amd64"
+            "betternat_${VERSION}_linux_arm64"
+            "betternat_${VERSION}_linux_amd64"
+            "terraform-provider-betternat_${VERSION}_linux_amd64"
+            "SHA256SUMS"
+            "manifest.json"
+          )
+
+          for asset in "${assets[@]}"; do
+            curl -fsSI "$base/$asset" >/dev/null
+          done

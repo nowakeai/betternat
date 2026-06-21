@@ -8,16 +8,21 @@ import (
 )
 
 type Spec struct {
-	AgentConfig       string
-	AgentBinaryPath   string
-	AgentBinaryURL    string
-	ConfigPath        string
-	LoxiCMDBinaryPath string
-	LoxiCMDBinaryURL  string
-	LoxiLBImage       string
-	LoxiLBContainer   string
-	PrimaryInterface  string
-	MetricsPort       int
+	AgentConfig         string
+	AgentBinaryPath     string
+	AgentBinarySHA256   string
+	AgentBinaryURL      string
+	CLIBinaryPath       string
+	CLIBinarySHA256     string
+	CLIBinaryURL        string
+	ConfigPath          string
+	LoxiCMDBinaryPath   string
+	LoxiCMDBinarySHA256 string
+	LoxiCMDBinaryURL    string
+	LoxiLBImage         string
+	LoxiLBContainer     string
+	PrimaryInterface    string
+	MetricsPort         int
 }
 
 func RenderUserData(spec Spec) (string, error) {
@@ -42,6 +47,9 @@ func withDefaults(spec Spec) Spec {
 	if spec.AgentBinaryPath == "" {
 		spec.AgentBinaryPath = "/usr/local/bin/betternat-agent"
 	}
+	if spec.CLIBinaryPath == "" {
+		spec.CLIBinaryPath = "/usr/local/bin/betternat"
+	}
 	if spec.LoxiCMDBinaryPath == "" {
 		spec.LoxiCMDBinaryPath = "/usr/local/bin/loxicmd"
 	}
@@ -49,7 +57,7 @@ func withDefaults(spec Spec) Spec {
 		spec.ConfigPath = "/etc/betternat/agent.json"
 	}
 	if spec.LoxiLBImage == "" {
-		spec.LoxiLBImage = "ghcr.io/loxilb-io/loxilb:latest"
+		spec.LoxiLBImage = "ghcr.io/loxilb-io/loxilb@sha256:dacc9b21688d4042b768f2cbc5968360b8753cf92f926ee288346153a23f3052"
 	}
 	if spec.LoxiLBContainer == "" {
 		spec.LoxiLBContainer = "loxilb"
@@ -94,11 +102,25 @@ fi
 
 {{- if .AgentBinaryURL }}
 curl -fsSL {{ shellQuote .AgentBinaryURL }} -o {{ shellQuote .AgentBinaryPath }}
+{{- if .AgentBinarySHA256 }}
+echo {{ shellQuote .AgentBinarySHA256 }} {{ shellQuote .AgentBinaryPath }} | sha256sum -c -
+{{- end }}
 chmod 0755 {{ shellQuote .AgentBinaryPath }}
+{{- end }}
+
+{{- if .CLIBinaryURL }}
+curl -fsSL {{ shellQuote .CLIBinaryURL }} -o {{ shellQuote .CLIBinaryPath }}
+{{- if .CLIBinarySHA256 }}
+echo {{ shellQuote .CLIBinarySHA256 }} {{ shellQuote .CLIBinaryPath }} | sha256sum -c -
+{{- end }}
+chmod 0755 {{ shellQuote .CLIBinaryPath }}
 {{- end }}
 
 {{- if .LoxiCMDBinaryURL }}
 curl -fsSL {{ shellQuote .LoxiCMDBinaryURL }} -o {{ shellQuote .LoxiCMDBinaryPath }}
+{{- if .LoxiCMDBinarySHA256 }}
+echo {{ shellQuote .LoxiCMDBinarySHA256 }} {{ shellQuote .LoxiCMDBinaryPath }} | sha256sum -c -
+{{- end }}
 chmod 0755 {{ shellQuote .LoxiCMDBinaryPath }}
 {{- end }}
 
@@ -112,9 +134,19 @@ cat > /etc/sysctl.d/99-betternat.conf <<'BETTERNAT_SYSCTL'
 net.ipv4.ip_forward = 1
 net.ipv4.conf.all.rp_filter = 0
 net.ipv4.conf.default.rp_filter = 0
-net.netfilter.nf_conntrack_max = 1048576
 BETTERNAT_SYSCTL
+
+if [ -e /proc/sys/net/netfilter/nf_conntrack_max ]; then
+  cat >> /etc/sysctl.d/99-betternat.conf <<'BETTERNAT_CONNTRACK_SYSCTL'
+net.netfilter.nf_conntrack_max = 1048576
+BETTERNAT_CONNTRACK_SYSCTL
+fi
+
 sysctl --system
+
+for rp_filter in /proc/sys/net/ipv4/conf/*/rp_filter; do
+  [ -e "$rp_filter" ] && echo 0 > "$rp_filter"
+done
 
 systemctl enable --now docker
 docker rm -f {{ .LoxiLBContainer }} >/dev/null 2>&1 || true

@@ -155,6 +155,7 @@ func Build(input Input) (Plan, error) {
 		LeaseTableName:      leaseTable,
 		EIPAllocationNames:  map[string]string{},
 		RequiredIAMActions: []string{
+			"autoscaling:DescribeAutoScalingGroups",
 			"ec2:AssociateAddress",
 			"ec2:DescribeAddresses",
 			"ec2:DescribeInstances",
@@ -165,6 +166,8 @@ func Build(input Input) (Plan, error) {
 			"dynamodb:DeleteItem",
 			"dynamodb:GetItem",
 			"dynamodb:UpdateItem",
+			"iam:SimulatePrincipalPolicy",
+			"sts:GetCallerIdentity",
 		},
 		Tags: map[string]string{
 			"BetterNATGateway": input.Name,

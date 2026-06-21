@@ -6,7 +6,7 @@ Last updated: 2026-06-21
 
 This document lists the AWS tests that were not covered by the first AWS integration run and prioritizes the low-cost follow-up tests.
 
-Execution checklist: `docs/deployment/AWS_SUPPLEMENTAL_RUNBOOK.md`.
+Execution checklist: `docs/testing/AWS_SUPPLEMENTAL_RUNBOOK.md`.
 
 The first AWS run proved the core path:
 

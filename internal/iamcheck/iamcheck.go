@@ -6,6 +6,7 @@ import (
 )
 
 var RequiredRuntimeActions = []string{
+	"autoscaling:DescribeAutoScalingGroups",
 	"ec2:AssociateAddress",
 	"ec2:DescribeAddresses",
 	"ec2:DescribeInstanceAttribute",
@@ -14,6 +15,8 @@ var RequiredRuntimeActions = []string{
 	"dynamodb:DeleteItem",
 	"dynamodb:GetItem",
 	"dynamodb:UpdateItem",
+	"iam:SimulatePrincipalPolicy",
+	"sts:GetCallerIdentity",
 }
 
 type Result struct {

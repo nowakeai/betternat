@@ -1,32 +1,67 @@
-# BetterNAT Documentation Index
+# BetterNAT Documentation
 
-This index is ordered by planning priority, not just by folder name.
+This directory is split by audience and document lifecycle.
 
-- `Current Priority` documents describe the product and implementation work that should drive v0.
-- `Research / Decision History` documents preserve evidence and pivots.
-- Older research may describe nftables-first or custom-eBPF-first thinking. Treat those as history when they conflict with the current architecture/spec pair.
+- `user/` is for people installing, operating, or evaluating BetterNAT.
+- `release/` is for maintainers preparing releases, AMIs, and publication gates.
+- `testing/` is for repeatable local/AWS test plans and runbooks.
+- `dev/` is for contributor workflow, dependency policy, and development validation.
+- `research/` is for design records, spikes, feasibility analysis, and historical decisions.
+- `dev-logs/` is for dated implementation notes and session summaries.
 
-## Current Priority
+Older research may describe nftables-first or custom-eBPF-first thinking. Treat those as history when they conflict with the current architecture and spec.
 
-### Architecture And Spec
+## Start Here
 
-- [architecture.md](architecture.md) — Current BetterNAT architecture baseline: LoxiLB-first datapath, nftables fallback, Terraform install UX, and agent-owned HA.
+- [architecture.md](architecture.md) — Current architecture: LoxiLB-first datapath, nftables fallback, Terraform install UX, and agent-owned HA.
 - [architecture-diagram.md](architecture-diagram.md) — Mermaid diagrams for AWS route replacement, agent/LoxiLB interaction, runtime reconciliation, and failover.
 - [spec-v0.md](spec-v0.md) — v0 product and implementation spec.
+- [user/QUICK_START.md](user/QUICK_START.md) — Disposable-VPC install, verification, destroy, and cleanup guide for the first alpha.
+- [release/RELEASE_CHECKLIST.md](release/RELEASE_CHECKLIST.md) — Alpha and production release gates.
 
-### Workflow And Harness
+## User Docs
 
-- [deployment/AMI_RELEASE_PLAN.md](deployment/AMI_RELEASE_PLAN.md) — AMI-first production release contract, channel plan, bootstrap contract, and AMI readiness tests.
-- [deployment/AI_WORKFLOW.md](deployment/AI_WORKFLOW.md) — AI-assisted workflow, validation ladder, documentation update rules, and product bias.
-- [deployment/AWS_SUPPLEMENTAL_RUNBOOK.md](deployment/AWS_SUPPLEMENTAL_RUNBOOK.md) — Execution checklist for the next low-cost AWS supplemental test pass.
-- [deployment/AWS_TEST_PLAN.md](deployment/AWS_TEST_PLAN.md) — AWS-only integration test plan for route replacement, EIP failover, DynamoDB lease, LoxiLB on EC2, public egress, rollback, and cleanup.
-- [deployment/AWS_SUPPLEMENTAL_TEST_PLAN.md](deployment/AWS_SUPPLEMENTAL_TEST_PLAN.md) — Low-cost supplemental AWS tests for route-only failover timing, repeated stable-IP timing, client recovery, rollback, IAM, and deferred expensive work.
-- [deployment/DEPENDENCY_POLICY.md](deployment/DEPENDENCY_POLICY.md) — Dependency freshness, mature-component preference, and upgrade policy.
-- [deployment/LOCAL_VM_TEST_MATRIX.md](deployment/LOCAL_VM_TEST_MATRIX.md) — Complete local VM test matrix: single-VM, multi-VM, datapath, agent, HA simulation, and AWS boundaries.
-- [deployment/LINUX_DATAPATH_VALIDATION.md](deployment/LINUX_DATAPATH_VALIDATION.md) — Environment-agnostic Linux validation plan for nftables, conntrack, and LoxiLB.
-- [deployment/TERRAFORM_PROVIDER_LOCAL_TESTING.md](deployment/TERRAFORM_PROVIDER_LOCAL_TESTING.md) — Local provider testing layers: Go tests, Terraform CLI dev overrides, and AWS acceptance tests.
+These are meant to be readable by external users.
 
-### Development Logs
+- [user/QUICK_START.md](user/QUICK_START.md) — First alpha quick start.
+- [user/EXISTING_VPC_INSTALL.md](user/EXISTING_VPC_INSTALL.md) — Existing-VPC install and route ownership warnings.
+- [user/CONFIGURATION.md](user/CONFIGURATION.md) — `betternat_gateway` Terraform input reference and runtime configuration notes.
+- [user/IAM_POLICY.md](user/IAM_POLICY.md) — Terraform execution and gateway runtime IAM requirements.
+- [user/OPERATIONS_GUIDE.md](user/OPERATIONS_GUIDE.md) — Day-2 operations: CLI, metrics, alerts, AWS checks, SSM access, troubleshooting, and cleanup.
+- [user/FAILURE_MODES.md](user/FAILURE_MODES.md) — Failure-mode behavior and limitations.
+- [user/LIMITATIONS.md](user/LIMITATIONS.md) — Alpha limitations: SLA, failover, cost, performance, bootstrap, and tuning.
+- [user/RELEASE_NOTES_v0.1.0-alpha.1.md](user/RELEASE_NOTES_v0.1.0-alpha.1.md) — First alpha release notes.
+
+## Release And Packaging
+
+These are maintainer-facing release documents.
+
+- [release/RELEASE_CHECKLIST.md](release/RELEASE_CHECKLIST.md) — Release gates, evidence requirements, validation commands, and decision template.
+- [release/OPEN_SOURCE_RELEASE_PLAN.md](release/OPEN_SOURCE_RELEASE_PLAN.md) — First public release plan for the free/open-source edition.
+- [release/ENGINEERING_RELEASE_GAP_LIST.md](release/ENGINEERING_RELEASE_GAP_LIST.md) — Code, feature, and test gaps by priority.
+- [release/ALPHA_BOOTSTRAP_RELEASE_PATH.md](release/ALPHA_BOOTSTRAP_RELEASE_PATH.md) — Temporary cloud-init based release path before published AMIs exist.
+- [release/AMI_RELEASE_PLAN.md](release/AMI_RELEASE_PLAN.md) — AMI-first production release contract and AMI readiness tests.
+
+## Testing
+
+These are executable plans and runbooks, not product docs.
+
+- [testing/AWS_TEST_PLAN.md](testing/AWS_TEST_PLAN.md) — AWS integration test plan for route replacement, EIP failover, DynamoDB lease, LoxiLB on EC2, public egress, rollback, and cleanup.
+- [testing/AWS_SUPPLEMENTAL_TEST_PLAN.md](testing/AWS_SUPPLEMENTAL_TEST_PLAN.md) — Low-cost supplemental AWS tests and deferred expensive work.
+- [testing/AWS_SUPPLEMENTAL_RUNBOOK.md](testing/AWS_SUPPLEMENTAL_RUNBOOK.md) — Execution checklist for the low-cost AWS supplemental test pass.
+
+## Development
+
+These documents guide contributors and agents working in the repo.
+
+- [dev/AI_WORKFLOW.md](dev/AI_WORKFLOW.md) — AI-assisted workflow, validation ladder, documentation update rules, and product bias.
+- [dev/DEPENDENCY_POLICY.md](dev/DEPENDENCY_POLICY.md) — Dependency freshness, mature-component preference, and upgrade policy.
+- [dev/LOCAL_VM_TEST_MATRIX.md](dev/LOCAL_VM_TEST_MATRIX.md) — Local VM test matrix and AWS boundaries.
+- [dev/LINUX_DATAPATH_VALIDATION.md](dev/LINUX_DATAPATH_VALIDATION.md) — Environment-agnostic Linux validation plan for nftables, conntrack, and LoxiLB.
+- [dev/TERRAFORM_PROVIDER_LOCAL_TESTING.md](dev/TERRAFORM_PROVIDER_LOCAL_TESTING.md) — Local provider testing layers: Go tests, Terraform CLI dev overrides, LocalStack, and AWS acceptance.
+- [dev/USER_DOCUMENTATION_GUIDE.md](dev/USER_DOCUMENTATION_GUIDE.md) — User-facing documentation rules based on fck-nat and LoxiLB references.
+
+## Development Logs
 
 - [dev-logs/README.md](dev-logs/README.md) — How to record durable implementation notes, session summaries, and architecture pivots.
 - [dev-logs/2026-06-20-harness-and-dependency-refresh.md](dev-logs/2026-06-20-harness-and-dependency-refresh.md) — Repo harness setup and dependency refresh notes.
@@ -40,41 +75,48 @@ Read these first when revisiting product or architecture direction:
 - [research/023-aws-integration-test-results.md](research/023-aws-integration-test-results.md) — AWS integration test: isolated VPC, LoxiLB on EC2, private egress, EIP/route failover, DynamoDB fencing, and cleanup.
 - [research/024-terraform-workflow-devops-tf-nat.md](research/024-terraform-workflow-devops-tf-nat.md) — devops-tf NAT Gateway workflow review and BetterNAT provider/module UX recommendations.
 - [research/025-fck-nat-reference-review.md](research/025-fck-nat-reference-review.md) — fck-nat reference review: AMI packaging, config contract, sysctl tuning, metrics, and what BetterNAT should or should not copy.
-- [research/026-aws-supplemental-test-results.md](research/026-aws-supplemental-test-results.md) — Terraform provider lifecycle, AL2023 cloud-init bootstrap, stable EIP association, LoxiLB/agent health, and cleanup.
-- [research/027-asg-self-healing-architecture.md](research/027-asg-self-healing-architecture.md) — ASG appliance-pool architecture for self-healing capacity, dynamic agent ownership, scale-out/scale-in, and production HA.
-- [research/028-asg-pool-vs-per-instance-asg.md](research/028-asg-pool-vs-per-instance-asg.md) — Decision record for one ASG pool per AZ instead of one ASG per appliance instance, including agent ownership and scaling semantics.
-- [research/029-aws-asg-provider-test-results.md](research/029-aws-asg-provider-test-results.md) — Real AWS ASG-first provider validation: Launch Template, ASG desired=2, EIP/route owner, source/destination check self-disable, and cleanup.
-- [research/030-automatic-ha-implementation-checklist.md](research/030-automatic-ha-implementation-checklist.md) — Engineering checklist for closing the runtime gap before complete automatic HA tests.
-- [research/031-aws-low-cost-supplemental-results.md](research/031-aws-low-cost-supplemental-results.md) — Low-cost AWS supplemental run results: ASG repair, agent-stop takeover, owner-termination gap, blocked scale test, and cleanup.
-- [research/017-loxilb-evaluation.md](research/017-loxilb-evaluation.md) — LoxiLB as the primary BetterNAT datapath candidate.
-- [research/016-mvp-scope-milestones.md](research/016-mvp-scope-milestones.md) — MVP scope and milestone planning.
-- [research/019-target-workloads.md](research/019-target-workloads.md) — Target workloads and cost pain: crawlers, EKS image pulls, blockchain/RPC nodes, and high-response-volume downloads.
+- [research/027-asg-self-healing-architecture.md](research/027-asg-self-healing-architecture.md) — ASG appliance-pool architecture for self-healing capacity and production HA.
+- [research/028-asg-pool-vs-per-instance-asg.md](research/028-asg-pool-vs-per-instance-asg.md) — Decision record for one ASG pool per AZ.
+- [research/031-aws-low-cost-supplemental-results.md](research/031-aws-low-cost-supplemental-results.md) — Low-cost AWS supplemental run results.
+- [research/033-upgrade-and-graceful-shutdown-design.md](research/033-upgrade-and-graceful-shutdown-design.md) — Gateway upgrade model, graceful shutdown, and alpha/production policy.
+- [research/036-loxilb-sysctl-and-conntrack-tuning.md](research/036-loxilb-sysctl-and-conntrack-tuning.md) — LoxiLB/eBPF, sysctl, and `nf_conntrack` tuning decision.
+- [research/037-v0.1.0-alpha-aws-release-candidate-results.md](research/037-v0.1.0-alpha-aws-release-candidate-results.md) — v0.1.0-alpha AWS release-candidate result.
 
 ## Supporting Research
 
-- [research/014-observability-mvp.md](research/014-observability-mvp.md) — Observability MVP and normalized metrics.
-- [research/013-security-model.md](research/013-security-model.md) — Security model and IAM/runtime boundaries.
-- [research/012-agent-architecture.md](research/012-agent-architecture.md) — Agent responsibilities and runtime architecture.
-- [research/011-benchmark-slo.md](research/011-benchmark-slo.md) — Benchmark and SLO planning.
-- [research/010-install-terraform-ux.md](research/010-install-terraform-ux.md) — Terraform-first install UX.
-- [research/009-observability-eks-pod-attribution.md](research/009-observability-eks-pod-attribution.md) — Pod attribution considerations for EKS.
-- [research/008-ha-replaceroute-lease-multicloud.md](research/008-ha-replaceroute-lease-multicloud.md) — Route replacement, lease/fencing, and multi-cloud notes.
-- [research/007-ha-primitive-selection.md](research/007-ha-primitive-selection.md) — HA primitive selection.
-- [research/006-datapath-comparison-nftables-ebpf-vpp.md](research/006-datapath-comparison-nftables-ebpf-vpp.md) — nftables/eBPF/VPP comparison.
-- [research/005-cost-model-review.md](research/005-cost-model-review.md) — Cost model review.
-- [research/004-product-pillars-feasibility.md](research/004-product-pillars-feasibility.md) — Product pillars: cost, observability, HA, install UX.
-- [research/003-nftables-performance.md](research/003-nftables-performance.md) — nftables performance notes.
-- [research/002-existing-building-blocks.md](research/002-existing-building-blocks.md) — Existing components and reuse options.
-- [research/001-cilium-hubble-ebpf-feasibility.md](research/001-cilium-hubble-ebpf-feasibility.md) — Cilium/Hubble/custom eBPF feasibility.
-
-## Spike Plans And Evidence
-
-- [research/020-loxilb-spike-plan.md](research/020-loxilb-spike-plan.md) — AWS LoxiLB spike plan.
+- [research/001-cilium-hubble-ebpf-feasibility.md](research/001-cilium-hubble-ebpf-feasibility.md)
+- [research/002-existing-building-blocks.md](research/002-existing-building-blocks.md)
+- [research/003-nftables-performance.md](research/003-nftables-performance.md)
+- [research/004-product-pillars-feasibility.md](research/004-product-pillars-feasibility.md)
+- [research/005-cost-model-review.md](research/005-cost-model-review.md)
+- [research/006-datapath-comparison-nftables-ebpf-vpp.md](research/006-datapath-comparison-nftables-ebpf-vpp.md)
+- [research/007-ha-primitive-selection.md](research/007-ha-primitive-selection.md)
+- [research/008-ha-replaceroute-lease-multicloud.md](research/008-ha-replaceroute-lease-multicloud.md)
+- [research/009-observability-eks-pod-attribution.md](research/009-observability-eks-pod-attribution.md)
+- [research/010-install-terraform-ux.md](research/010-install-terraform-ux.md)
+- [research/011-benchmark-slo.md](research/011-benchmark-slo.md)
+- [research/012-agent-architecture.md](research/012-agent-architecture.md)
+- [research/013-security-model.md](research/013-security-model.md)
+- [research/014-observability-mvp.md](research/014-observability-mvp.md)
+- [research/015-cost-calculator.md](research/015-cost-calculator.md)
+- [research/016-mvp-scope-milestones.md](research/016-mvp-scope-milestones.md)
+- [research/017-loxilb-evaluation.md](research/017-loxilb-evaluation.md)
+- [research/018-naming-collision-check.md](research/018-naming-collision-check.md)
+- [research/019-target-workloads.md](research/019-target-workloads.md)
+- [research/020-loxilb-spike-plan.md](research/020-loxilb-spike-plan.md)
+- [research/026-aws-supplemental-test-results.md](research/026-aws-supplemental-test-results.md)
+- [research/029-aws-asg-provider-test-results.md](research/029-aws-asg-provider-test-results.md)
+- [research/030-automatic-ha-implementation-checklist.md](research/030-automatic-ha-implementation-checklist.md)
+- [research/032-failover-stability-industry-patterns.md](research/032-failover-stability-industry-patterns.md)
+- [research/034-pro-edition-product-plan.md](research/034-pro-edition-product-plan.md)
+- [research/035-p0-open-source-release-acceptance-results.md](research/035-p0-open-source-release-acceptance-results.md)
 
 ## Documentation Rules
 
-- Add durable docs under `docs/`.
+- Put external install/operation docs in `docs/user/`.
+- Put release gate, packaging, and publication docs in `docs/release/`.
+- Put repeatable test plans and runbooks in `docs/testing/`.
+- Put contributor workflow and local validation docs in `docs/dev/`.
+- Put evidence, design decisions, spikes, and research in `docs/research/`.
+- Put dated implementation notes in `docs/dev-logs/`.
 - Update this index when adding a durable new document.
-- Use `docs/research/` for evidence and decision records.
-- Use `docs/deployment/` for workflow, dependency, release, local setup, and operator-runbook docs.
-- Use `docs/dev-logs/` for implementation notes and architecture pivots.

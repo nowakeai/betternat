@@ -118,6 +118,17 @@ func (r fakeStatusReporter) Snapshot() ha.StatusSnapshot {
 	return r.snapshot
 }
 
+func TestRuntimeVersionDoesNotRequireConfig(t *testing.T) {
+	var out bytes.Buffer
+	runtime := Runtime{Stdout: &out}
+	if err := runtime.Run(context.Background(), Options{Version: true}); err != nil {
+		t.Fatalf("runtime version: %v", err)
+	}
+	if !strings.Contains(out.String(), "betternat-agent version=dev") {
+		t.Fatalf("unexpected version output: %s", out.String())
+	}
+}
+
 func TestRuntimeRunOnceReconcilesDatapath(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "agent.json")
@@ -300,6 +311,10 @@ func TestRuntimeRunOnceCanRenderPrometheus(t *testing.T) {
 	if !bytes.Contains(out.Bytes(), []byte(`betternat_datapath_ready{engine="fake",gateway="prod-egress",ha_group="prod-egress-a"} 1`)) {
 		t.Fatalf("missing ready metric in output: %s", out.String())
 	}
+	if !bytes.Contains(out.Bytes(), []byte(`betternat_agent_build_info{commit="unknown",gateway="prod-egress",ha_group="prod-egress-a",node="i-local",version="dev"} 1`)) &&
+		!bytes.Contains(out.Bytes(), []byte(`betternat_agent_build_info{commit="unknown",gateway="prod-egress",ha_group="prod-egress-a",node="",version="dev"} 1`)) {
+		t.Fatalf("missing build info metric in output: %s", out.String())
+	}
 	if !bytes.Contains(out.Bytes(), []byte(`betternat_loxilb_rule_packets_total{cidr="10.0.0.0/8",engine="fake",gateway="prod-egress",ha_group="prod-egress-a"} 12`)) {
 		t.Fatalf("missing counter metric in output: %s", out.String())
 	}
@@ -354,6 +369,9 @@ func TestMetricsHandler(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "betternat_datapath_ready") {
 		t.Fatalf("missing metrics output: %s", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `betternat_agent_build_info{commit="unknown",gateway="prod-egress",ha_group="prod-egress-a",node="i-local",version="dev"} 1`) {
+		t.Fatalf("missing build info metric: %s", rec.Body.String())
 	}
 	if !strings.Contains(rec.Body.String(), `betternat_ha_state{gateway="prod-egress",ha_group="prod-egress-a",node="i-local",state="ACTIVE"} 1`) {
 		t.Fatalf("missing HA state metric: %s", rec.Body.String())

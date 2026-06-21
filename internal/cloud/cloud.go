@@ -20,6 +20,21 @@ type InstanceInfo struct {
 	SourceDestCheckEnabled bool
 }
 
+type ASGInstance struct {
+	InstanceID       string
+	LifecycleState   string
+	HealthStatus     string
+	AvailabilityZone string
+}
+
+type ASGInfo struct {
+	Name            string
+	MinSize         int32
+	DesiredCapacity int32
+	MaxSize         int32
+	Instances       []ASGInstance
+}
+
 type InstancePreparer interface {
 	DisableSourceDestCheck(ctx context.Context, instanceID string) error
 }

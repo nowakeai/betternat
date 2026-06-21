@@ -221,7 +221,11 @@ func TestDeriveGatewayStateRejectsInvalidHATiming(t *testing.T) {
 func TestDeriveGatewayStateBinaryURLs(t *testing.T) {
 	plan := validGatewayPlan()
 	plan.AgentBinaryURL = types.StringValue("https://example.invalid/betternat-agent")
+	plan.AgentBinarySHA256 = types.StringValue("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	plan.CLIBinaryURL = types.StringValue("https://example.invalid/betternat")
+	plan.CLIBinarySHA256 = types.StringValue("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")
 	plan.LoxiCMDBinaryURL = types.StringValue("https://example.invalid/loxicmd")
+	plan.LoxiCMDBinarySHA256 = types.StringValue("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
 	derived, err := DeriveGatewayState(context.Background(), &plan)
 	if err != nil {
 		t.Fatalf("derive gateway state: %v", err)
@@ -231,6 +235,18 @@ func TestDeriveGatewayStateBinaryURLs(t *testing.T) {
 	}
 	if !strings.Contains(derived.UserData.ValueString(), "https://example.invalid/loxicmd") {
 		t.Fatalf("missing loxicmd binary url in user data: %s", derived.UserData.ValueString())
+	}
+	if !strings.Contains(derived.UserData.ValueString(), "https://example.invalid/betternat") {
+		t.Fatalf("missing CLI binary url in user data: %s", derived.UserData.ValueString())
+	}
+	if !strings.Contains(derived.UserData.ValueString(), "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") {
+		t.Fatalf("missing agent checksum in user data: %s", derived.UserData.ValueString())
+	}
+	if !strings.Contains(derived.UserData.ValueString(), "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc") {
+		t.Fatalf("missing CLI checksum in user data: %s", derived.UserData.ValueString())
+	}
+	if !strings.Contains(derived.UserData.ValueString(), "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb") {
+		t.Fatalf("missing loxicmd checksum in user data: %s", derived.UserData.ValueString())
 	}
 }
 
