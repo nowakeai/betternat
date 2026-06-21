@@ -203,6 +203,15 @@ Status: in progress.
   - Terraform/OpenTofu examples,
   - acceptance test docs.
 
+Current status:
+
+- Provider repo exists and is public.
+- Provider repo has a thin wrapper that imports `github.com/nowakeai/betternat/pkg/tfprovider`.
+- Provider repo CI passes.
+- Provider repo test release creates Linux amd64/arm64 zip assets and `SHA256SUMS`.
+- Terraform local dev override validation passed with Terraform `v1.15.6`.
+- OpenTofu validation is still pending because `tofu` was not installed in the first local validation environment.
+
 ### Phase 2: Extract Importable Product Packages
 
 - Move stable provider-consumed logic out of `internal/` into `pkg/`.
