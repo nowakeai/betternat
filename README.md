@@ -120,24 +120,44 @@ resource "betternat_gateway" "egress" {
 BetterNAT owns the private default route after apply, so do not keep a separate `aws_route` resource managing the same `0.0.0.0/0` private route.
 
 ```mermaid
-flowchart LR
-  private[Private workloads]
-  rt[Private route table<br/>0.0.0.0/0]
-  old[AWS NAT Gateway]
-  active[BetterNAT active appliance<br/>agent + LoxiLB]
-  standby[BetterNAT standby appliance]
-  ddb[(DynamoDB lease)]
-  eip[Shared EIP]
+flowchart TB
+  subgraph vpc[AWS VPC]
+    subgraph private_subnet[Private subnet]
+      workloads[Private workloads]
+      route[Private route table<br/>0.0.0.0/0]
+    end
+
+    subgraph old_nat[Before: AWS managed NAT]
+      natgw[AWS NAT Gateway]
+    end
+
+    subgraph public_subnet[After: BetterNAT public subnet]
+      active[Active appliance<br/>betternat-agent + LoxiLB]
+      standby[Standby appliance<br/>ready for takeover]
+      eip[Shared EIP]
+    end
+
+    subgraph control[AWS control plane]
+      ddb[(DynamoDB lease)]
+      ec2api[EC2 APIs<br/>AssociateAddress<br/>ReplaceRoute]
+    end
+  end
+
   internet((Internet))
 
-  private --> rt
-  rt -. before: nat_gateway_id .-> old
-  rt -->|after: active instance target| active
-  active -->|SNAT| eip
+  workloads --> route
+  route -. before: nat_gateway_id .-> natgw
+  natgw -. old path .-> internet
+
+  route -->|after: active instance target| active
+  active -->|SNAT via LoxiLB| eip
   eip --> internet
+
   active <--> ddb
   standby <--> ddb
-  standby -. failover: AssociateAddress + ReplaceRoute .-> rt
+  standby -. takeover .-> ec2api
+  ec2api -. moves EIP + route .-> eip
+  ec2api -. points route to standby .-> route
 ```
 
 For a disposable VPC run:
