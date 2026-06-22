@@ -119,45 +119,71 @@ resource "betternat_gateway" "egress" {
 
 BetterNAT owns the private default route after apply, so do not keep a separate `aws_route` resource managing the same `0.0.0.0/0` private route.
 
+Before:
+
 ```mermaid
-flowchart TB
+flowchart LR
   subgraph vpc[AWS VPC]
     subgraph private_subnet[Private subnet]
       workloads[Private workloads]
       route[Private route table<br/>0.0.0.0/0]
     end
 
-    subgraph old_nat[Before: AWS managed NAT]
+    subgraph public_subnet[Public subnet]
       natgw[AWS NAT Gateway]
-    end
-
-    subgraph public_subnet[After: BetterNAT public subnet]
-      active[Active appliance<br/>betternat-agent + LoxiLB]
-      standby[Standby appliance<br/>ready for takeover]
-      eip[Shared EIP]
-    end
-
-    subgraph control[AWS control plane]
-      ddb[(DynamoDB lease)]
-      ec2api[EC2 APIs<br/>AssociateAddress<br/>ReplaceRoute]
+      nateip[NAT Gateway EIP]
     end
   end
 
   internet((Internet))
 
   workloads --> route
-  route -. before: nat_gateway_id .-> natgw
-  natgw -. old path .-> internet
+  route -->|nat_gateway_id| natgw
+  natgw --> nateip
+  nateip --> internet
+```
 
-  route -->|after: active instance target| active
-  active -->|SNAT via LoxiLB| eip
+After:
+
+```mermaid
+%%{init: {"flowchart": {"curve": "linear"}} }%%
+flowchart TB
+  subgraph vpc[AWS VPC]
+    subgraph private_subnet[Private subnet]
+      direction LR
+      workloads[Private workloads]
+      route[Private route table<br/>0.0.0.0/0]
+      workloads --> route
+    end
+
+    subgraph public_subnet[Public subnet]
+      direction LR
+      subgraph appliances[BetterNAT appliances]
+        direction TB
+        active[Active appliance<br/>betternat-agent + LoxiLB]
+        standby[Standby appliance<br/>ready for takeover]
+      end
+      eip[Shared EIP]
+      active -->|SNAT via LoxiLB| eip
+    end
+
+    subgraph control[AWS control plane]
+      direction LR
+      ddb[(DynamoDB lease)]
+      ec2api[EC2 APIs<br/>AssociateAddress<br/>ReplaceRoute]
+      failover[Failover update<br/>route target + shared EIP]
+    end
+  end
+
+  internet((Internet))
+
+  route -->|active instance target| active
   eip --> internet
 
   active <--> ddb
   standby <--> ddb
   standby -. takeover .-> ec2api
-  ec2api -. moves EIP + route .-> eip
-  ec2api -. points route to standby .-> route
+  ec2api --> failover
 ```
 
 For a disposable VPC run:
