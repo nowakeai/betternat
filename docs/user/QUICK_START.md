@@ -24,7 +24,6 @@ Important:
 
 Install locally:
 
-- Go,
 - Terraform,
 - AWS CLI,
 - an AWS profile with permission to create EC2, Auto Scaling, IAM, DynamoDB, and SSM resources.
@@ -94,19 +93,16 @@ test -n "$BETTERNAT_CLI_BINARY_SHA256"
 
 For unreleased local builds, use the maintainer AWS supplemental runbook instead of this user quick start. That runbook may use temporary private artifact hosting for test-only binaries.
 
-## Build Local Provider
+## Use Registry Provider
 
-```sh
-GOCACHE="$PWD/tmp/go-build-cache" \
-  go build -o terraform-provider-betternat ./cmd/terraform-provider-betternat
+The public Quick Start uses the Terraform Registry provider:
+
+```hcl
+source  = "nowakeai/betternat"
+version = "= 0.1.0-alpha.2"
 ```
 
-Use the repo's local Terraform dev override file:
-
-```sh
-export TF_CLI_CONFIG_FILE="$PWD/tmp/terraform-dev.tfrc"
-export TMPDIR="$PWD/tmp"
-```
+Do not set `TF_CLI_CONFIG_FILE` for this guide. Local provider override files are for provider development only.
 
 ## Deploy Disposable VPC
 

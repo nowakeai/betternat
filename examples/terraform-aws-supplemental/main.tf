@@ -5,7 +5,8 @@ terraform {
       version = ">= 6.0"
     }
     betternat = {
-      source = "nowakeai/betternat"
+      source  = "nowakeai/betternat"
+      version = "= 0.1.0-alpha.2"
     }
   }
 }
