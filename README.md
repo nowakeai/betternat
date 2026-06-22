@@ -12,17 +12,7 @@ AWS [NAT Gateway pricing](https://docs.aws.amazon.com/vpc/latest/userguide/nat-g
 
 For private-subnet download-heavy workloads, this matters:
 
-```text
-                    10 TB requests/uploads
-Private workload  ----------------------->  Public peers / APIs / registries
-      ^                                                     |
-      |                                                     |
-      +-----------------------------------------------------+
-                    40 TB responses/downloads
-
-NAT Gateway sees 50 TB processed through the gateway.
-BetterNAT removes that NAT processing fee; standard data transfer still applies.
-```
+![Download-heavy private subnet traffic cost flow](docs/assets/betternat-download-heavy-flow.svg)
 
 The large response returns through NAT Gateway and contributes to processed GB. BetterNAT replaces that managed per-GB NAT processing fee with a self-managed EC2 appliance pool.
 
@@ -121,70 +111,11 @@ BetterNAT owns the private default route after apply, so do not keep a separate 
 
 Before:
 
-```mermaid
-flowchart LR
-  subgraph vpc[AWS VPC]
-    subgraph private_subnet[Private subnet]
-      workloads[Private workloads]
-      route[Private route table<br/>0.0.0.0/0]
-    end
-
-    subgraph public_subnet[Public subnet]
-      natgw[AWS NAT Gateway]
-      nateip[NAT Gateway EIP]
-    end
-  end
-
-  internet((Internet))
-
-  workloads --> route
-  route -->|nat_gateway_id| natgw
-  natgw --> nateip
-  nateip --> internet
-```
+![Before BetterNAT: AWS NAT Gateway route path](docs/assets/betternat-before.svg)
 
 After:
 
-```mermaid
-%%{init: {"flowchart": {"curve": "linear"}} }%%
-flowchart TB
-  subgraph vpc[AWS VPC]
-    subgraph private_subnet[Private subnet]
-      direction LR
-      workloads[Private workloads]
-      route[Private route table<br/>0.0.0.0/0]
-      workloads --> route
-    end
-
-    subgraph public_subnet[Public subnet]
-      direction LR
-      subgraph appliances[BetterNAT appliances]
-        direction TB
-        active[Active appliance<br/>betternat-agent + LoxiLB]
-        standby[Standby appliance<br/>ready for takeover]
-      end
-      eip[Shared EIP]
-      active -->|SNAT via LoxiLB| eip
-    end
-
-    subgraph control[AWS control plane]
-      direction LR
-      ddb[(DynamoDB lease)]
-      ec2api[EC2 APIs<br/>AssociateAddress<br/>ReplaceRoute]
-      failover[Failover update<br/>route target + shared EIP]
-    end
-  end
-
-  internet((Internet))
-
-  route -->|active instance target| active
-  eip --> internet
-
-  active <--> ddb
-  standby <--> ddb
-  standby -. takeover .-> ec2api
-  ec2api --> failover
-```
+![After BetterNAT: appliance route, shared EIP, and AWS failover control plane](docs/assets/betternat-after.svg)
 
 For a disposable VPC run:
 

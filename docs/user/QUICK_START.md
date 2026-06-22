@@ -115,44 +115,11 @@ The module can keep compatibility outputs such as `nat_gateway_ip` by returning 
 
 Before:
 
-```mermaid
-flowchart LR
-  private[Private subnet workloads]
-  rt[Private route table<br/>0.0.0.0/0]
-  nat[AWS NAT Gateway]
-  eip[NAT Gateway EIP]
-  internet((Internet))
-
-  private --> rt
-  rt -->|nat_gateway_id| nat
-  nat --> eip
-  eip --> internet
-```
+![Before BetterNAT: AWS NAT Gateway route path](../assets/betternat-before.svg)
 
 After:
 
-```mermaid
-flowchart LR
-  private[Private subnet workloads]
-  rt[Private route table<br/>0.0.0.0/0]
-
-  subgraph public[Public subnet]
-    active[Active BetterNAT appliance<br/>betternat-agent + LoxiLB]
-    standby[Standby BetterNAT appliance<br/>ready for failover]
-  end
-
-  ddb[(DynamoDB lease)]
-  eip[Shared EIP]
-  internet((Internet))
-
-  private --> rt
-  rt -->|instance target owned by betternat-agent| active
-  active -->|SNAT via LoxiLB| eip
-  eip --> internet
-  active <--> ddb
-  standby <--> ddb
-  standby -. takeover: AssociateAddress + ReplaceRoute .-> rt
-```
+![After BetterNAT: appliance route, shared EIP, and AWS failover control plane](../assets/betternat-after.svg)
 
 For the datapath component BetterNAT uses inside each appliance, see the upstream [LoxiLB overview image](https://github.com/loxilb-io/loxilb/assets/75648333/87da0183-1a65-493f-b6fe-5bc738ba5468) and [LoxiLB standalone documentation](https://github.com/loxilb-io/loxilbdocs/blob/main/docs/standalone.md). BetterNAT uses LoxiLB as a local egress SNAT datapath; AWS route/EIP failover is handled by `betternat-agent`.
 

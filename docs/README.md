@@ -8,6 +8,7 @@ This directory is split by audience and document lifecycle.
 - `dev/` is for contributor workflow, dependency policy, and development validation.
 - `research/` is for design records, spikes, feasibility analysis, and historical decisions.
 - `dev-logs/` is for dated implementation notes and session summaries.
+- `assets/` is for shared diagrams and images referenced by user and maintainer docs.
 
 Older research may describe nftables-first or custom-eBPF-first thinking. Treat those as history when they conflict with the current architecture and spec.
 
