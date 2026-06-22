@@ -567,22 +567,30 @@ P1 items are not required to publish the first alpha, but they should be priorit
   - [x] upload release assets,
   - [x] verify release asset URLs,
   - [x] verify checksum file against uploaded assets.
-- [ ] Document Terraform provider installation for users who are not building from source.
-- [ ] Decide whether provider binaries are distributed through GitHub Releases only or later through the Terraform Registry.
+- [x] Document Terraform provider installation for users who are not building from source.
+- [x] Decide whether provider binaries are distributed through GitHub Releases only or later through the Terraform Registry.
 - [ ] Add a release smoke test that deploys using GitHub Release URLs instead of temporary S3 URLs.
 - [ ] Create `github.com/nowakeai/terraform-provider-betternat` for Registry-compatible provider publishing.
 - [x] Create `github.com/nowakeai/terraform-provider-betternat` for Registry-compatible provider publishing.
 - [x] Expose a thin main-repo public provider factory for the provider repo.
 - [x] Add provider-specific alpha release workflow for Linux provider zip artifacts.
-- [ ] Add provider-specific GoReleaser or equivalent workflow for full Terraform Registry artifact format.
-- [ ] Configure provider checksum signing.
-- [ ] Test provider install through Terraform.
+- [x] Add provider-specific GoReleaser or equivalent workflow for full Terraform Registry artifact format.
+- [x] Configure provider checksum signing.
+- [x] Test provider install through Terraform.
 - [x] Test provider local dev override through Terraform.
 - [x] Test provider local dev override through OpenTofu.
 - [x] Test provider filesystem mirror install through Terraform release zip.
 - [x] Test provider filesystem mirror install through OpenTofu release zip with explicit `registry.terraform.io/nowakeai/betternat` source.
-- [ ] Publish and test provider through Terraform Registry.
-- [ ] Publish and test provider through OpenTofu-native registry path or document explicit Terraform Registry source requirement.
+- [x] Publish and test provider through Terraform Registry.
+- [x] Publish and test provider through OpenTofu-native registry path or document explicit Terraform Registry source requirement.
+
+Provider Registry validation recorded on 2026-06-22:
+
+- Terraform Registry provider version: `nowakeai/betternat` `0.1.0-alpha.2`.
+- Terraform `v1.15.6` `terraform init` and `terraform validate`: passed with `source = "nowakeai/betternat"`.
+- OpenTofu `v1.12.3` `tofu init` and `tofu validate`: passed with `source = "registry.terraform.io/nowakeai/betternat"`.
+- Signing key ID observed by Terraform/OpenTofu: `F2D78A307FAB2914`.
+- OpenTofu-native registry tracking issues: https://github.com/opentofu/registry/issues/4494 and https://github.com/opentofu/registry/issues/4496.
 
 ### Operations And Observability
 

@@ -53,7 +53,7 @@ terraform {
   required_providers {
     betternat = {
       source  = "nowakeai/betternat"
-      version = "= 0.1.0-alpha.1"
+      version = "= 0.1.0-alpha.2"
     }
   }
 }
@@ -225,13 +225,28 @@ Current status:
 Provider release artifacts should follow Terraform provider conventions, for example:
 
 ```text
-terraform-provider-betternat_0.1.0-alpha.1_linux_amd64.zip
-terraform-provider-betternat_0.1.0-alpha.1_linux_arm64.zip
-terraform-provider-betternat_0.1.0-alpha.1_darwin_arm64.zip
-terraform-provider-betternat_0.1.0-alpha.1_SHA256SUMS
-terraform-provider-betternat_0.1.0-alpha.1_SHA256SUMS.sig
-terraform-provider-betternat_0.1.0-alpha.1_manifest.json
+terraform-provider-betternat_0.1.0-alpha.2_linux_amd64.zip
+terraform-provider-betternat_0.1.0-alpha.2_linux_arm64.zip
+terraform-provider-betternat_0.1.0-alpha.2_darwin_arm64.zip
+terraform-provider-betternat_0.1.0-alpha.2_SHA256SUMS
+terraform-provider-betternat_0.1.0-alpha.2_SHA256SUMS.sig
+terraform-provider-betternat_0.1.0-alpha.2_manifest.json
 ```
+
+The first published Terraform Registry provider version is:
+
+```text
+0.1.0-alpha.2
+```
+
+`0.1.0-alpha.2` was published through `github.com/nowakeai/terraform-provider-betternat` with:
+
+- Linux amd64 provider zip,
+- Linux arm64 provider zip,
+- Darwin arm64 provider zip,
+- `_manifest.json`,
+- `_SHA256SUMS` covering the zips and manifest,
+- `_SHA256SUMS.sig` signed by key ID `F2D78A307FAB2914`.
 
 Use GoReleaser or an equivalent workflow that can:
 
@@ -302,6 +317,8 @@ Terraform v1.15.6 local dev override validate: passed
 OpenTofu v1.12.3 local dev override validate: passed
 Terraform v1.15.6 filesystem mirror install + validate from provider release zip: passed
 OpenTofu v1.12.3 filesystem mirror install + validate from provider release zip: passed when source explicitly uses registry.terraform.io/nowakeai/betternat
+Terraform v1.15.6 Terraform Registry install + validate for nowakeai/betternat 0.1.0-alpha.2: passed
+OpenTofu v1.12.3 Terraform Registry install + validate for registry.terraform.io/nowakeai/betternat 0.1.0-alpha.2: passed
 ```
 
 Important OpenTofu source-address note:
@@ -314,6 +331,11 @@ Important OpenTofu source-address note:
 ```hcl
 source = "registry.terraform.io/nowakeai/betternat"
 ```
+
+OpenTofu Registry tracking issues:
+
+- Provider entry: https://github.com/opentofu/registry/issues/4494
+- Provider key: https://github.com/opentofu/registry/issues/4496
 
 Before production:
 
