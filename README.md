@@ -45,15 +45,6 @@ Assumptions: `$0.045/GB` NAT Gateway processing, `$0.045/hour` for one NAT Gatew
 
 ## Quick Start
 
-Start in a disposable VPC:
-
-```sh
-export AWS_PROFILE="<your-profile>"
-export AWS_REGION="us-west-2"
-export BETTERNAT_AZ="us-west-2a"
-export BETTERNAT_VERSION="v0.1.0-alpha.1"
-```
-
 Use the Terraform Registry provider:
 
 ```hcl
@@ -67,31 +58,32 @@ terraform {
 }
 ```
 
-Then follow:
+If your Terraform currently uses AWS NAT Gateway:
 
-- [Quick Start](docs/user/QUICK_START.md) for the `aws_nat_gateway` -> `betternat_gateway` Terraform shape and a disposable VPC run.
-- [Existing VPC Install](docs/user/EXISTING_VPC_INSTALL.md) when you are ready to test against real route tables.
-- [Configuration](docs/user/CONFIGURATION.md) for all `betternat_gateway` fields.
+```hcl
+resource "aws_eip" "nat" {
+  domain = "vpc"
+}
 
-Minimal resource shape:
+resource "aws_nat_gateway" "main" {
+  allocation_id = aws_eip.nat.id
+  subnet_id     = aws_subnet.public_a.id
+}
+
+resource "aws_route" "private_default" {
+  route_table_id         = aws_route_table.private_a.id
+  destination_cidr_block = "0.0.0.0/0"
+  nat_gateway_id         = aws_nat_gateway.main.id
+}
+```
+
+Replace it with BetterNAT:
 
 ```hcl
 resource "betternat_gateway" "egress" {
   name   = "prod-egress-a"
   region = "us-west-2"
   vpc_id = aws_vpc.main.id
-
-  ami_id           = data.aws_ami.al2023_arm64.id
-  instance_type    = "t4g.small"
-  use_spot         = false
-  min_size         = 1
-  desired_capacity = 2
-  max_size         = 3
-
-  agent_binary_url    = var.agent_binary_url
-  agent_binary_sha256 = var.agent_binary_sha256
-  cli_binary_url      = var.cli_binary_url
-  cli_binary_sha256   = var.cli_binary_sha256
 
   public_subnet_ids = {
     "us-west-2a" = aws_subnet.public_a.id
@@ -103,12 +95,60 @@ resource "betternat_gateway" "egress" {
 
   private_cidrs = [aws_vpc.main.cidr_block]
 
+  ami_id              = data.aws_ami.al2023_arm64.id
+  instance_type       = "t4g.small"
+  desired_capacity    = 2
+  max_size            = 3
   stable_egress_ip    = true
-  ha_profile          = "stable"
   prometheus_enabled  = true
   rollback_on_destroy = true
+
+  agent_binary_url    = var.agent_binary_url
+  agent_binary_sha256 = var.agent_binary_sha256
+  cli_binary_url      = var.cli_binary_url
+  cli_binary_sha256   = var.cli_binary_sha256
 }
 ```
+
+BetterNAT owns the private default route after apply, so do not keep a separate `aws_route` resource managing the same `0.0.0.0/0` private route.
+
+```mermaid
+flowchart LR
+  private[Private workloads]
+  rt[Private route table<br/>0.0.0.0/0]
+  old[AWS NAT Gateway]
+  active[BetterNAT active appliance<br/>agent + LoxiLB]
+  standby[BetterNAT standby appliance]
+  ddb[(DynamoDB lease)]
+  eip[Shared EIP]
+  internet((Internet))
+
+  private --> rt
+  rt -. before: nat_gateway_id .-> old
+  rt -->|after: active instance target| active
+  active -->|SNAT| eip
+  eip --> internet
+  active <--> ddb
+  standby <--> ddb
+  standby -. failover: AssociateAddress + ReplaceRoute .-> rt
+```
+
+For a disposable VPC run:
+
+```sh
+export AWS_PROFILE="<your-profile>"
+export AWS_REGION="us-west-2"
+export BETTERNAT_AZ="us-west-2a"
+export BETTERNAT_VERSION="v0.1.0-alpha.1"
+```
+
+Then follow:
+
+- [Quick Start](docs/user/QUICK_START.md) for release artifact setup, disposable VPC apply, verification, and destroy.
+- [Existing VPC Install](docs/user/EXISTING_VPC_INSTALL.md) when you are ready to test against real route tables.
+- [Configuration](docs/user/CONFIGURATION.md) for all `betternat_gateway` fields.
+
+BetterNAT uses LoxiLB as the local datapath inside each appliance; see the [LoxiLB overview](https://github.com/loxilb-io/loxilb/assets/75648333/87da0183-1a65-493f-b6fe-5bc738ba5468) and [standalone mode docs](https://github.com/loxilb-io/loxilbdocs/blob/main/docs/standalone.md).
 
 ## Verify
 
