@@ -117,7 +117,6 @@ Replacement is required for changes such as:
 - `private_route_table_ids`
 - `private_cidrs`
 - `datapath_engine`
-- `fallback_datapath_engine`
 - `stable_egress_ip`
 - `ha_profile`
 - `ha_lease_ttl_seconds`

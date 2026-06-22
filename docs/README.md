@@ -14,7 +14,7 @@ Older research may describe nftables-first or custom-eBPF-first thinking. Treat 
 
 ## Start Here
 
-- [architecture.md](architecture.md) — Current architecture: LoxiLB-first datapath, nftables fallback, Terraform install UX, and agent-owned HA.
+- [architecture.md](architecture.md) — Current architecture: LoxiLB datapath, Terraform install UX, and agent-owned HA.
 - [architecture-diagram.md](architecture-diagram.md) — Mermaid diagrams for AWS route replacement, agent/LoxiLB interaction, runtime reconciliation, and failover.
 - [spec-v0.md](spec-v0.md) — v0 product and implementation spec.
 - [user/QUICK_START.md](user/QUICK_START.md) — Disposable-VPC install, verification, destroy, and cleanup guide for the first alpha.

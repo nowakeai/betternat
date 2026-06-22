@@ -12,8 +12,7 @@ It is intended for evaluation in disposable or non-critical AWS environments.
 
 - AWS single-AZ active/standby gateway group.
 - Terraform provider resource: `betternat_gateway`.
-- LoxiLB/eBPF primary datapath.
-- nftables fallback datapath.
+- LoxiLB/eBPF datapath.
 - DynamoDB-backed lease/fencing.
 - AWS route replacement for private default routes.
 - Optional shared EIP for stable public egress identity.

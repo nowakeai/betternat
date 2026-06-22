@@ -82,10 +82,9 @@ Capacity-only updates are intended to be in-place. Other topology or bootstrap c
 
 | Name | Default | Description |
 | --- | --- | --- |
-| `datapath_engine` | `loxilb` | Primary datapath. |
-| `fallback_datapath_engine` | `nftables` | Fallback datapath for support and emergency use. |
+| `datapath_engine` | `loxilb` | BetterNAT appliance datapath. |
 
-LoxiLB has its own eBPF conntrack state. Linux `nf_conntrack_max` is retained for nftables fallback and host compatibility; it is not the primary LoxiLB capacity knob.
+LoxiLB has its own eBPF conntrack state. Linux `nf_conntrack_max` is not the primary LoxiLB capacity knob.
 
 ### Egress Identity
 

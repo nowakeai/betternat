@@ -18,7 +18,7 @@ The first alpha is designed to answer these questions:
 - Does the DynamoDB lease match the local owner view?
 - Do private route tables point to the expected active target?
 - In stable egress IP mode, is the EIP associated with the expected owner?
-- Is the LoxiLB or nftables datapath ready?
+- Is the LoxiLB datapath ready?
 - Are SNAT rule counters increasing?
 - Are failover attempts and durations being recorded?
 - Does a private client see the expected public egress IP?
@@ -311,7 +311,7 @@ Check:
 2. `loxicmd get firewall -o json`.
 3. `loxicmd get conntrack -o json`.
 4. Agent logs around LoxiLB reconciliation.
-5. nftables tools if fallback mode is enabled.
+5. Appliance service logs if LoxiLB is not reconciling.
 
 ## Current Limits
 

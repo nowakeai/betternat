@@ -36,7 +36,7 @@ Assumptions: `$0.045/GB` NAT Gateway processing, `$0.045/hour` for one NAT Gatew
 - Lower NAT Gateway processing cost for suitable high-volume workloads.
 - Stable egress IP failover mode with a shared EIP.
 - ASG-backed appliance pool with active/standby ownership.
-- LoxiLB/eBPF primary datapath with nftables fallback.
+- LoxiLB/eBPF datapath for appliance-local SNAT.
 - DynamoDB lease/fencing for route and EIP ownership.
 - Prometheus metrics for HA, datapath, traffic counters, and failover state.
 - Terraform provider install UX through `nowakeai/betternat`.
@@ -216,8 +216,7 @@ Current scope:
 - Terraform provider first.
 - No published BetterNAT AMI in the first alpha.
 - Install path is Terraform plus cloud-init bootstrap on an explicit Linux AMI.
-- LoxiLB/eBPF is the primary datapath.
-- nftables/nf_conntrack remains a fallback path.
+- LoxiLB/eBPF is the datapath.
 - New connections recover after failover; active connections may reset.
 - No NAT Gateway equivalent SLA.
 - High-volume savings are modeled, not proven by expensive multi-TB benchmark runs.

@@ -16,8 +16,7 @@ Current alpha scope:
 - one AZ per HA group,
 - Terraform provider first,
 - cloud-init bootstrap instead of a published BetterNAT AMI,
-- LoxiLB/eBPF primary datapath,
-- nftables/nf_conntrack fallback.
+- LoxiLB/eBPF datapath.
 
 Not included:
 
@@ -88,6 +87,6 @@ Boot-to-ready timing is not representative of a future prebuilt AMI.
 
 The alpha bootstrap applies conservative gateway sysctls.
 
-Linux `nf_conntrack_max` is applied only when the kernel exposes it and is retained for nftables fallback or Linux-netfilter compatibility. It is not the primary LoxiLB/eBPF conntrack capacity knob.
+Linux `nf_conntrack_max` is not the primary LoxiLB/eBPF conntrack capacity knob.
 
 Advanced tuning such as conntrack buckets, timeouts, ephemeral port ranges, backlog, IRQ/RSS, and ENA settings is deferred until benchmark-backed profiles exist.

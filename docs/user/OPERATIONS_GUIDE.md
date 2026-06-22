@@ -51,7 +51,7 @@ Current behavior:
 - `doctor --live` adds local datapath, IAM runtime permission simulation, ASG fleet health, lease, route, EIP, source/destination check, Prometheus, and outbound source-IP probe checks where configured.
 - `failover status` prints configured HA/failover settings.
 - `datapath status` prints configured datapath settings.
-- `datapath ready` performs live local datapath checks through LoxiLB or nftables.
+- `datapath ready` performs live local datapath checks through LoxiLB.
 - `cost estimate` estimates NAT Gateway processing-cost avoidance.
 
 Important:
@@ -286,7 +286,7 @@ Check:
 1. Private route table has `0.0.0.0/0` target pointing to active BetterNAT appliance.
 2. Source/destination check is disabled on active appliance.
 3. Appliance security group allows forwarded traffic.
-4. LoxiLB or nftables datapath is ready.
+4. LoxiLB datapath is ready.
 5. IP forwarding sysctl is enabled.
 6. Private source CIDR is included in `datapath.private_cidrs`.
 7. Public subnet route table has Internet Gateway route.
@@ -319,7 +319,7 @@ Check:
 2. `loxicmd get lbversion -o json`.
 3. `loxicmd get firewall -o json`.
 4. `loxicmd get conntrack -o json`.
-5. nftables fallback tools if fallback mode is used.
+5. Agent logs around LoxiLB reconciliation.
 
 ### Metrics Missing
 

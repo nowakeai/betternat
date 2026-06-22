@@ -152,7 +152,7 @@ RestrictAddressFamilies=AF_INET AF_INET6 AF_NETLINK AF_UNIX
 SystemCallFilter=@system-service @network-io
 ```
 
-Do not blindly apply these to the alpha cloud-init path. Validate them on Linux with LoxiLB, nftables fallback, metrics, AWS SDK calls, and graceful shutdown behavior.
+Do not blindly apply these to the alpha cloud-init path. Validate them on Linux with LoxiLB, metrics, AWS SDK calls, and graceful shutdown behavior.
 
 ## Datapath Privilege
 
@@ -160,7 +160,7 @@ BetterNAT uses LoxiLB as the primary datapath in the first alpha.
 
 Alpha bootstrap runs LoxiLB as a privileged host-network container because it needs kernel/network datapath access. This is acceptable for a technical preview, but production packaging should prefer a more controlled AMI-integrated runtime with a reviewed capability set.
 
-nftables fallback also requires network administration privileges.
+Do not remove network administration privileges until LoxiLB datapath behavior has been validated under the proposed hardening profile.
 
 ## Metrics Security
 
@@ -217,7 +217,6 @@ Include:
 BetterNAT integrates with:
 
 - LoxiLB,
-- nftables and conntrack tools,
 - AWS SDK for Go,
 - Terraform Plugin Framework,
 - Prometheus-compatible metrics.
