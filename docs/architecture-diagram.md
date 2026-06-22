@@ -4,6 +4,15 @@ Date: 2026-06-20
 
 These diagrams show how BetterNAT, LoxiLB, and AWS work together.
 
+BetterNAT-specific flows are shown as Mermaid diagrams so they stay versioned with this repository. For LoxiLB's upstream architecture and product visuals, see the LoxiLB project overview image and docs:
+
+[![LoxiLB overview](https://github.com/loxilb-io/loxilb/assets/75648333/87da0183-1a65-493f-b6fe-5bc738ba5468)](https://github.com/loxilb-io/loxilb)
+
+- [LoxiLB architecture in brief](https://github.com/loxilb-io/loxilbdocs/blob/main/docs/arch.md)
+- [LoxiLB standalone mode](https://github.com/loxilb-io/loxilbdocs/blob/main/docs/standalone.md)
+
+In BetterNAT, LoxiLB is the local datapath on each appliance. BetterNAT owns Terraform UX, AWS route/EIP failover, DynamoDB lease/fencing, rollback, and normalized observability.
+
 ## 1. Deployment Topology
 
 ```mermaid

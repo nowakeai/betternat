@@ -4,7 +4,7 @@ Date: 2026-06-21
 
 ## Purpose
 
-This guide deploys BetterNAT into a disposable AWS VPC, verifies private-subnet egress, and destroys all resources.
+This guide shows the Terraform migration shape first, then deploys BetterNAT into a disposable AWS VPC, verifies private-subnet egress, and destroys all resources.
 
 Use this first. Do not start by replacing a production NAT Gateway.
 
@@ -19,6 +19,142 @@ Important:
 - The example uses one AZ.
 - The example uses small EC2 instances and tiny HTTP probes.
 - It does not run expensive multi-TB traffic tests.
+
+## Terraform UX: Replace The NAT Backend
+
+If your Terraform currently provisions a single-AZ AWS NAT Gateway, it probably has this shape:
+
+```hcl
+resource "aws_eip" "nat" {
+  domain = "vpc"
+}
+
+resource "aws_nat_gateway" "main" {
+  allocation_id = aws_eip.nat.id
+  subnet_id     = aws_subnet.public["us-west-2a"].id
+}
+
+resource "aws_route" "private_default" {
+  route_table_id         = aws_route_table.private["us-west-2a"].id
+  destination_cidr_block = "0.0.0.0/0"
+  nat_gateway_id         = aws_nat_gateway.main.id
+}
+```
+
+With BetterNAT, the user-facing replacement is one resource. BetterNAT creates the appliance pool, EIP, lease table, IAM role, security group, launch template, ASG, and owns the private route target:
+
+```hcl
+resource "betternat_gateway" "egress" {
+  name   = "prod-egress-a"
+  region = "us-west-2"
+  vpc_id = aws_vpc.main.id
+
+  public_subnet_ids = {
+    "us-west-2a" = aws_subnet.public["us-west-2a"].id
+  }
+
+  private_route_table_ids = {
+    "us-west-2a" = [aws_route_table.private["us-west-2a"].id]
+  }
+
+  private_cidrs = [aws_vpc.main.cidr_block]
+
+  ami_id              = data.aws_ami.al2023_arm64.id
+  instance_type       = "t4g.small"
+  desired_capacity    = 2
+  max_size            = 3
+  stable_egress_ip    = true
+  prometheus_enabled  = true
+  rollback_on_destroy = true
+
+  agent_binary_url    = var.agent_binary_url
+  agent_binary_sha256 = var.agent_binary_sha256
+  cli_binary_url      = var.cli_binary_url
+  cli_binary_sha256   = var.cli_binary_sha256
+}
+```
+
+The important migration rule:
+
+- before: Terraform owns `aws_route.private_default` with `nat_gateway_id`,
+- after: `betternat_gateway` owns that route table's default route so `betternat-agent` can move it during failover.
+
+Do not keep a separate `aws_route` resource managing the same `0.0.0.0/0` private route after BetterNAT is active.
+
+### Module-Level Switch
+
+In a networking module, keep the old input and add a backend selector:
+
+```hcl
+variable "enable_nat_gateway" {
+  type    = bool
+  default = true
+}
+
+variable "nat_backend" {
+  type    = string
+  default = "aws_nat_gateway"
+
+  validation {
+    condition     = contains(["aws_nat_gateway", "betternat", "none"], var.nat_backend)
+    error_message = "nat_backend must be aws_nat_gateway, betternat, or none."
+  }
+}
+```
+
+Then callers change only:
+
+```hcl
+enable_nat_gateway = true
+nat_backend        = "betternat"
+```
+
+The module can keep compatibility outputs such as `nat_gateway_ip` by returning either the AWS NAT Gateway EIP or the BetterNAT EIP.
+
+## Flow Diagram
+
+Before:
+
+```mermaid
+flowchart LR
+  private[Private subnet workloads]
+  rt[Private route table<br/>0.0.0.0/0]
+  nat[AWS NAT Gateway]
+  eip[NAT Gateway EIP]
+  internet((Internet))
+
+  private --> rt
+  rt -->|nat_gateway_id| nat
+  nat --> eip
+  eip --> internet
+```
+
+After:
+
+```mermaid
+flowchart LR
+  private[Private subnet workloads]
+  rt[Private route table<br/>0.0.0.0/0]
+
+  subgraph public[Public subnet]
+    active[Active BetterNAT appliance<br/>betternat-agent + LoxiLB]
+    standby[Standby BetterNAT appliance<br/>ready for failover]
+  end
+
+  ddb[(DynamoDB lease)]
+  eip[Shared EIP]
+  internet((Internet))
+
+  private --> rt
+  rt -->|instance target owned by betternat-agent| active
+  active -->|SNAT via LoxiLB| eip
+  eip --> internet
+  active <--> ddb
+  standby <--> ddb
+  standby -. takeover: AssociateAddress + ReplaceRoute .-> rt
+```
+
+For the datapath component BetterNAT uses inside each appliance, see the upstream [LoxiLB overview image](https://github.com/loxilb-io/loxilb/assets/75648333/87da0183-1a65-493f-b6fe-5bc738ba5468) and [LoxiLB standalone documentation](https://github.com/loxilb-io/loxilbdocs/blob/main/docs/standalone.md). BetterNAT uses LoxiLB as a local egress SNAT datapath; AWS route/EIP failover is handled by `betternat-agent`.
 
 ## Prerequisites
 

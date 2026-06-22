@@ -69,7 +69,7 @@ terraform {
 
 Then follow:
 
-- [Quick Start](docs/user/QUICK_START.md) for a disposable VPC.
+- [Quick Start](docs/user/QUICK_START.md) for the `aws_nat_gateway` -> `betternat_gateway` Terraform shape and a disposable VPC run.
 - [Existing VPC Install](docs/user/EXISTING_VPC_INSTALL.md) when you are ready to test against real route tables.
 - [Configuration](docs/user/CONFIGURATION.md) for all `betternat_gateway` fields.
 
