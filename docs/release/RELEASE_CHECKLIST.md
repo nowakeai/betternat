@@ -634,7 +634,7 @@ Provider Registry validation recorded on 2026-06-22:
 ### Documentation
 
 - [ ] Run the Quick Start from a clean clone using GitHub Release URLs.
-- [ ] Add provider installation guide.
+- [x] Add provider installation guide.
 - [ ] Add observability guide.
 - [ ] Add rollback guide.
 - [ ] Add upgrade/replacement guide.
@@ -652,7 +652,7 @@ P2 items are valuable, but should not block alpha or early P1 hardening.
 - [ ] Preload LoxiLB image or binary in AMI.
 - [ ] Include third-party license bundle inside AMI.
 - [ ] Add CloudFormation template or make an explicit decision to defer it.
-- [ ] Evaluate Terraform Registry publication.
+- [x] Evaluate Terraform Registry publication.
 
 ### Performance And Tuning
 
