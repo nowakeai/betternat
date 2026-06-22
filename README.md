@@ -13,8 +13,8 @@ AWS [NAT Gateway pricing](https://docs.aws.amazon.com/vpc/latest/userguide/nat-g
 For private-subnet download-heavy workloads, this matters:
 
 ```text
-private worker -> small request -> public peer/API/registry
-public peer/API/registry -> large response/download -> private worker
+private worker -> 10 TB requests/uploads -> public peers/APIs/registries
+public peers/APIs/registries -> 40 TB responses/downloads -> private worker
 ```
 
 The large response returns through NAT Gateway and contributes to processed GB. BetterNAT replaces that managed per-GB NAT processing fee with a self-managed EC2 appliance pool.
