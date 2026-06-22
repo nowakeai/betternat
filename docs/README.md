@@ -25,8 +25,10 @@ These are meant to be readable by external users.
 
 - [user/QUICK_START.md](user/QUICK_START.md) — First alpha quick start.
 - [user/EXISTING_VPC_INSTALL.md](user/EXISTING_VPC_INSTALL.md) — Existing-VPC install and route ownership warnings.
+- [user/COST_MODEL.md](user/COST_MODEL.md) — NAT Gateway processing-fee model, BetterNAT cost formula, example savings, endpoint guidance, and CLI estimate usage.
 - [user/CONFIGURATION.md](user/CONFIGURATION.md) — `betternat_gateway` Terraform input reference and runtime configuration notes.
 - [user/IAM_POLICY.md](user/IAM_POLICY.md) — Terraform execution and gateway runtime IAM requirements.
+- [user/SECURITY_HARDENING.md](user/SECURITY_HARDENING.md) — Current alpha security posture, IAM/network/bootstrap hardening, artifact integrity, and production checklist.
 - [user/OPERATIONS_GUIDE.md](user/OPERATIONS_GUIDE.md) — Day-2 operations: CLI, metrics, alerts, AWS checks, SSM access, troubleshooting, and cleanup.
 - [user/OBSERVABILITY_GUIDE.md](user/OBSERVABILITY_GUIDE.md) — Prometheus metrics, CLI checks, AWS cross-checks, alerts, attribution scope, and current observability limits.
 - [user/ROLLBACK_GUIDE.md](user/ROLLBACK_GUIDE.md) — Safe destroy, private route restoration, manual rollback, and residual-resource checks.

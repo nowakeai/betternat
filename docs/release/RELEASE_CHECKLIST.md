@@ -329,13 +329,14 @@ rg -n "X-Amz|AWSAccessKeyId|BEGIN (RSA|OPENSSH|EC|PRIVATE) KEY|BETTERNAT_AGENT_B
 Production requirement:
 
 - [ ] least-privilege IAM reviewed.
-- [ ] AMI supply-chain story documented.
-- [ ] systemd hardening reviewed.
+- [x] AMI supply-chain story documented.
+- [x] systemd hardening reviewed.
 - [ ] public release artifacts are signed or otherwise supply-chain hardened beyond checksums.
 
 Evidence:
 
 - `docs/research/013-security-model.md`
+- `docs/user/SECURITY_HARDENING.md`
 - `docs/spec-v0.md`
 - release artifact checksums
 
@@ -376,8 +377,8 @@ Production requirement:
 - [ ] Trademark review completed for BetterNAT, LoxiLB, AWS, Terraform, Prometheus, Grafana, and any cloud/provider names used in public copy.
 - [ ] Product name, logo, domain, and package names are approved.
 - [ ] Any use of "powered by", "integrates with", or similar third-party wording is approved.
-- [ ] Open-source license for BetterNAT itself is chosen and documented.
-- [ ] Vulnerability and dependency disclosure process is documented.
+- [x] Open-source license for BetterNAT itself is chosen and documented.
+- [x] Vulnerability and dependency disclosure process is documented.
 
 Evidence:
 
@@ -400,9 +401,9 @@ Alpha minimum:
 
 Production requirement:
 
-- [ ] Grafana dashboard or example Prometheus queries.
-- [ ] alert suggestions for stale HA state, route mismatch, public identity mismatch, and datapath not ready.
-- [ ] top-N attribution story is clearly scoped.
+- [x] Grafana dashboard or example Prometheus queries.
+- [x] alert suggestions for stale HA state, route mismatch, public identity mismatch, and datapath not ready.
+- [x] top-N attribution story is clearly scoped.
 
 Evidence:
 
@@ -449,27 +450,27 @@ Alpha minimum:
 
 Production requirement:
 
-- [ ] upgrade guide.
-- [ ] rollback guide.
-- [ ] cost calculator docs.
-- [ ] security hardening docs.
+- [x] upgrade guide.
+- [x] rollback guide.
+- [x] cost calculator docs.
+- [x] security hardening docs.
 - [ ] AMI refresh policy.
-- [ ] operations guide:
-  - [ ] how to detect active owner,
-  - [ ] how to inspect route/EIP ownership,
-  - [ ] how to inspect DynamoDB lease,
-  - [ ] how to recover from partial deploy,
-  - [ ] how to safely destroy or roll back.
-- [ ] observability guide:
-  - [ ] Prometheus scrape example,
-  - [ ] Grafana dashboard or starter queries,
-  - [ ] alerts for stale HA, route mismatch, EIP mismatch, datapath not ready.
-- [ ] production limitations page:
-  - [ ] no SLA equivalence to AWS NAT Gateway,
-  - [ ] no active connection preservation,
-  - [ ] single-AZ HA group scope,
-  - [ ] failure-mode table,
-  - [ ] measured failover timing and test conditions.
+- [x] operations guide:
+  - [x] how to detect active owner,
+  - [x] how to inspect route/EIP ownership,
+  - [x] how to inspect DynamoDB lease,
+  - [x] how to recover from partial deploy,
+  - [x] how to safely destroy or roll back.
+- [x] observability guide:
+  - [x] Prometheus scrape example,
+  - [x] Grafana dashboard or starter queries,
+  - [x] alerts for stale HA, route mismatch, EIP mismatch, datapath not ready.
+- [x] production limitations page:
+  - [x] no SLA equivalence to AWS NAT Gateway,
+  - [x] no active connection preservation,
+  - [x] single-AZ HA group scope,
+  - [x] failure-mode table,
+  - [x] measured failover timing and test conditions.
 - [ ] docs have been followed by someone other than the primary developer in a clean account or disposable VPC.
 
 Evidence:
@@ -631,12 +632,12 @@ Provider Registry validation recorded on 2026-06-22:
 ### Security And Supply Chain
 
 - [ ] Review runtime IAM least-privilege policy against real AWS actions.
-- [ ] Review systemd hardening options.
+- [x] Review systemd hardening options.
 - [ ] Add dependency/license scan to release workflow.
 - [ ] Add artifact signing decision:
-  - [ ] no signing for alpha with checksums only,
+  - [x] no signing for alpha with checksums only,
   - [ ] or cosign/minisign/GPG for later releases.
-- [ ] Add vulnerability disclosure and patch policy to user docs.
+- [x] Add vulnerability disclosure and patch policy to user docs.
 
 ### Documentation
 
@@ -648,7 +649,7 @@ Provider Registry validation recorded on 2026-06-22:
 - [x] Add observability guide.
 - [x] Add rollback guide.
 - [x] Add upgrade/replacement guide.
-- [ ] Add cost calculator docs or a documented cost-model worksheet.
+- [x] Add cost calculator docs or a documented cost-model worksheet.
 
 ## P2 Backlog
 

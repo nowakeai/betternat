@@ -1,0 +1,236 @@
+# BetterNAT Cost Model
+
+Date: 2026-06-22
+
+## Purpose
+
+BetterNAT is designed for private-subnet workloads where NAT Gateway data processing charges dominate the bill.
+
+It does not make AWS networking free. It replaces the managed NAT Gateway per-GB processing line item with a self-owned EC2 appliance pool, while normal AWS costs still apply.
+
+## The Bill Line BetterNAT Targets
+
+AWS NAT Gateway pricing has two main NAT Gateway-specific components:
+
+- NAT Gateway hours,
+- data processed per GB.
+
+AWS also says standard data transfer charges still apply for data transferred through NAT Gateway.
+
+The important point for high-volume private-subnet workloads:
+
+> NAT Gateway data processing is charged for each GB processed through the gateway, regardless of traffic source or destination.
+
+For a private workload that initiates an outbound connection and receives a large response, the response traffic returns through the NAT Gateway and contributes to processed GB.
+
+Example:
+
+```text
+private worker -> small request -> public peer/API/registry
+public peer/API/registry -> large response/download -> private worker
+```
+
+That large return path can be the expensive part of the NAT Gateway bill.
+
+BetterNAT is especially relevant for:
+
+- blockchain/RPC/full nodes syncing from public peers,
+- crawler fleets pulling large pages, media, or datasets,
+- Kubernetes nodes pulling large public images or artifacts,
+- data ingestion workers downloading from public APIs or partner endpoints,
+- any private subnet workload with tens of TB/month through NAT Gateway.
+
+## Example Processing Fee
+
+Using an illustrative NAT Gateway processing price of `$0.045/GB`:
+
+| Monthly processed data | NAT Gateway processing fee only |
+| ---: | ---: |
+| 10 TB | about `$461/month` |
+| 30 TB | about `$1,382/month` |
+| 50 TB | about `$2,304/month` |
+| 100 TB | about `$4,608/month` |
+
+Assumptions:
+
+- `1 TB = 1024 GB`,
+- processing fee only,
+- excludes NAT Gateway hourly charges,
+- excludes standard data transfer charges,
+- excludes BetterNAT appliance costs.
+
+Pricing varies by region and can change. Always verify current AWS pricing for your region.
+
+## Example Savings Shape
+
+This example uses:
+
+- `50 TB/month` processed by NAT Gateway,
+- `$0.045/hour` NAT Gateway hourly price,
+- `$0.045/GB` NAT Gateway processing price,
+- `730` hours/month,
+- two BetterNAT appliances,
+- `$0.05/hour` per appliance.
+
+Run:
+
+```sh
+betternat cost estimate \
+  --gb 51200 \
+  --nat-gateway-hourly 0.045 \
+  --nat-gateway-processing-per-gb 0.045 \
+  --appliance-hourly 0.05 \
+  --appliances 2
+```
+
+Example output:
+
+```json
+{
+  "processed_gb": 51200,
+  "nat_gateway_usd": 2336.85,
+  "betternat_usd": 73,
+  "estimated_savings_usd": 2263.85,
+  "savings_percent": 96.87613667971843
+}
+```
+
+This is not a quote. It is a directional model for deciding whether the workload is worth testing.
+
+## Formula
+
+Approximate NAT Gateway monthly cost:
+
+```text
+nat_gateway_monthly_cost =
+  nat_gateway_count * nat_gateway_hourly_price * monthly_hours
+  + processed_gb * nat_gateway_processing_price_per_gb
+```
+
+Approximate BetterNAT monthly cost:
+
+```text
+betternat_monthly_cost =
+  appliance_count * appliance_hourly_price * monthly_hours
+  + ebs_monthly_cost
+  + public_ipv4_or_eip_monthly_cost
+  + dynamodb_monthly_cost
+  + monitoring_monthly_cost
+  + extra_cross_az_data_transfer_cost
+```
+
+Approximate savings:
+
+```text
+savings =
+  nat_gateway_monthly_cost
+  - betternat_monthly_cost
+```
+
+Break-even processed GB:
+
+```text
+break_even_gb =
+  (betternat_monthly_cost - nat_gateway_hourly_cost_replaced)
+  / nat_gateway_processing_price_per_gb
+```
+
+If your processed GB is low, AWS NAT Gateway simplicity may be worth the cost even if BetterNAT is cheaper on paper.
+
+## Costs BetterNAT Can Reduce
+
+BetterNAT can reduce or remove:
+
+- NAT Gateway per-GB data processing charges for traffic moved to BetterNAT,
+- NAT Gateway hourly charges for NAT Gateways you delete,
+- cross-AZ NAT path costs when you deploy per-AZ and keep routes aligned.
+
+BetterNAT can also make NAT spend easier to reason about through appliance metrics and owner labels.
+
+## Costs BetterNAT Does Not Remove
+
+BetterNAT does not remove:
+
+- standard internet data transfer charges,
+- EC2 appliance instance charges,
+- EBS volume charges,
+- public IPv4/EIP charges where applicable,
+- DynamoDB lease table costs,
+- CloudWatch, SSM, Prometheus, or log storage costs,
+- operational ownership,
+- extra cross-AZ data transfer caused by poor route placement.
+
+It is a replacement for a managed NAT processing fee, not a way to bypass AWS data transfer pricing.
+
+## VPC Endpoints First
+
+If most NAT Gateway traffic goes to AWS services that support VPC endpoints, use endpoints before or alongside BetterNAT.
+
+Common examples:
+
+- S3 gateway endpoints,
+- DynamoDB gateway endpoints,
+- interface endpoints for supported AWS services where the endpoint economics make sense.
+
+AWS explicitly recommends endpoints as a way to reduce NAT Gateway data processing charges for supported service traffic.
+
+BetterNAT is most useful for traffic that still must go to the public internet or external services after endpoint cleanup.
+
+## Direction Split Matters
+
+For download-heavy workloads, do not model only request bytes.
+
+Use:
+
+```text
+nat_gateway_processed_gb =
+  private_to_internet_request_gb
+  + internet_to_private_response_gb
+```
+
+For crawler, artifact pull, and blockchain sync workloads, `internet_to_private_response_gb` may be much larger than request bytes.
+
+## What To Measure Before Migrating
+
+Before replacing an existing NAT Gateway, collect:
+
+- NAT Gateway `BytesOutToDestination`,
+- NAT Gateway `BytesInFromDestination`,
+- per-AZ route table ownership,
+- which private subnets use which NAT Gateway,
+- whether traffic crosses AZs,
+- whether traffic can move to VPC endpoints,
+- peak Mbps/Gbps,
+- packet rate,
+- new connection rate,
+- concurrent flow estimate,
+- destinations that require stable egress IP allowlisting.
+
+The first alpha does not yet import CloudWatch NAT Gateway metrics automatically. Use AWS CloudWatch, Cost Explorer, VPC Flow Logs, and BetterNAT estimates together.
+
+## How To Use The CLI Estimate
+
+Basic:
+
+```sh
+betternat cost estimate --gb 10240
+```
+
+Region-specific prices are not fetched automatically in the first alpha. Override prices explicitly:
+
+```sh
+betternat cost estimate \
+  --gb 30720 \
+  --nat-gateway-hourly <price-per-hour> \
+  --nat-gateway-processing-per-gb <price-per-gb> \
+  --appliance-hourly <your-ec2-price> \
+  --appliances 2
+```
+
+Use your own EC2 price, expected appliance count, and region-specific NAT Gateway price.
+
+## Sources
+
+- AWS NAT Gateway pricing documentation: https://docs.aws.amazon.com/vpc/latest/userguide/nat-gateway-pricing.html
+- AWS VPC pricing page: https://aws.amazon.com/vpc/pricing/
+- AWS NAT Gateway CloudWatch metrics: https://docs.aws.amazon.com/vpc/latest/userguide/metrics-dimensions-nat-gateway.html

@@ -1,89 +1,77 @@
 # BetterNAT
 
-BetterNAT is a self-managed, observable AWS egress gateway for high-volume private-subnet workloads.
+Self-owned, observable, highly available egress for high-volume AWS private subnet workloads.
 
-It is built for teams that are surprised by NAT Gateway per-GB processing charges: crawler fleets, blockchain/RPC nodes syncing from public peers, Kubernetes nodes pulling large public images, and other workloads that download tens of TB per month from the public internet.
+BetterNAT targets the NAT Gateway bill line that hurts at scale: per-GB data processing. It is built for crawler fleets, blockchain/RPC nodes syncing from public peers, Kubernetes nodes pulling large public images, and other private workloads that download tens of TB per month from the public internet.
 
 Better not be surprised by NAT Gateway bills.
 
-## Alpha Status
+## Why BetterNAT
 
-`v0.1.0-alpha.1` is an early technical preview.
+AWS [NAT Gateway pricing](https://docs.aws.amazon.com/vpc/latest/userguide/nat-gateway-pricing.html) charges for each hour it is available and each GB it processes. The [AWS VPC pricing page](https://aws.amazon.com/vpc/pricing/) also states that data processing charges apply for each GB processed through NAT Gateway regardless of traffic source or destination, and standard data transfer charges still apply.
 
-Current scope:
+For private-subnet download-heavy workloads, this matters:
 
-- AWS only.
-- Single-AZ HA group.
-- Terraform provider first.
-- No published BetterNAT AMI in the first alpha.
-- Install path is Terraform plus cloud-init bootstrap on an explicit Linux AMI.
-- LoxiLB/eBPF is the primary datapath.
-- nftables/nf_conntrack remains a fallback path.
-- New connections recover after failover; active connections may reset.
-- No NAT Gateway equivalent SLA.
-- High-volume savings are modeled, not proven by expensive multi-TB benchmark runs.
+```text
+private worker -> small request -> public peer/API/registry
+public peer/API/registry -> large response/download -> private worker
+```
 
-## When To Use It
+The large response returns through NAT Gateway and contributes to processed GB. BetterNAT replaces that managed per-GB NAT processing fee with a self-managed EC2 appliance pool.
 
-BetterNAT is worth evaluating when:
+Illustrative processing-fee-only examples at `$0.045/GB`:
 
-- NAT Gateway data processing fees dominate the bill.
-- You can operate a small EC2 appliance pool.
-- New-flow recovery after failover is acceptable.
-- You want Prometheus metrics and appliance-local diagnostics.
-- You are comfortable testing an alpha in a disposable or non-critical VPC first.
+| Monthly processed data | NAT Gateway processing fee |
+| ---: | ---: |
+| 10 TB | about `$461/month` |
+| 30 TB | about `$1,382/month` |
+| 50 TB | about `$2,304/month` |
+| 100 TB | about `$4,608/month` |
 
-Use AWS NAT Gateway instead when:
+Those figures exclude NAT Gateway hourly charges, EC2 appliance costs, and standard AWS data transfer charges. See [Cost Model](docs/user/COST_MODEL.md) for formulas, caveats, and CLI examples.
 
-- you need AWS-managed service semantics and SLA,
-- active connection preservation matters,
-- multi-AZ managed NAT behavior is required immediately,
-- you do not want to own EC2, IAM, route, EIP, and DynamoDB operational state.
+## What You Get
 
-## Architecture
-
-BetterNAT deploys an Auto Scaling Group of gateway appliances in one AZ.
-
-Each appliance runs:
-
-- `betternat-agent`,
-- LoxiLB in standalone mode,
-- the `betternat` CLI,
-- Prometheus metrics.
-
-The active appliance owns:
-
-- the DynamoDB lease,
-- the private route table default route,
-- the shared EIP when `stable_egress_ip=true`.
-
-On failure, a standby appliance takes over by reconciling datapath state, claiming the EIP when configured, and replacing the private route target.
+- Lower NAT Gateway processing cost for suitable high-volume workloads.
+- Stable egress IP failover mode with a shared EIP.
+- ASG-backed appliance pool with active/standby ownership.
+- LoxiLB/eBPF primary datapath with nftables fallback.
+- DynamoDB lease/fencing for route and EIP ownership.
+- Prometheus metrics for HA, datapath, traffic counters, and failover state.
+- Terraform provider install UX through `nowakeai/betternat`.
+- Rollback-oriented route ownership model for existing VPC adoption.
 
 ## Quick Start
 
-Start with a disposable VPC:
+Start in a disposable VPC:
 
-- [Quick Start](docs/user/QUICK_START.md)
+```sh
+export AWS_PROFILE="<your-profile>"
+export AWS_REGION="us-west-2"
+export BETTERNAT_AZ="us-west-2a"
+export BETTERNAT_VERSION="v0.1.0-alpha.1"
+```
 
-For an existing VPC:
+Use the Terraform Registry provider:
 
-- [Existing VPC Install](docs/user/EXISTING_VPC_INSTALL.md)
+```hcl
+terraform {
+  required_providers {
+    betternat = {
+      source  = "nowakeai/betternat"
+      version = "= 0.1.0-alpha.2"
+    }
+  }
+}
+```
 
-Configuration reference:
+Then follow:
 
-- [Configuration](docs/user/CONFIGURATION.md)
+- [Quick Start](docs/user/QUICK_START.md) for a disposable VPC.
+- [Existing VPC Install](docs/user/EXISTING_VPC_INSTALL.md) when you are ready to test against real route tables.
+- [Configuration](docs/user/CONFIGURATION.md) for all `betternat_gateway` fields.
 
-Operational docs:
-
-- [Operations Guide](docs/user/OPERATIONS_GUIDE.md)
-- [Failure Modes And Limitations](docs/user/FAILURE_MODES.md)
-- [Limitations](docs/user/LIMITATIONS.md)
-
-Release notes:
-
-- [v0.1.0-alpha.1](docs/user/RELEASE_NOTES_v0.1.0-alpha.1.md)
-
-## Minimal Terraform Shape
+Minimal resource shape:
 
 ```hcl
 resource "betternat_gateway" "egress" {
@@ -122,23 +110,105 @@ resource "betternat_gateway" "egress" {
 
 ## Verify
 
-Run on the active gateway appliance through SSM:
+Run on a gateway appliance through SSM:
 
 ```sh
 betternat doctor --live --config /etc/betternat/agent.json
 ```
 
-Check the private client source IP:
+Check public egress from a private client:
 
 ```sh
 curl -fsS https://checkip.amazonaws.com
 ```
 
-Scrape appliance metrics:
+Scrape metrics:
 
 ```text
 http://<gateway-private-ip>:9108/metrics
 ```
+
+Estimate the cost shape:
+
+```sh
+betternat cost estimate --gb 51200 --appliance-hourly 0.05 --appliances 2
+```
+
+## When To Use It
+
+BetterNAT is worth evaluating when:
+
+- NAT Gateway data processing fees dominate the bill.
+- Private workloads pull or receive large amounts of public internet data.
+- You can operate a small EC2 appliance pool.
+- New-flow recovery after failover is acceptable.
+- You want Prometheus metrics and appliance-local diagnostics.
+- You can test in a disposable or non-critical VPC first.
+
+Use AWS NAT Gateway instead when:
+
+- you need AWS-managed service semantics and SLA,
+- active connection preservation matters,
+- multi-AZ managed NAT behavior is required immediately,
+- you do not want to own EC2, IAM, routes, EIPs, DynamoDB, metrics, and rollback state.
+
+## Architecture
+
+BetterNAT deploys an Auto Scaling Group of gateway appliances in one AZ.
+
+Each appliance runs:
+
+- `betternat-agent`,
+- LoxiLB in standalone mode,
+- the `betternat` CLI,
+- Prometheus metrics.
+
+The active appliance owns:
+
+- the DynamoDB lease,
+- the private route table default route,
+- the shared EIP when `stable_egress_ip=true`.
+
+On failure, a standby appliance takes over by reconciling datapath state, claiming the EIP when configured, and replacing the private route target.
+
+Architecture docs:
+
+- [Architecture](docs/architecture.md)
+- [Architecture Diagram](docs/architecture-diagram.md)
+- [Failure Modes](docs/user/FAILURE_MODES.md)
+
+## Alpha Status
+
+`v0.1.0-alpha.1` is an early technical preview.
+
+Current scope:
+
+- AWS only.
+- Single-AZ HA group.
+- Terraform provider first.
+- No published BetterNAT AMI in the first alpha.
+- Install path is Terraform plus cloud-init bootstrap on an explicit Linux AMI.
+- LoxiLB/eBPF is the primary datapath.
+- nftables/nf_conntrack remains a fallback path.
+- New connections recover after failover; active connections may reset.
+- No NAT Gateway equivalent SLA.
+- High-volume savings are modeled, not proven by expensive multi-TB benchmark runs.
+
+Read before using real route tables:
+
+- [Limitations](docs/user/LIMITATIONS.md)
+- [Rollback Guide](docs/user/ROLLBACK_GUIDE.md)
+- [Upgrade And Replacement Guide](docs/user/UPGRADE_REPLACEMENT_GUIDE.md)
+- [Security And Supply Chain Guide](docs/user/SECURITY_HARDENING.md)
+
+## Documentation
+
+- [Documentation Index](docs/README.md)
+- [Cost Model](docs/user/COST_MODEL.md)
+- [Operations Guide](docs/user/OPERATIONS_GUIDE.md)
+- [Observability Guide](docs/user/OBSERVABILITY_GUIDE.md)
+- [IAM Policy](docs/user/IAM_POLICY.md)
+- [Release Notes](docs/user/RELEASE_NOTES_v0.1.0-alpha.1.md)
 
 ## Development
 
@@ -158,10 +228,8 @@ GOCACHE=$PWD/tmp/go-build go build ./cmd/terraform-provider-betternat
 
 The repo-local `./manage` script is an optional convenience wrapper, not the only supported workflow.
 
-## Documentation
+## License
 
-Durable docs live under `docs/`.
+BetterNAT is licensed under the Apache License 2.0. See [LICENSE](LICENSE).
 
-- `docs/README.md` is the documentation index.
-- `docs/dev/USER_DOCUMENTATION_GUIDE.md` defines user-facing documentation rules.
-- `docs/release/RELEASE_CHECKLIST.md` tracks alpha and production release gates.
+Third-party notices are recorded in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
