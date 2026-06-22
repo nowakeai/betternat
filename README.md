@@ -19,16 +19,18 @@ public peer/API/registry -> large response/download -> private worker
 
 The large response returns through NAT Gateway and contributes to processed GB. BetterNAT replaces that managed per-GB NAT processing fee with a self-managed EC2 appliance pool.
 
-Illustrative monthly estimate at `$0.045/GB`, `$0.045/hour` for one NAT Gateway, and two `$0.05/hour` BetterNAT appliances:
+Direction matters. NAT Gateway processing is metered on both request bytes and response bytes through the gateway. BetterNAT has no equivalent per-GB NAT processing fee; after replacement, the remaining AWS data-transfer bill depends on traffic direction. That is why BetterNAT is especially strong for workloads that send small requests and pull large responses into AWS.
 
-| Monthly processed data | NAT Gateway | BetterNAT | Savings | Savings % |
+NAT-layer monthly estimate at `$0.045/GB`, `$0.045/hour` for one NAT Gateway, and two `$0.05/hour` BetterNAT appliances:
+
+| Monthly NAT-processed data | NAT Gateway | BetterNAT | Savings | Savings % |
 | ---: | ---: | ---: | ---: | ---: |
 | 10 TB | about `$494/month` | about `$73/month` | about `$421/month` | about `85%` |
 | 30 TB | about `$1,415/month` | about `$73/month` | about `$1,342/month` | about `95%` |
 | 50 TB | about `$2,337/month` | about `$73/month` | about `$2,264/month` | about `97%` |
 | 100 TB | about `$4,641/month` | about `$73/month` | about `$4,568/month` | about `98%` |
 
-The BetterNAT column includes only illustrative appliance instance hours: `2 appliances * $0.05/hour * 730 hours = $73/month`. It excludes EBS, EIP/public IPv4, DynamoDB, monitoring, operational cost, and standard AWS data transfer charges. See [Cost Model](docs/user/COST_MODEL.md) for formulas, caveats, and CLI examples.
+The BetterNAT column includes only illustrative appliance instance hours: `2 appliances * $0.05/hour * 730 hours = $73/month`. It excludes EBS, EIP/public IPv4, DynamoDB, monitoring, operational cost, and standard AWS data transfer charges. Upload-heavy workloads still pay normal AWS internet egress charges in both designs; download-heavy workloads often feel the largest improvement because NAT Gateway was adding a per-GB processing charge to return traffic. See [Cost Model](docs/user/COST_MODEL.md) for formulas, direction examples, caveats, and CLI usage.
 
 ## What You Get
 

@@ -40,11 +40,35 @@ BetterNAT is especially relevant for:
 - data ingestion workers downloading from public APIs or partner endpoints,
 - any private subnet workload with tens of TB/month through NAT Gateway.
 
+## Direction Mix Matters
+
+NAT Gateway processed data is bidirectional:
+
+```text
+nat_gateway_processed_gb =
+  private_to_internet_request_or_upload_gb
+  + internet_to_private_response_or_download_gb
+```
+
+BetterNAT does not add an equivalent per-GB NAT processing fee. The remaining AWS data-transfer bill depends on direction:
+
+- private-to-internet upload/egress still pays normal AWS internet data transfer out in both designs,
+- internet-to-private download/response traffic often has no equivalent AWS data transfer-in charge, but NAT Gateway still charges processed GB while it is in the path,
+- this makes BetterNAT especially attractive for workloads that send small requests and download large responses.
+
+Examples for `50 TB` total traffic through the NAT layer:
+
+| Traffic shape | Private -> internet | Internet -> private | NAT Gateway processed GB | Why the impact differs |
+| --- | ---: | ---: | ---: | --- |
+| Download-heavy sync/crawling | 1 TB | 49 TB | 50 TB | NAT Gateway charges the 49 TB return path; BetterNAT removes that NAT processing line. |
+| Balanced API traffic | 25 TB | 25 TB | 50 TB | NAT Gateway charges both directions; BetterNAT removes NAT processing, but standard egress transfer remains for outbound bytes. |
+| Upload-heavy export | 49 TB | 1 TB | 50 TB | NAT processing savings are still real, but normal AWS internet egress transfer can dominate the total bill. |
+
 ## Example Processing Fee And Savings
 
 Using an illustrative NAT Gateway processing price of `$0.045/GB`, one NAT Gateway at `$0.045/hour`, and two BetterNAT appliances at `$0.05/hour` each:
 
-| Monthly processed data | NAT Gateway estimate | BetterNAT estimate | Estimated savings | Savings percent |
+| Monthly NAT-processed data | NAT Gateway estimate | BetterNAT estimate | Estimated savings | Savings percent |
 | ---: | ---: | ---: | ---: | ---: |
 | 10 TB | about `$494/month` | about `$73/month` | about `$421/month` | about `85%` |
 | 30 TB | about `$1,415/month` | about `$73/month` | about `$1,342/month` | about `95%` |
@@ -103,6 +127,10 @@ This is not a quote. It is a directional model for deciding whether the workload
 Approximate NAT Gateway monthly cost:
 
 ```text
+processed_gb =
+  private_to_internet_request_or_upload_gb
+  + internet_to_private_response_or_download_gb
+
 nat_gateway_monthly_cost =
   nat_gateway_count * nat_gateway_hourly_price * monthly_hours
   + processed_gb * nat_gateway_processing_price_per_gb
@@ -176,20 +204,6 @@ Common examples:
 AWS explicitly recommends endpoints as a way to reduce NAT Gateway data processing charges for supported service traffic.
 
 BetterNAT is most useful for traffic that still must go to the public internet or external services after endpoint cleanup.
-
-## Direction Split Matters
-
-For download-heavy workloads, do not model only request bytes.
-
-Use:
-
-```text
-nat_gateway_processed_gb =
-  private_to_internet_request_gb
-  + internet_to_private_response_gb
-```
-
-For crawler, artifact pull, and blockchain sync workloads, `internet_to_private_response_gb` may be much larger than request bytes.
 
 ## What To Measure Before Migrating
 
