@@ -40,24 +40,25 @@ BetterNAT is especially relevant for:
 - data ingestion workers downloading from public APIs or partner endpoints,
 - any private subnet workload with tens of TB/month through NAT Gateway.
 
-## Example Processing Fee
+## Example Processing Fee And Savings
 
-Using an illustrative NAT Gateway processing price of `$0.045/GB`:
+Using an illustrative NAT Gateway processing price of `$0.045/GB` and an illustrative BetterNAT appliance cost of `2 appliances * $0.05/hour * 730 hours = $73/month`:
 
-| Monthly processed data | NAT Gateway processing fee only |
-| ---: | ---: |
-| 10 TB | about `$461/month` |
-| 30 TB | about `$1,382/month` |
-| 50 TB | about `$2,304/month` |
-| 100 TB | about `$4,608/month` |
+| Monthly processed data | NAT Gateway processing fee only | BetterNAT avoids before appliance cost | Example net after appliance hours |
+| ---: | ---: | ---: | ---: |
+| 10 TB | about `$461/month` | about `$461/month` | about `$388/month` |
+| 30 TB | about `$1,382/month` | about `$1,382/month` | about `$1,309/month` |
+| 50 TB | about `$2,304/month` | about `$2,304/month` | about `$2,231/month` |
+| 100 TB | about `$4,608/month` | about `$4,608/month` | about `$4,535/month` |
 
 Assumptions:
 
 - `1 TB = 1024 GB`,
-- processing fee only,
-- excludes NAT Gateway hourly charges,
+- `730` hours/month,
+- example appliance cost subtracts only EC2 instance hours,
+- excludes NAT Gateway hourly charges that may also be removed,
 - excludes standard data transfer charges,
-- excludes BetterNAT appliance costs.
+- excludes EBS, EIP/public IPv4, DynamoDB, monitoring, and operational costs.
 
 Pricing varies by region and can change. Always verify current AWS pricing for your region.
 

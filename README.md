@@ -19,16 +19,16 @@ public peer/API/registry -> large response/download -> private worker
 
 The large response returns through NAT Gateway and contributes to processed GB. BetterNAT replaces that managed per-GB NAT processing fee with a self-managed EC2 appliance pool.
 
-Illustrative processing-fee-only examples at `$0.045/GB`:
+Illustrative examples at `$0.045/GB`:
 
-| Monthly processed data | NAT Gateway processing fee |
-| ---: | ---: |
-| 10 TB | about `$461/month` |
-| 30 TB | about `$1,382/month` |
-| 50 TB | about `$2,304/month` |
-| 100 TB | about `$4,608/month` |
+| Monthly processed data | NAT Gateway processing fee | BetterNAT avoids before appliance cost | Example net after 2 x `$0.05/h` appliances |
+| ---: | ---: | ---: | ---: |
+| 10 TB | about `$461/month` | about `$461/month` | about `$388/month` |
+| 30 TB | about `$1,382/month` | about `$1,382/month` | about `$1,309/month` |
+| 50 TB | about `$2,304/month` | about `$2,304/month` | about `$2,231/month` |
+| 100 TB | about `$4,608/month` | about `$4,608/month` | about `$4,535/month` |
 
-Those figures exclude NAT Gateway hourly charges, EC2 appliance costs, and standard AWS data transfer charges. See [Cost Model](docs/user/COST_MODEL.md) for formulas, caveats, and CLI examples.
+The net column subtracts only illustrative appliance instance hours: `2 appliances * $0.05/hour * 730 hours = $73/month`. It excludes EBS, EIP/public IPv4, DynamoDB, monitoring, operational cost, and standard AWS data transfer charges. It also excludes NAT Gateway hourly charges that may be removed if you delete the NAT Gateway. See [Cost Model](docs/user/COST_MODEL.md) for formulas, caveats, and CLI examples.
 
 ## What You Get
 
