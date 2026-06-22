@@ -58,17 +58,19 @@ BetterNAT does not add an equivalent per-GB NAT processing fee. The remaining AW
 
 Examples for `50 TB` total traffic through the NAT layer:
 
-| Traffic shape | Private -> internet | Internet -> private | NAT Gateway processed GB | Why the impact differs |
+| Traffic shape | Private -> internet | Internet -> private | NAT Gateway processed GB | Standard transfer implication |
 | --- | ---: | ---: | ---: | --- |
-| Download-heavy sync/crawling | 1 TB | 49 TB | 50 TB | NAT Gateway charges the 49 TB return path; BetterNAT removes that NAT processing line. |
-| Balanced API traffic | 25 TB | 25 TB | 50 TB | NAT Gateway charges both directions; BetterNAT removes NAT processing, but standard egress transfer remains for outbound bytes. |
-| Upload-heavy export | 49 TB | 1 TB | 50 TB | NAT processing savings are still real, but normal AWS internet egress transfer can dominate the total bill. |
+| Download-heavy sync/crawling | 1 TB | 49 TB | 50 TB | NAT Gateway charges the 49 TB return path; BetterNAT removes that NAT processing line, and normal AWS data-transfer-in may be low or free depending on source/path. |
+| Balanced API traffic | 25 TB | 25 TB | 50 TB | NAT Gateway charges both directions; BetterNAT removes NAT processing, but standard egress transfer remains for the outbound half. |
+| Upload-heavy export | 49 TB | 1 TB | 50 TB | NAT processing savings are still real, but normal AWS internet egress transfer on 49 TB can dominate the total bill in both designs. |
 
 ## Example Processing Fee And Savings
 
-Using an illustrative NAT Gateway processing price of `$0.045/GB`, one NAT Gateway at `$0.045/hour`, and two BetterNAT appliances at `$0.05/hour` each:
+Using an illustrative NAT Gateway processing price of `$0.045/GB`, one NAT Gateway at `$0.045/hour`, and two BetterNAT appliances at `$0.05/hour` each.
 
-| Monthly NAT-processed data | NAT Gateway estimate | BetterNAT estimate | Estimated savings | Savings percent |
+This is a NAT-layer comparison, not a total AWS bill estimate:
+
+| Monthly traffic through NAT layer | NAT Gateway-specific cost | BetterNAT-specific cost | NAT-layer savings | Savings percent |
 | ---: | ---: | ---: | ---: | ---: |
 | 10 TB | about `$494/month` | about `$73/month` | about `$421/month` | about `85%` |
 | 30 TB | about `$1,415/month` | about `$73/month` | about `$1,342/month` | about `95%` |
@@ -79,10 +81,24 @@ Assumptions:
 
 - `1 TB = 1024 GB`,
 - `730` hours/month,
-- NAT Gateway estimate includes one NAT Gateway hourly charge plus processed GB,
-- BetterNAT estimate includes only EC2 appliance instance hours,
-- excludes standard data transfer charges,
+- NAT Gateway-specific cost includes one NAT Gateway hourly charge plus processed GB,
+- BetterNAT-specific cost includes only EC2 appliance instance hours,
+- excludes direction-dependent standard data transfer charges,
 - excludes EBS, EIP/public IPv4, DynamoDB, monitoring, and operational costs.
+
+Total bill shape:
+
+```text
+nat_gateway_design_total =
+  nat_gateway_specific_cost
+  + standard_aws_data_transfer_by_direction
+  + other_aws_resource_costs
+
+betternat_design_total =
+  betternat_specific_cost
+  + standard_aws_data_transfer_by_direction
+  + other_aws_resource_costs
+```
 
 Pricing varies by region and can change. Always verify current AWS pricing for your region.
 
