@@ -28,6 +28,7 @@ These are meant to be readable by external users.
 - [user/CONFIGURATION.md](user/CONFIGURATION.md) — `betternat_gateway` Terraform input reference and runtime configuration notes.
 - [user/IAM_POLICY.md](user/IAM_POLICY.md) — Terraform execution and gateway runtime IAM requirements.
 - [user/OPERATIONS_GUIDE.md](user/OPERATIONS_GUIDE.md) — Day-2 operations: CLI, metrics, alerts, AWS checks, SSM access, troubleshooting, and cleanup.
+- [user/OBSERVABILITY_GUIDE.md](user/OBSERVABILITY_GUIDE.md) — Prometheus metrics, CLI checks, AWS cross-checks, alerts, attribution scope, and current observability limits.
 - [user/ROLLBACK_GUIDE.md](user/ROLLBACK_GUIDE.md) — Safe destroy, private route restoration, manual rollback, and residual-resource checks.
 - [user/FAILURE_MODES.md](user/FAILURE_MODES.md) — Failure-mode behavior and limitations.
 - [user/LIMITATIONS.md](user/LIMITATIONS.md) — Alpha limitations: SLA, failover, cost, performance, bootstrap, and tuning.
