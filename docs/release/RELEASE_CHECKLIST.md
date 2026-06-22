@@ -646,7 +646,7 @@ Provider Registry validation recorded on 2026-06-22:
   - [x] Clean clone `examples/terraform-aws-supplemental init` and `validate` passed with `HTTP_PROXY`/`HTTPS_PROXY` set to `http://127.0.0.1:10808`.
 - [x] Add provider installation guide.
 - [ ] Add observability guide.
-- [ ] Add rollback guide.
+- [x] Add rollback guide.
 - [ ] Add upgrade/replacement guide.
 - [ ] Add cost calculator docs or a documented cost-model worksheet.
 
