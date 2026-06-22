@@ -23,6 +23,7 @@ Older research may describe nftables-first or custom-eBPF-first thinking. Treat 
 ## User Docs
 
 These are meant to be readable by external users.
+Read them in this order for the first full pass:
 
 - [user/QUICK_START.md](user/QUICK_START.md) — First alpha quick start.
 - [user/EXISTING_VPC_INSTALL.md](user/EXISTING_VPC_INSTALL.md) — Existing-VPC install and route ownership warnings.

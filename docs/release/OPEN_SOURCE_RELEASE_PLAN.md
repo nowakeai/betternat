@@ -48,23 +48,23 @@ Do not mention in first-release user docs:
 
 Required before public release:
 
-- [ ] `README.md` with clear alpha/private-preview status.
-- [ ] `LICENSE` for BetterNAT itself.
-- [ ] `SECURITY.md` with vulnerability reporting process.
-- [ ] `CONTRIBUTING.md`.
-- [ ] `THIRD_PARTY_NOTICES.md`.
-- [ ] `.gitignore` excludes build outputs, local state, secrets, Terraform state, and local paths.
-- [ ] No local absolute paths are committed.
-- [ ] No presigned URLs, AWS keys, tokens, or private endpoints are committed.
-- [ ] Examples do not require maintainer-only local files.
-- [ ] Documentation index includes all release-blocking docs.
+- [x] `README.md` with clear alpha/private-preview status.
+- [x] `LICENSE` for BetterNAT itself.
+- [x] `SECURITY.md` with vulnerability reporting process.
+- [x] `CONTRIBUTING.md`.
+- [x] `THIRD_PARTY_NOTICES.md`.
+- [x] `.gitignore` excludes build outputs, local state, secrets, Terraform state, and local paths.
+- [x] No local absolute paths are committed.
+- [x] No presigned URLs, AWS keys, tokens, or private endpoints are committed.
+- [x] Examples do not require maintainer-only local files.
+- [x] Documentation index includes all release-blocking docs.
 
 Optional but recommended:
 
 - [ ] `CODE_OF_CONDUCT.md`.
 - [ ] GitHub issue templates.
 - [ ] Pull request template.
-- [ ] Release drafter or changelog automation.
+- [x] Release drafter or changelog automation.
 
 ## License Choice
 

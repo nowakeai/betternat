@@ -2,6 +2,8 @@
 
 Self-owned, observable, highly available egress for high-volume AWS private subnet workloads.
 
+**Alpha technical preview.** Start with the [documentation index](docs/README.md), then follow the [Quick Start](docs/user/QUICK_START.md), [Cost Model](docs/user/COST_MODEL.md), [Operations Guide](docs/user/OPERATIONS_GUIDE.md), and [Limitations](docs/user/LIMITATIONS.md).
+
 BetterNAT targets the NAT Gateway bill line that hurts at scale: per-GB data processing. It is built for crawler fleets, blockchain/RPC nodes syncing from public peers, Kubernetes nodes pulling large public images, and other private workloads that download tens of TB per month from the public internet.
 
 Better not be surprised by NAT Gateway bills.
