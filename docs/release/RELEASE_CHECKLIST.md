@@ -643,7 +643,7 @@ Provider Registry validation recorded on 2026-06-22:
 - [ ] Run the Quick Start from a clean clone using GitHub Release URLs.
   - [x] Clean clone at `v0.1.0-alpha.1` can read release `SHA256SUMS` and resolve arm64 agent/CLI checksums.
   - [x] Clean clone can install `nowakeai/betternat` `0.1.0-alpha.2` from Terraform Registry and validate `examples/terraform`.
-  - [ ] Clean clone `examples/terraform-aws-supplemental init` still needs a completed run; the attempted run stalled while downloading `hashicorp/aws` `v6.51.0`, before BetterNAT-specific validation.
+  - [ ] Clean clone `examples/terraform-aws-supplemental init` still needs a completed run; attempts stalled while downloading `hashicorp/aws` `v6.51.0`, before BetterNAT-specific validation. The `http://127.0.0.1:10808` proxy reached HashiCorp releases, but the 173 MB AWS provider zip downloaded at roughly 115 KB/s and was stopped rather than waiting about 25 minutes.
 - [x] Add provider installation guide.
 - [ ] Add observability guide.
 - [ ] Add rollback guide.
