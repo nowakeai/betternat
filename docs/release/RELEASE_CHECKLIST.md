@@ -647,7 +647,7 @@ Provider Registry validation recorded on 2026-06-22:
 - [x] Add provider installation guide.
 - [x] Add observability guide.
 - [x] Add rollback guide.
-- [ ] Add upgrade/replacement guide.
+- [x] Add upgrade/replacement guide.
 - [ ] Add cost calculator docs or a documented cost-model worksheet.
 
 ## P2 Backlog
