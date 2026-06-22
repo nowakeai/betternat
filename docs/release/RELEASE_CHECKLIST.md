@@ -193,17 +193,24 @@ Alpha minimum:
   - [x] `net.ipv4.conf.default.rp_filter = 0`,
   - [x] conditional `net.netfilter.nf_conntrack_max = 1048576` when the kernel exposes the sysctl.
 - [x] Release notes state that advanced performance tuning is not yet claimed or benchmarked.
-- [ ] Public alpha binaries are attached to a GitHub Release:
-  - [ ] Linux arm64 `betternat-agent`
-  - [ ] Linux amd64 `betternat-agent`
-  - [ ] Linux arm64 `betternat`
-  - [ ] Linux amd64 `betternat`
-  - [ ] Terraform provider binary or documented build/install path
-  - [ ] `SHA256SUMS`
-  - [ ] `manifest.json`
+- [x] Public alpha binaries are attached to a GitHub Release:
+  - [x] Linux arm64 `betternat-agent`
+  - [x] Linux amd64 `betternat-agent`
+  - [x] Linux arm64 `betternat`
+  - [x] Linux amd64 `betternat`
+  - [x] Terraform provider binary or documented Registry install path
+  - [x] `SHA256SUMS`
+  - [x] `manifest.json`
 - [x] User-facing install docs use GitHub Release asset URLs, not S3.
-- [ ] GitHub Release asset URLs return HTTP 200 before tagging the release as ready.
-- [ ] Checksums in `SHA256SUMS` match uploaded release assets.
+- [x] GitHub Release asset URLs return HTTP 200 before tagging the release as ready.
+- [x] Checksums in `SHA256SUMS` match uploaded release assets.
+
+Release artifact validation recorded on 2026-06-22:
+
+- GitHub Release: `v0.1.0-alpha.1`.
+- Release workflow: https://github.com/nowakeai/betternat/actions/runs/27931536630.
+- Assets verified with HTTP 200: Linux arm64/amd64 `betternat-agent`, Linux arm64/amd64 `betternat`, Linux amd64 legacy provider binary, `SHA256SUMS`, and `manifest.json`.
+- Downloaded assets passed `shasum -a 256 -c SHA256SUMS`.
 
 Explicitly deferred from first alpha:
 
@@ -634,6 +641,9 @@ Provider Registry validation recorded on 2026-06-22:
 ### Documentation
 
 - [ ] Run the Quick Start from a clean clone using GitHub Release URLs.
+  - [x] Clean clone at `v0.1.0-alpha.1` can read release `SHA256SUMS` and resolve arm64 agent/CLI checksums.
+  - [x] Clean clone can install `nowakeai/betternat` `0.1.0-alpha.2` from Terraform Registry and validate `examples/terraform`.
+  - [ ] Clean clone `examples/terraform-aws-supplemental init` still needs a completed run; the attempted run stalled while downloading `hashicorp/aws` `v6.51.0`, before BetterNAT-specific validation.
 - [x] Add provider installation guide.
 - [ ] Add observability guide.
 - [ ] Add rollback guide.
