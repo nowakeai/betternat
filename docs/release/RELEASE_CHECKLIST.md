@@ -566,7 +566,7 @@ P1 items are not required to publish the first alpha, but they should be priorit
 
 ### Release Distribution
 
-- [ ] Publish public binaries only through GitHub Release assets.
+- [x] Publish public binaries only through GitHub Release assets.
 - [x] Add a repeatable GitHub release workflow:
   - [x] build artifacts,
   - [x] generate `SHA256SUMS`,
@@ -577,7 +577,6 @@ P1 items are not required to publish the first alpha, but they should be priorit
 - [x] Document Terraform provider installation for users who are not building from source.
 - [x] Decide whether provider binaries are distributed through GitHub Releases only or later through the Terraform Registry.
 - [ ] Add a release smoke test that deploys using GitHub Release URLs instead of temporary S3 URLs.
-- [ ] Create `github.com/nowakeai/terraform-provider-betternat` for Registry-compatible provider publishing.
 - [x] Create `github.com/nowakeai/terraform-provider-betternat` for Registry-compatible provider publishing.
 - [x] Expose a thin main-repo public provider factory for the provider repo.
 - [x] Add provider-specific alpha release workflow for Linux provider zip artifacts.
