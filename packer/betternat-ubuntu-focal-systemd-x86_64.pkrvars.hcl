@@ -9,4 +9,4 @@ provision_script = "scripts/ami/provision-betternat-ami-ubuntu-systemd.sh"
 # LoxiLB currently publishes amd64 .deb release assets. Keep this flavor
 # explicit until an arm64 .deb or BetterNAT-owned package is available.
 loxilb_deb_url    = "https://github.com/loxilb-io/loxilb/releases/download/v0.9.7/loxilb_0.9.7-amd64.deb"
-loxilb_deb_sha256 = ""
+loxilb_deb_sha256 = "10b67ecd67e486e5fd0b72ab005c9f84277d21845868db9145555fb547ef9beb"
