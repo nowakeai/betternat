@@ -16,12 +16,22 @@ if [ -z "$BETTERNAT_LOXILB_DEB_URL" ]; then
   exit 1
 fi
 
+wait_for_apt() {
+  cloud-init status --wait >/dev/null 2>&1 || true
+  while fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock >/dev/null 2>&1; do
+    sleep 5
+  done
+}
+
 install -m 0755 /tmp/betternat-agent /usr/local/bin/betternat-agent
 install -m 0755 /tmp/betternat /usr/local/bin/betternat
 
 export DEBIAN_FRONTEND=noninteractive
+wait_for_apt
 apt-get update
+wait_for_apt
 apt-get upgrade -y
+wait_for_apt
 apt-get install -y \
   ca-certificates \
   conntrack \
