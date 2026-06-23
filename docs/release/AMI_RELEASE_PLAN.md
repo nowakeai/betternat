@@ -201,6 +201,9 @@ Ubuntu 24.04 Noble build validation then found a release blocker on 2026-06-23:
 The Ubuntu systemd `.deb` flavor has been removed from the release path until
 newer upstream `.deb` packages exist or BetterNAT owns a supported package build.
 The release AMI path is AL2023 with Docker and a pinned LoxiLB image digest.
+The current release pin is recorded in
+[`DEPENDENCY_PINS.md`](DEPENDENCY_PINS.md): BetterNAT `v0.1.0-alpha.2`
+corresponds to LoxiLB `v0.9.8.6`.
 
 ## Sysctl Profile
 

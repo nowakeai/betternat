@@ -49,6 +49,7 @@ These are maintainer-facing release documents.
 - [release/ENGINEERING_RELEASE_GAP_LIST.md](release/ENGINEERING_RELEASE_GAP_LIST.md) — Code, feature, and test gaps by priority.
 - [release/ALPHA_BOOTSTRAP_RELEASE_PATH.md](release/ALPHA_BOOTSTRAP_RELEASE_PATH.md) — Temporary cloud-init based release path before published AMIs exist.
 - [release/AMI_RELEASE_PLAN.md](release/AMI_RELEASE_PLAN.md) — AMI-first production release contract and AMI readiness tests.
+- [release/DEPENDENCY_PINS.md](release/DEPENDENCY_PINS.md) — BetterNAT release to LoxiLB version/digest pin table and validation policy.
 - [release/TERRAFORM_PROVIDER_DISTRIBUTION_PLAN.md](release/TERRAFORM_PROVIDER_DISTRIBUTION_PLAN.md) — Split-repo provider publishing plan, Registry release model, versioning, and OpenTofu compatibility.
 
 ## Testing

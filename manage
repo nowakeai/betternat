@@ -18,6 +18,7 @@ Usage:
   ./manage test
   ./manage verify
   ./manage build [all|cli|agent|provider]
+  ./manage release-pins check
   ./manage smoke [doctor|status|datapath|failover|metrics]
   ./manage deps check
   ./manage deps upgrade
@@ -31,6 +32,10 @@ USAGE
 
 run_go_test() {
   go test ./...
+}
+
+release_pins_check() {
+  scripts/check-release-pins.sh
 }
 
 build_target() {
@@ -99,6 +104,7 @@ case "${1:-help}" in
     run_go_test
     ;;
   verify)
+    release_pins_check
     run_go_test
     build_target all
     smoke_target doctor
@@ -120,6 +126,18 @@ case "${1:-help}" in
         ;;
       *)
         echo "unknown deps command: ${2:-}" >&2
+        usage >&2
+        exit 2
+        ;;
+    esac
+    ;;
+  release-pins)
+    case "${2:-check}" in
+      check)
+        release_pins_check
+        ;;
+      *)
+        echo "unknown release-pins command: ${2:-}" >&2
         usage >&2
         exit 2
         ;;

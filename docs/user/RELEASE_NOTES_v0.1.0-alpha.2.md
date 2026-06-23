@@ -34,6 +34,12 @@ It remains AWS-only and single-AZ for the first public evaluation path.
 
 This release still does not publish a BetterNAT AMI.
 
+This release pins LoxiLB to `v0.9.8.6` by immutable image digest:
+
+```text
+ghcr.io/loxilb-io/loxilb@sha256:38f08be39aaa57826cbfb818c34442e34b0e456f9f88a74265c4a298208862cb
+```
+
 The alpha install path remains:
 
 ```text
