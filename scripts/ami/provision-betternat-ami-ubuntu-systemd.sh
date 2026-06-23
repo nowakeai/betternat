@@ -54,6 +54,7 @@ apt-get install -y /tmp/loxilb.deb
 rm -f /tmp/loxilb.deb
 
 install -d -m 0755 /etc/betternat
+install -d -m 0755 /etc/systemd/system/loxilb.service.d
 install -d -m 0755 /usr/local/lib/betternat
 install -d -m 0755 /usr/share/doc/betternat/licenses
 install -d -m 0755 /usr/share/doc/betternat/licenses/loxilb
@@ -67,6 +68,12 @@ fi
 if [ -f /tmp/betternat-THIRD_PARTY_NOTICES.md ]; then
   install -m 0644 /tmp/betternat-THIRD_PARTY_NOTICES.md /usr/share/doc/betternat/THIRD_PARTY_NOTICES.md
 fi
+
+cat > /etc/systemd/system/loxilb.service.d/betternat.conf <<'EOF'
+[Service]
+ExecStart=
+ExecStart=/usr/local/sbin/loxilb --api --fallback
+EOF
 
 cat > /etc/systemd/system/betternat-agent.service <<'EOF'
 [Unit]
