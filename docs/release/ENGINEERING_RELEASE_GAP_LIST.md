@@ -718,7 +718,8 @@ Still needed:
 - publish arm64 and amd64 AMIs,
 - wire provider `ami_channel` resolution to published AMI metadata,
 - add AMI license bundle validation,
-- add private AWS API reachability / no per-node public IP validation.
+- publish private AWS API reachability requirements in user docs and provider
+  install behavior.
 
 When `stable_egress_ip=true`, the provider-derived plan now sets
 `AssociatePublicIpAddress=false`. When `stable_egress_ip=false`, nodes may keep
@@ -728,6 +729,30 @@ no per-node public IPs. That can be done with VPC endpoints or with a routing
 topology where standby nodes use the current active gateway without breaking the
 active node's own internet path. The path must cover DynamoDB, EC2, Auto
 Scaling, STS, SSM, EC2 Messages, SSM Messages, and CloudWatch where enabled.
+
+AWS no-public-IP validation on 2026-06-23:
+
+- Added temporary VPC endpoints to the retained test VPC:
+  - DynamoDB gateway endpoint,
+  - EC2, Auto Scaling, STS, SSM, SSM Messages, and EC2 Messages interface
+    endpoints.
+- Created launch template version `16` from version `15` with
+  `AssociatePublicIpAddress=false`.
+- ASG instance refresh `2cf3c2c8-2381-4e4b-976f-3fe55b728aa0` completed
+  successfully from `2026-06-23T19:00:30Z` to `2026-06-23T19:03:42Z`.
+- Final no-public-IP gateway state:
+  - active `i-0cf0b4eb48268a08b`, private `10.88.1.39`, public
+    `52.24.117.43` from the shared EIP only,
+  - standby `i-02c90f1f8314ca8ab`, private `10.88.1.12`, no public IP.
+- `betternat status` reported both nodes `Healthy`, metrics `ok`, and control
+  `ok`.
+- Manual proactive handover
+  `i-02c90f1f8314ca8ab -> i-0cf0b4eb48268a08b` completed at generation `11`.
+- Client egress probe during handover recorded `240` samples, `3` one-second
+  curl timeouts, longest consecutive failure run `2`, and `0` non-shared public
+  IP samples.
+- Temporary VPC endpoints were retained with the manual test environment so
+  no-public-IP standby nodes keep private AWS API reachability.
 
 ### 9. Advanced Kernel/NIC Tuning Profile
 

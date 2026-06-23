@@ -270,7 +270,19 @@ Record cloud-init boot timings now if using a development AMI or bootstrap path.
 - The same AMI was rolled into the active ASG with launch template version `15`;
   instance refresh `c7c091e4-63b6-4895-a160-ef75f7113a6f` completed
   successfully.
-- Follow-up before stable AMI publication: verify standby gateway operation
-  without auto-assigned public IPv4 addresses and with private AWS API
-  reachability, because a temporary public-IP environment leaked non-shared
-  egress IPs during handover.
+- Follow-up before stable AMI publication: convert temporary VPC endpoint
+  requirements into provider-managed or clearly documented install behavior.
+
+2026-06-23 no-public-IP stable-EIP validation:
+
+- Temporary private AWS control-plane reachability was added with VPC endpoints
+  for DynamoDB, EC2, Auto Scaling, STS, SSM, SSM Messages, and EC2 Messages.
+- Launch template version `16` used `AssociatePublicIpAddress=false`.
+- ASG instance refresh `2cf3c2c8-2381-4e4b-976f-3fe55b728aa0` completed
+  successfully.
+- Final gateway nodes had no per-node public IPv4 addresses:
+  - active node had only the shared EIP `52.24.117.43`,
+  - standby node had no public IP.
+- Manual handover to the no-public-IP standby completed successfully.
+- Client egress probe during handover observed `0` non-shared public IP
+  samples; it recorded `3` one-second curl timeouts out of `240` samples.

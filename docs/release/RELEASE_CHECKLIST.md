@@ -554,7 +554,7 @@ Do not mark BetterNAT production-ready until alpha checklist is complete plus:
   - [x] ASG lifecycle hook or interruption notice handling implemented locally,
   - [x] ASG lifecycle hook behavior verified in AWS,
   - [x] Spot interruption handling follows the documented AWS IMDS path; forced interruption validation is not a first-alpha release gate.
-- [ ] transient non-EIP leakage in stable mode is fixed or documented with clear conditions.
+- [x] transient non-EIP leakage in stable mode is fixed or documented with clear conditions.
 - [ ] IAM least-privilege policy is reviewed.
 - [ ] provider release process is documented.
 - [ ] release artifacts have checksums.
@@ -644,6 +644,11 @@ Reliability validation update on 2026-06-23:
   public IPs during handover because this temporary environment still assigns
   per-node public IPv4 addresses. Production AMI rollout must remove per-node
   public IP assignment before claiming stable shared-EIP identity.
+- Follow-up no-public-IP validation on 2026-06-23 used VPC endpoints for
+  private AWS API reachability, refreshed the ASG to launch template version
+  `16` with `AssociatePublicIpAddress=false`, and completed a manual handover
+  between no-public-IP gateway nodes. The client probe observed `0` non-shared
+  public IP samples and `3` one-second curl timeouts out of `240` samples.
 - Stale paired `systemd-stop-*` handover records remained in intermediate
   states after the ASG lifecycle handover completed. Treat this as operation
   record hygiene to fix before production readiness.
