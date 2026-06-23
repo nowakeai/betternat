@@ -25,3 +25,6 @@ code_references/
 /betternat-agent
 /terraform-provider-betternat
 coverage.out
+
+# Local Packer outputs.
+packer-manifest*.json

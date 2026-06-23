@@ -124,7 +124,7 @@ variable "provision_script" {
 
 variable "manifest_output" {
   type    = string
-  default = "tmp/packer/betternat-manifest.json"
+  default = "packer-manifest.json"
 }
 
 locals {

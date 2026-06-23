@@ -180,7 +180,7 @@ The AL2023 Docker flavor:
 - writes the baseline sysctl profile,
 - copies BetterNAT `LICENSE` and `THIRD_PARTY_NOTICES.md`,
 - records `/usr/share/doc/betternat/AMI_MANIFEST`.
-- writes a Packer manifest under `tmp/packer/` by default.
+- writes a local Packer manifest, `packer-manifest.json`, by default.
 
 The Ubuntu systemd flavor:
 
