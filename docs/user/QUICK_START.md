@@ -10,11 +10,11 @@ Use this first. Do not start by replacing a production NAT Gateway.
 
 ## Scope
 
-This guide is for `v0.1.0-alpha.1`.
+This guide is for `v0.1.0-alpha.2`.
 
 Important:
 
-- BetterNAT does not publish a BetterNAT AMI in the first alpha.
+- BetterNAT does not publish a BetterNAT AMI in the current alpha.
 - Terraform launches an explicit Linux AMI and uses cloud-init to install release artifacts at boot.
 - The example uses one AZ.
 - The example uses small EC2 instances and tiny HTTP probes.
@@ -137,7 +137,7 @@ Choose:
 export AWS_PROFILE="<your-profile>"
 export AWS_REGION="us-west-2"
 export BETTERNAT_AZ="us-west-2a"
-export BETTERNAT_VERSION="v0.1.0-alpha.1"
+export BETTERNAT_VERSION="v0.1.0-alpha.2"
 export BETTERNAT_RUN_ID="betternat-alpha-test-$(date -u +%Y%m%d%H%M%S)"
 ```
 

@@ -76,10 +76,10 @@ Current alpha shape:
 resource "betternat_gateway" "egress" {
   # ...
 
-  agent_binary_url    = "https://github.com/nowakeai/betternat/releases/download/v0.1.0-alpha.1/betternat-agent_v0.1.0-alpha.1_linux_arm64"
+  agent_binary_url    = "https://github.com/nowakeai/betternat/releases/download/v0.1.0-alpha.2/betternat-agent_v0.1.0-alpha.2_linux_arm64"
   agent_binary_sha256 = "..."
 
-  cli_binary_url      = "https://github.com/nowakeai/betternat/releases/download/v0.1.0-alpha.1/betternat_v0.1.0-alpha.1_linux_arm64"
+  cli_binary_url      = "https://github.com/nowakeai/betternat/releases/download/v0.1.0-alpha.2/betternat_v0.1.0-alpha.2_linux_arm64"
   cli_binary_sha256   = "..."
 }
 ```
@@ -90,7 +90,7 @@ Recommended P1 UX:
 resource "betternat_gateway" "egress" {
   # ...
 
-  betternat_version = "v0.1.0-alpha.1"
+  betternat_version = "v0.1.0-alpha.2"
 }
 ```
 

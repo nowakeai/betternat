@@ -59,7 +59,7 @@ terraform {
 
 Provider versions and BetterNAT runtime artifact versions are separate. The
 current alpha provider is `0.1.0-alpha.2`; the current runtime release assets
-referenced by the quick start are `v0.1.0-alpha.1`.
+referenced by the quick start are `v0.1.0-alpha.2`.
 
 If your Terraform currently uses AWS NAT Gateway:
 
@@ -129,7 +129,7 @@ For a disposable VPC run:
 export AWS_PROFILE="<your-profile>"
 export AWS_REGION="us-west-2"
 export BETTERNAT_AZ="us-west-2a"
-export BETTERNAT_VERSION="v0.1.0-alpha.1"
+export BETTERNAT_VERSION="v0.1.0-alpha.2"
 ```
 
 Then follow:
@@ -211,14 +211,14 @@ Architecture docs:
 
 ## Alpha Status
 
-`v0.1.0-alpha.1` is an early technical preview.
+`v0.1.0-alpha.2` is an early technical preview.
 
 Current scope:
 
 - AWS only.
 - Single-AZ HA group.
 - Terraform provider first.
-- No published BetterNAT AMI in the first alpha.
+- No published BetterNAT AMI in the current alpha.
 - Install path is Terraform plus cloud-init bootstrap on an explicit Linux AMI.
 - LoxiLB/eBPF is the datapath.
 - New connections recover after failover; active connections may reset.
@@ -239,7 +239,7 @@ Read before using real route tables:
 - [Operations Guide](docs/user/OPERATIONS_GUIDE.md)
 - [Observability Guide](docs/user/OBSERVABILITY_GUIDE.md)
 - [IAM Policy](docs/user/IAM_POLICY.md)
-- [Release Notes](docs/user/RELEASE_NOTES_v0.1.0-alpha.1.md)
+- [Release Notes](docs/user/RELEASE_NOTES_v0.1.0-alpha.2.md)
 
 ## Development
 

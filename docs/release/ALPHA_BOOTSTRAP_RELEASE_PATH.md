@@ -4,11 +4,11 @@ Date: 2026-06-23
 
 ## Purpose
 
-The first open-source alpha can ship before a published BetterNAT AMI exists.
+The current open-source alpha can ship before a published BetterNAT AMI exists.
 
-This document defines the temporary bootstrap-based release path for `v0.1.0-alpha.1`.
+This document defines the temporary bootstrap-based release path for `v0.1.0-alpha.2`.
 
-Production should still move to a prebuilt AMI once the runtime body is stable, but the first public alpha intentionally does not publish a BetterNAT AMI.
+Production should still move to a prebuilt AMI once the runtime body is stable, but the current public alpha intentionally does not publish a BetterNAT AMI.
 
 ## Release Shape
 
@@ -37,13 +37,13 @@ This is acceptable for alpha because it avoids maintaining a premature AMI pipel
 Build:
 
 ```sh
-BETTERNAT_VERSION=v0.1.0-alpha.1 scripts/release-build.sh
+BETTERNAT_VERSION=v0.1.0-alpha.2 scripts/release-build.sh
 ```
 
 Output:
 
 ```text
-tmp/release/v0.1.0-alpha.1/
+tmp/release/v0.1.0-alpha.2/
   betternat_<version>_<host-os>_<host-arch>
   betternat_<version>_linux_arm64
   betternat_<version>_linux_amd64
@@ -87,8 +87,8 @@ export BETTERNAT_CLI_BINARY_SHA256="<sha256>"
 The SHA must be calculated from the exact uploaded file:
 
 ```sh
-awk '$2 == "betternat-agent_v0.1.0-alpha.1_linux_arm64" {print $1}' SHA256SUMS
-awk '$2 == "betternat_v0.1.0-alpha.1_linux_arm64" {print $1}' SHA256SUMS
+awk '$2 == "betternat-agent_v0.1.0-alpha.2_linux_arm64" {print $1}' SHA256SUMS
+awk '$2 == "betternat_v0.1.0-alpha.2_linux_arm64" {print $1}' SHA256SUMS
 ```
 
 Internal pre-release AWS tests may still use a temporary private S3 bucket and presigned URLs because the binaries are not yet public release assets. That is a maintainer testing transport, not the user-facing distribution path.
@@ -176,7 +176,7 @@ Not included yet:
 - instance-family-specific ENA tuning,
 - benchmark-derived profiles by instance size.
 
-For `v0.1.0-alpha.1`, this is a conservative baseline, not a high-volume performance claim.
+For `v0.1.0-alpha.2`, this is a conservative baseline, not a high-volume performance claim.
 
 ## Security Notes
 
@@ -197,7 +197,7 @@ For `v0.1.0-alpha.1`, this is a conservative baseline, not a high-volume perform
 
 ## Exit Criteria
 
-Before using this path for `v0.1.0-alpha.1`:
+Before using this path for `v0.1.0-alpha.2`:
 
 - [x] release artifact build succeeds,
 - [x] `SHA256SUMS` contains the Linux arm64 agent,

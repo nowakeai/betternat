@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
+	awscloud "github.com/nowakeai/betternat/internal/cloud/aws"
 	"github.com/nowakeai/betternat/internal/lease"
 )
 
@@ -78,7 +78,7 @@ type HandoverRecord struct {
 }
 
 func New(ctx context.Context, region string, table string, haGroupID string, ttl time.Duration) (*Backend, error) {
-	cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(region))
+	cfg, err := awscloud.LoadConfig(ctx, region)
 	if err != nil {
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}

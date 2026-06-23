@@ -24,8 +24,17 @@ When failover happens:
 
 - new connections should recover after standby takeover,
 - existing flows may reset,
-- stable EIP mode should preserve the public source IP for new connections,
+- stable EIP mode should converge new connections back to the shared public EIP,
 - non-stable mode may change public source IP.
+
+In the current alpha handover path, route and EIP ownership are both verified
+after mutation, but AWS control-plane convergence is not perfectly atomic. A
+2026-06-23 handover timing test observed a short timeout window and one
+successful private-client request leaving through a non-shared instance public
+IP before traffic returned to the shared EIP. Users that require strict egress
+identity during every failover sample should wait for the production hardening
+that gates route cutover on shared-EIP ownership or removes per-node public IPs
+from the production AMI path.
 
 ## Summary Table
 
@@ -67,6 +76,10 @@ Impact:
 - measured outage depends on HA profile and AWS API timing.
 
 Low-cost AWS supplemental tests observed about 12 seconds for owner termination under tested conditions. This is evidence, not a product SLA.
+
+AWS SDK calls use a bounded retry policy for transient errors and throttling:
+up to four attempts with retry backoff capped at three seconds. HA controller
+step deadlines still bound total reconciliation time.
 
 ## Standby EC2 Failure
 

@@ -37,6 +37,7 @@ Read them in this order for the first full pass:
 - [user/UPGRADE_REPLACEMENT_GUIDE.md](user/UPGRADE_REPLACEMENT_GUIDE.md) — In-place capacity updates, explicit replacement, blue/green upgrade workflow, and alpha rolling-upgrade limits.
 - [user/FAILURE_MODES.md](user/FAILURE_MODES.md) — Failure-mode behavior and limitations.
 - [user/LIMITATIONS.md](user/LIMITATIONS.md) — Alpha limitations: SLA, failover, cost, performance, bootstrap, and tuning.
+- [user/RELEASE_NOTES_v0.1.0-alpha.2.md](user/RELEASE_NOTES_v0.1.0-alpha.2.md) — Current alpha release notes.
 - [user/RELEASE_NOTES_v0.1.0-alpha.1.md](user/RELEASE_NOTES_v0.1.0-alpha.1.md) — First alpha release notes.
 
 ## Release And Packaging

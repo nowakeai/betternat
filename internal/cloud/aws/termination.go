@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
 	smithyhttp "github.com/aws/smithy-go/transport/http"
 
@@ -39,7 +38,7 @@ func NewTerminationWatcher(ctx context.Context, region string, gatewayID string,
 	if instanceID == "" || instanceID == "auto" {
 		return nil, fmt.Errorf("resolved instance id is required")
 	}
-	cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(region))
+	cfg, err := LoadConfig(ctx, region)
 	if err != nil {
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}

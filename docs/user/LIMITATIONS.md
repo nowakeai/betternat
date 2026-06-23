@@ -4,7 +4,7 @@ Date: 2026-06-21
 
 ## Alpha Quality
 
-`v0.1.0-alpha.1` is for technical evaluation in disposable or non-critical AWS environments.
+`v0.1.0-alpha.2` is for technical evaluation in disposable or non-critical AWS environments.
 
 It is not a drop-in AWS NAT Gateway SLA replacement.
 

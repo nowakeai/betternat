@@ -66,6 +66,7 @@ func newRootCommand(ctx context.Context, out io.Writer) *cobra.Command {
 	cmd.AddCommand(newDatapathCommand(ctx, out))
 	cmd.AddCommand(newFailoverCommand(out))
 	cmd.AddCommand(newHandoverCommand(ctx, out))
+	cmd.AddCommand(newSupportCommand(ctx, out))
 	return cmd
 }
 

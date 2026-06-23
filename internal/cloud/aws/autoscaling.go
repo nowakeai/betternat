@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
 
 	"github.com/nowakeai/betternat/internal/cloud"
@@ -21,7 +20,7 @@ type ASGProvider struct {
 }
 
 func NewASGProvider(ctx context.Context, region string) (*ASGProvider, error) {
-	cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(region))
+	cfg, err := LoadConfig(ctx, region)
 	if err != nil {
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}

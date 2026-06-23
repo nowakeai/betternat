@@ -6,8 +6,9 @@ import (
 	"regexp"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+
+	awscloud "github.com/nowakeai/betternat/internal/cloud/aws"
 )
 
 type STSAPI interface {
@@ -17,7 +18,7 @@ type STSAPI interface {
 var assumedRoleARNPattern = regexp.MustCompile(`^arn:([^:]+):sts::([0-9]{12}):assumed-role/([^/]+)/[^/]+$`)
 
 func ResolveCurrentRoleARN(ctx context.Context, region string) (string, error) {
-	cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(region))
+	cfg, err := awscloud.LoadConfig(ctx, region)
 	if err != nil {
 		return "", fmt.Errorf("load aws config: %w", err)
 	}

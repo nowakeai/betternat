@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"io"
@@ -533,6 +535,41 @@ func TestRunHandoverInspectUsesCoordinationRecord(t *testing.T) {
 	}
 }
 
+func TestRunSupportBundleRedactsConfigAndCollectsCommands(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "agent.json")
+	raw := strings.Replace(validConfigJSON(), `"observability": {}`, `"control":{"peer_api":{"enabled":true,"listen_address":"0.0.0.0","listen_port":9109,"auth_token":"secret-token"}},"observability":{"prometheus":{"listen_address":"127.0.0.1","listen_port":0}}`, 1)
+	if err := os.WriteFile(configPath, []byte(raw), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	outputPath := filepath.Join(dir, "support.tar.gz")
+	restore := runSupportCommand
+	defer func() { runSupportCommand = restore }()
+	runSupportCommand = func(_ context.Context, name string, args ...string) (supportCommandResult, error) {
+		return supportCommandResult{Stdout: []byte(name + " " + strings.Join(args, " ") + "\n")}, nil
+	}
+
+	var out bytes.Buffer
+	err := run(context.Background(), []string{"support", "bundle", "--config", configPath, "--output", outputPath, "--host", "http://127.0.0.1:1", "--timeout", "1ms"}, &out)
+	if err != nil {
+		t.Fatalf("run support bundle: %v", err)
+	}
+	files := readSupportBundle(t, outputPath)
+	configBody := string(files["config.redacted.json"])
+	if strings.Contains(configBody, "secret-token") {
+		t.Fatalf("support bundle leaked token: %s", configBody)
+	}
+	if !strings.Contains(configBody, "[REDACTED]") {
+		t.Fatalf("support bundle did not redact token: %s", configBody)
+	}
+	if !strings.Contains(string(files["systemd/betternat-agent.status.txt"]), "systemctl status betternat-agent") {
+		t.Fatalf("missing systemctl output: %s", string(files["systemd/betternat-agent.status.txt"]))
+	}
+	if !strings.Contains(out.String(), outputPath) {
+		t.Fatalf("missing output path: %s", out.String())
+	}
+}
+
 func TestRunDatapathStatus(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "agent.json")
@@ -705,6 +742,37 @@ func (fakeLiveCloud) DescribeInstance(context.Context, string) (cloud.InstanceIn
 
 func (fakeLiveCloud) SourceDestCheckEnabled(context.Context, string) (bool, error) {
 	return false, nil
+}
+
+func readSupportBundle(t *testing.T, path string) map[string][]byte {
+	t.Helper()
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open support bundle: %v", err)
+	}
+	defer file.Close()
+	gzipReader, err := gzip.NewReader(file)
+	if err != nil {
+		t.Fatalf("open gzip: %v", err)
+	}
+	defer gzipReader.Close()
+	tarReader := tar.NewReader(gzipReader)
+	files := map[string][]byte{}
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("read tar: %v", err)
+		}
+		body, err := io.ReadAll(tarReader)
+		if err != nil {
+			t.Fatalf("read %s: %v", header.Name, err)
+		}
+		files[header.Name] = body
+	}
+	return files
 }
 
 type fakeASGInspector struct{}

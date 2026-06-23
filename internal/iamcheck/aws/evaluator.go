@@ -5,10 +5,10 @@ import (
 	"fmt"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/iam/types"
 
+	awscloud "github.com/nowakeai/betternat/internal/cloud/aws"
 	"github.com/nowakeai/betternat/internal/iamcheck"
 )
 
@@ -22,7 +22,7 @@ type Evaluator struct {
 }
 
 func New(ctx context.Context, region string, policySourceARN string) (*Evaluator, error) {
-	cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(region))
+	cfg, err := awscloud.LoadConfig(ctx, region)
 	if err != nil {
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}

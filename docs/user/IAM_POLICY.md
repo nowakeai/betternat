@@ -4,7 +4,7 @@ Date: 2026-06-23
 
 ## Purpose
 
-This document describes the AWS IAM permissions needed by BetterNAT `v0.1.0-alpha.1`.
+This document describes the AWS IAM permissions needed by BetterNAT `v0.1.0-alpha.2`.
 
 There are two IAM surfaces:
 
@@ -93,6 +93,21 @@ Before production:
 - narrow EC2 route/EIP permissions to known route tables and allocation IDs where AWS supports it cleanly,
 - narrow DynamoDB permissions to the coordination table and any legacy lease table still used by an old alpha environment,
 - decide whether `iam:SimulatePrincipalPolicy` remains enabled by default or becomes an optional diagnostics permission.
+
+Review status on 2026-06-23:
+
+- Runtime fleet status no longer requires `autoscaling:DescribeAutoScalingGroups`
+  or `ec2:DescribeInstances`; agents self-register through DynamoDB and the CLI
+  reads the coordination table plus peer metrics.
+- `autoscaling:CompleteLifecycleAction` remains required for provider-created
+  termination lifecycle hooks.
+- `ec2:AssociateAddress` is only needed when stable shared-EIP mode is enabled,
+  but the alpha policy still includes it because stable mode is the default.
+- `iam:SimulatePrincipalPolicy` and `sts:GetCallerIdentity` are diagnostics
+  permissions used by `doctor --live`; production can make this optional if a
+  stricter runtime role is required.
+- The policy is acceptable for alpha, but production should still scope route
+  and EIP actions to the exact managed route tables and allocation IDs.
 
 ## Diagnostic Behavior
 

@@ -44,6 +44,7 @@ betternat datapath ready --config /etc/betternat/agent.json
 betternat handover current
 betternat handover history --limit 20
 betternat handover inspect <request-id>
+betternat support bundle
 betternat cost estimate --gb 10240
 betternat version
 ```
@@ -59,6 +60,7 @@ Current behavior:
 - `datapath ready` performs live local datapath checks through LoxiLB.
 - `handover current` shows the local daemon's current handover state.
 - `handover history` and `handover inspect` read durable handover operation records from the coordination table.
+- `support bundle` creates a local redacted `.tar.gz` with config, daemon status, handover state, metrics, systemd logs, LoxiLB state, and network snapshots for troubleshooting.
 - `cost estimate` estimates NAT Gateway processing-cost avoidance.
 
 Important:
@@ -247,10 +249,28 @@ sudo betternat status --config /etc/betternat/agent.json
 sudo betternat doctor --config /etc/betternat/agent.json
 sudo betternat doctor --live --config /etc/betternat/agent.json
 sudo betternat datapath ready --config /etc/betternat/agent.json
+sudo betternat support bundle --config /etc/betternat/agent.json
 curl -fsS http://127.0.0.1:9108/metrics | head
 loxicmd get firewall -o json
 loxicmd get conntrack -o json
 ```
+
+## Support Bundle
+
+`betternat support bundle` is a read-only local collection command for support
+and incident review. It writes a `.tar.gz` file and does not upload it anywhere.
+
+The bundle includes:
+
+- redacted `/etc/betternat/agent.json`,
+- local daemon `status` and current handover state when the daemon socket is reachable,
+- Prometheus metrics snapshot,
+- `systemctl status` and recent `journalctl` output for `betternat-agent`,
+- LoxiLB inspection output,
+- local `ip addr`, `ip route`, and nftables snapshots.
+
+The command redacts the peer API auth token from the config. Review the archive
+before sharing it outside your organization.
 
 ## Egress Probe
 

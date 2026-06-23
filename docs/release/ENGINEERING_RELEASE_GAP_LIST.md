@@ -549,8 +549,10 @@ Remaining:
 - add AWS validation for:
   - systemd stop on active,
   - ASG lifecycle termination on active,
-  - Spot interruption simulation where possible,
   - standby-local CLI request forwarding.
+  - Spot interruption follows the AWS IMDS `spot/instance-action` path and is
+    not required as a manually forced release gate; optional validation can use
+    AWS-supported Spot interruption initiation or FIS when available.
 
 Reference:
 
@@ -606,6 +608,18 @@ Local implementation follow-up on 2026-06-23:
   - `GOCACHE=$PWD/tmp/go-build go build ./cmd/betternat ./cmd/betternat-agent ./cmd/terraform-provider-betternat`.
 - AWS publish and automatic-trigger validation are still pending for this follow-up build.
 
+AWS documentation basis:
+
+- EC2 Spot interruption notices are exposed through instance metadata and AWS
+  recommends checking every 5 seconds:
+  https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/spot-instance-termination-notices.html
+- EC2 Auto Scaling target lifecycle state is exposed through instance metadata
+  at `autoscaling/target-lifecycle-state`:
+  https://docs.aws.amazon.com/autoscaling/ec2/userguide/retrieving-target-lifecycle-state-through-imds.html
+- Auto Scaling lifecycle hooks give instances time to complete custom actions
+  before transitioning:
+  https://docs.aws.amazon.com/autoscaling/ec2/userguide/lifecycle-hooks.html
+
 ### 6. Prometheus Alert Rules
 
 Add:
@@ -654,6 +668,22 @@ For production, add:
 - arm64 and amd64 builds or explicit architecture scope,
 - AMI file listing validation,
 - license files installed into AMI.
+
+Current implementation:
+
+- `packer/betternat.pkr.hcl` defines an Amazon EBS AMI build from Amazon Linux
+  2023.
+- `scripts/ami/provision-betternat-ami.sh` installs BetterNAT binaries, Docker,
+  nftables, conntrack tools, a pinned LoxiLB image, `loxicmd`, systemd units,
+  and baseline sysctls.
+
+Still needed:
+
+- run and validate the Packer build in AWS,
+- publish arm64 and amd64 AMIs,
+- wire provider `ami_channel` resolution to published AMI metadata,
+- add AMI license bundle validation,
+- add private AWS API reachability / no per-node public IP validation.
 
 The production AMI path should also remove the alpha dependency on per-node
 auto-assigned public IPv4 addresses. Alpha bootstrap can use those addresses so

@@ -601,37 +601,37 @@ Provider Registry validation recorded on 2026-06-22:
 
 ### Operations And Observability
 
-- [ ] Add `betternat status` or equivalent HA status command:
-  - [ ] local role,
-  - [ ] lease owner,
-  - [ ] route owner,
-  - [ ] EIP owner,
-  - [ ] ASG health,
-  - [ ] datapath readiness.
-- [ ] Add `betternat support bundle`:
-  - [ ] config redaction,
-  - [ ] agent logs,
-  - [ ] systemd status,
-  - [ ] LoxiLB state,
-  - [ ] selected AWS state summaries,
-  - [ ] metrics snapshot.
+- [x] Add `betternat status` or equivalent HA status command:
+  - [x] local role,
+  - [x] lease owner,
+  - [x] route owner,
+  - [x] EIP owner,
+  - [x] ASG/desired capacity health through the daemon registry view,
+  - [x] datapath readiness.
+- [x] Add `betternat support bundle`:
+  - [x] config redaction,
+  - [x] agent logs,
+  - [x] systemd status,
+  - [x] LoxiLB state,
+  - [x] daemon status and handover summaries,
+  - [x] metrics snapshot.
 - [ ] Ship Prometheus alert rule examples.
 - [ ] Ship Grafana starter dashboard or starter queries.
 - [ ] Clarify top-N source/destination attribution scope and limitations.
 
 ### Reliability
 
-- [ ] Add AWS SDK retry/backoff policy review and tests.
+- [x] Add AWS SDK retry/backoff policy review and tests.
 - [x] Add graceful shutdown lease release on systemd stop.
 - [x] Add ASG termination lifecycle hook and IMDS Spot/ASG termination watcher.
-- [ ] Verify ASG lifecycle hook and Spot interruption behavior in AWS.
+- [ ] Verify ASG lifecycle hook behavior in AWS. Spot interruption follows the documented IMDS path but is not practical to force on demand as a release gate.
 - [ ] Add LoxiLB restart reconciliation test.
 - [ ] Run a low-cost soak test with periodic egress probes and agent restarts.
-- [ ] Document transient public-IP leakage conditions in non-stable and stable modes, or fix them if observed.
+- [x] Document transient public-IP leakage conditions in non-stable and stable modes, or fix them if observed.
 
 ### Security And Supply Chain
 
-- [ ] Review runtime IAM least-privilege policy against real AWS actions.
+- [x] Review runtime IAM least-privilege policy against real AWS actions.
 - [x] Review systemd hardening options.
 - [ ] Add dependency/license scan to release workflow.
 - [ ] Add artifact signing decision:
@@ -657,7 +657,7 @@ P2 items are valuable, but should not block alpha or early P1 hardening.
 
 ### Packaging And Installation
 
-- [ ] Build repeatable AMI pipeline with Packer or EC2 Image Builder.
+- [x] Build repeatable AMI pipeline with Packer or EC2 Image Builder.
 - [ ] Publish arm64 and amd64 AMIs.
 - [ ] Add `ami_channel` resolver.
 - [ ] Preload LoxiLB image or binary in AMI.

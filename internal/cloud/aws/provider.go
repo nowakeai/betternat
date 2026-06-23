@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
@@ -29,7 +28,7 @@ type Provider struct {
 }
 
 func New(ctx context.Context, region string) (*Provider, error) {
-	cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(region))
+	cfg, err := LoadConfig(ctx, region)
 	if err != nil {
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}
@@ -37,7 +36,7 @@ func New(ctx context.Context, region string) (*Provider, error) {
 }
 
 func ResolveLocalInstanceID(ctx context.Context, region string) (string, error) {
-	cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(region))
+	cfg, err := LoadConfig(ctx, region)
 	if err != nil {
 		return "", fmt.Errorf("load aws config: %w", err)
 	}
@@ -58,7 +57,7 @@ func ResolveSharedEIPAllocationID(ctx context.Context, region string, gatewayID 
 	if availabilityZone == "" {
 		return "", fmt.Errorf("availability zone is required")
 	}
-	cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(region))
+	cfg, err := LoadConfig(ctx, region)
 	if err != nil {
 		return "", fmt.Errorf("load aws config: %w", err)
 	}

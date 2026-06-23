@@ -77,6 +77,8 @@ Current state:
 
 - `ami_channel` exists in the provider schema and install plan.
 - `ami_id` is the only launchable path until channel resolution is implemented.
+- A maintainer Packer template exists at `packer/betternat.pkr.hcl` as the
+  repeatable AMI build starting point.
 - AWS supplemental tests should not wait for a BetterNAT AMI. Use the latest official Amazon Linux 2023 AMI plus cloud-init and a temporary `betternat-agent` binary URL while debugging the product body.
 
 Channel resolver behavior:
@@ -111,6 +113,42 @@ loxicmd get firewall -o json
 ```
 
 During development, failures in `betternat-agent` readiness are allowed to block datapath tests, but should not block pure Terraform control-plane tests.
+
+## Packer Build
+
+Build release binaries first:
+
+```sh
+BETTERNAT_VERSION=v0.1.0-alpha.2 scripts/release-build.sh
+```
+
+Then initialize and build the AMI:
+
+```sh
+packer init packer/betternat.pkr.hcl
+packer build \
+  -var "version=v0.1.0-alpha.2" \
+  -var "aws_region=us-west-2" \
+  -var "architecture=arm64" \
+  -var "instance_type=t4g.small" \
+  -var "agent_binary_path=tmp/release/v0.1.0-alpha.2/betternat-agent_v0.1.0-alpha.2_linux_arm64" \
+  -var "cli_binary_path=tmp/release/v0.1.0-alpha.2/betternat_v0.1.0-alpha.2_linux_arm64" \
+  packer/betternat.pkr.hcl
+```
+
+The current Packer template:
+
+- starts from the latest Amazon Linux 2023 AMI for the selected architecture,
+- installs `betternat-agent` and `betternat`,
+- installs Docker, nftables, conntrack tools, and network diagnostics,
+- pre-pulls the pinned LoxiLB image,
+- installs `loxicmd` as a host wrapper,
+- installs `loxilb.service` and `betternat-agent.service`,
+- writes the baseline sysctl profile,
+- records `/usr/share/doc/betternat/AMI_MANIFEST`.
+
+The template is not yet wired into provider `ami_channel` resolution and does
+not publish AMIs automatically.
 
 ## Sysctl Profile
 

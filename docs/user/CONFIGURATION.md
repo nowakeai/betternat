@@ -50,7 +50,7 @@ terraform {
 | Name | Description |
 | --- | --- |
 | `ami_id` | Explicit Linux AMI ID. Required for the first alpha bootstrap path. |
-| `ami_channel` | Future AMI channel selector. Do not rely on it for `v0.1.0-alpha.1`. |
+| `ami_channel` | Future AMI channel selector. Do not rely on it for `v0.1.0-alpha.2`. |
 | `agent_binary_url` | Sensitive URL for `betternat-agent`. |
 | `agent_binary_sha256` | SHA256 checksum for the agent artifact. |
 | `cli_binary_url` | Sensitive URL for the `betternat` CLI. |

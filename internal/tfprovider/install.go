@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
+	awscloud "github.com/nowakeai/betternat/internal/cloud/aws"
 	awsinstall "github.com/nowakeai/betternat/internal/install/aws"
 	"github.com/nowakeai/betternat/internal/installplan"
 )
@@ -109,7 +110,7 @@ func defaultReaderFactory(ctx context.Context, region string) (Reader, error) {
 }
 
 func defaultAWSLifecycle(ctx context.Context, region string) (awsInstaller, error) {
-	cfg, err := awssdkconfig.LoadDefaultConfig(ctx, awssdkconfig.WithRegion(region))
+	cfg, err := awscloud.LoadConfig(ctx, region)
 	if err != nil {
 		return awsInstaller{}, fmt.Errorf("load aws config: %w", err)
 	}
@@ -157,8 +158,8 @@ func endpointReaderFactory(endpointURL string) ReaderFactory {
 }
 
 func endpointAWSLifecycle(ctx context.Context, region string, endpointURL string) (awsInstaller, error) {
-	cfg, err := awssdkconfig.LoadDefaultConfig(ctx,
-		awssdkconfig.WithRegion(region),
+	cfg, err := awscloud.LoadConfig(ctx,
+		region,
 		awssdkconfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider("test", "test", "")),
 	)
 	if err != nil {
