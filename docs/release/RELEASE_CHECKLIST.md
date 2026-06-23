@@ -552,7 +552,8 @@ Do not mark BetterNAT production-ready until alpha checklist is complete plus:
   - [ ] EC2 owner state check,
   - [x] graceful lease release on systemd stop,
   - [x] ASG lifecycle hook or interruption notice handling implemented locally,
-  - [ ] ASG lifecycle hook and Spot interruption handling verified in AWS.
+  - [x] ASG lifecycle hook behavior verified in AWS,
+  - [x] Spot interruption handling follows the documented AWS IMDS path; forced interruption validation is not a first-alpha release gate.
 - [ ] transient non-EIP leakage in stable mode is fixed or documented with clear conditions.
 - [ ] IAM least-privilege policy is reviewed.
 - [ ] provider release process is documented.
@@ -623,10 +624,29 @@ Provider Registry validation recorded on 2026-06-22:
 - [x] Add AWS SDK retry/backoff policy review and tests.
 - [x] Add graceful shutdown lease release on systemd stop.
 - [x] Add ASG termination lifecycle hook and IMDS Spot/ASG termination watcher.
-- [ ] Verify ASG lifecycle hook behavior in AWS. Spot interruption follows the documented IMDS path but is not practical to force on demand as a release gate.
+- [x] Verify ASG lifecycle hook behavior in AWS. Spot interruption follows the documented IMDS path but is not practical to force on demand as a release gate.
 - [ ] Add LoxiLB restart reconciliation test.
 - [ ] Run a low-cost soak test with periodic egress probes and agent restarts.
 - [x] Document transient public-IP leakage conditions in non-stable and stable modes, or fix them if observed.
+
+Reliability validation update on 2026-06-23:
+
+- Private dev AMI `ami-072757363df299006` passed boot smoke and was rolled into
+  ASG `betternat-bnat-lifecycle-20260623023753-us-west-2a` with launch template
+  version `15`.
+- Instance refresh `c7c091e4-63b6-4895-a160-ef75f7113a6f` completed
+  successfully from `2026-06-23T18:27:10Z` to `2026-06-23T18:29:40Z`.
+- The ASG lifecycle-triggered handover path completed during refresh, and two
+  manual proactive handovers completed afterward on the AMI nodes.
+- Client egress probing during one manual handover recorded `240` samples with
+  `0` failed samples.
+- The same probe observed `5` successful samples through non-shared gateway
+  public IPs during handover because this temporary environment still assigns
+  per-node public IPv4 addresses. Production AMI rollout must remove per-node
+  public IP assignment before claiming stable shared-EIP identity.
+- Stale paired `systemd-stop-*` handover records remained in intermediate
+  states after the ASG lifecycle handover completed. Treat this as operation
+  record hygiene to fix before production readiness.
 
 ### Security And Supply Chain
 

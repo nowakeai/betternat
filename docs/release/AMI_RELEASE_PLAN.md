@@ -252,3 +252,20 @@ The next AWS supplemental pass can start before AMI release work if it is scoped
 - AMI boot-to-ready timing: blocked until a dev AMI exists.
 
 Record cloud-init boot timings now if using a development AMI or bootstrap path. Repeat after a real AMI exists.
+
+2026-06-23 dev AMI validation:
+
+- Private AL2023 arm64 dev AMI `ami-072757363df299006` passed boot smoke.
+- SSM was online about `25s` after EC2 launch time.
+- User data completed about `27s` after EC2 launch time.
+- Baked Docker, LoxiLB, and BetterNAT agent services were active by the
+  verification check at about `49s` instance uptime.
+- LoxiLB listened on `*:11111`, reported `0.9.8.6-beta`, and exposed the
+  expected SNAT rule for `10.88.0.0/16`.
+- The same AMI was rolled into the active ASG with launch template version `15`;
+  instance refresh `c7c091e4-63b6-4895-a160-ef75f7113a6f` completed
+  successfully.
+- Follow-up before stable AMI publication: verify standby gateway operation
+  without auto-assigned public IPv4 addresses and with private AWS API
+  reachability, because a temporary public-IP environment leaked non-shared
+  egress IPs during handover.

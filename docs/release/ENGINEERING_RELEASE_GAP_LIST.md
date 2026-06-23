@@ -543,16 +543,16 @@ Current:
 
 Remaining:
 
-- publish and verify the automatic handover build on AWS,
 - add richer `/v1/handover` state reporting and operation listing,
 - add structured phase-duration metrics and logs for handover operations,
 - add AWS validation for:
   - systemd stop on active,
-  - ASG lifecycle termination on active,
   - standby-local CLI request forwarding.
-  - Spot interruption follows the AWS IMDS `spot/instance-action` path and is
-    not required as a manually forced release gate; optional validation can use
-    AWS-supported Spot interruption initiation or FIS when available.
+- Spot interruption follows the AWS IMDS `spot/instance-action` path and is
+  not required as a manually forced release gate; optional validation can use
+  AWS-supported Spot interruption initiation or FIS when available.
+- clean up or expire stale automatic handover operation records that remain in
+  intermediate states after the paired lifecycle-triggered operation completes.
 
 Reference:
 
@@ -567,7 +567,10 @@ Acceptance:
 - [x] AWS handover validation completed.
 - [x] duplicate handover request IDs are idempotent.
 - [x] standby peer prepare rejects non-active requesters.
-- [ ] AWS automatic systemd/ASG/Spot handover validation completed.
+- [x] AWS ASG lifecycle handover validation completed.
+- [ ] Standalone systemd-stop automatic handover validation completed.
+- [x] Spot interruption handling follows the documented AWS IMDS path; forced
+      AWS interruption validation is not a first-alpha release gate.
 
 AWS validation on 2026-06-23:
 
@@ -607,6 +610,39 @@ Local implementation follow-up on 2026-06-23:
   - `GOCACHE=$PWD/tmp/go-build go test ./...`,
   - `GOCACHE=$PWD/tmp/go-build go build ./cmd/betternat ./cmd/betternat-agent ./cmd/terraform-provider-betternat`.
 - AWS publish and automatic-trigger validation are still pending for this follow-up build.
+
+AWS automatic-trigger and AMI validation on 2026-06-23:
+
+- Built and boot-smoked private dev AMI `ami-072757363df299006` from the Packer
+  AL2023 Docker path.
+- The AMI bakes BetterNAT `v0.1.0-alpha.2` and pinned LoxiLB
+  `ghcr.io/loxilb-io/loxilb@sha256:dacc9b21688d4042b768f2cbc5968360b8753cf92f926ee288346153a23f3052`.
+- Launch template `lt-0e610263c6ef023f7` version `15` uses the AMI and an
+  AMI-mode user-data script that only writes `/etc/betternat/agent.json`,
+  applies sysctls, and starts baked services.
+- ASG instance refresh `c7c091e4-63b6-4895-a160-ef75f7113a6f` completed
+  successfully from `2026-06-23T18:27:10Z` to `2026-06-23T18:29:40Z`.
+- Final gateway nodes:
+  - active `i-04a1815ed94a74088`, LT `15`, AMI `ami-072757363df299006`,
+  - standby `i-0a4ccdacb96d4ab07`, LT `15`, AMI `ami-072757363df299006`.
+- During the refresh, the ASG lifecycle-triggered operation
+  `termination-i-0e1486d3bb0920c6f-autoscaling-target-lifecycle-state-Terminated-betternat-bnat-lifecycle-20260623023753-us-west-2a-terminating`
+  completed and handed over to `i-04a1815ed94a74088`.
+- Manual proactive handover was revalidated on the AMI nodes:
+  - `i-04a1815ed94a74088 -> i-0a4ccdacb96d4ab07`, generation `6`,
+  - `i-0a4ccdacb96d4ab07 -> i-04a1815ed94a74088`, generation `7`.
+- A client egress probe from `i-0ec999731bb6cb25b` during the second manual
+  handover recorded `240` samples at about `250ms` spacing with `0` failed
+  samples.
+- Finding: this temporary environment still assigns per-node public IPv4
+  addresses to gateway nodes. During handover, `5` successful probe samples
+  exited through non-shared public IPs between `2026-06-23T18:32:39.520Z` and
+  `2026-06-23T18:32:46.896Z`. The production AMI path must remove per-node
+  public IP assignment or otherwise prevent non-shared egress identity leakage.
+- Follow-up: stale automatic records from the paired `systemd-stop-*` trigger
+  remained in `preparing` or `committing` even though the ASG lifecycle-triggered
+  handover completed. This is a record hygiene issue, not an observed failover
+  outage in this run.
 
 AWS documentation basis:
 
