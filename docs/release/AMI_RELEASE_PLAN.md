@@ -38,14 +38,19 @@ public IPs so new nodes can download packages and release artifacts before a
 BetterNAT AMI exists. That is a development/install bootstrap compromise, not a
 production networking contract.
 
-Before disabling per-node public IPs by default, the production install path
-must provide private AWS API reachability for standby nodes. A standby node
-without the shared EIP still needs to renew/register with DynamoDB, observe ASG
-termination state, complete lifecycle actions, call EC2 route/EIP APIs during
-takeover, and use STS/IAM checks where configured. Production installs should
-therefore use VPC endpoints or an equivalent private control-plane path for at
-least DynamoDB, EC2, Auto Scaling, STS, IAM, SSM, and CloudWatch when those
-features are enabled.
+When `stable_egress_ip=true`, the provider-derived plan sets Launch Template
+`AssociatePublicIpAddress=false` so the shared EIP is the only public egress
+identity. When `stable_egress_ip=false`, nodes may keep per-node public IPv4
+addresses because failover is allowed to change the public source IP.
+
+Before using no-public-IP standby nodes, the install environment must provide a
+bootstrap/control-plane reachability path. One possible shape is private AWS API
+reachability through VPC endpoints. Another is routing standby egress through
+the current active gateway, provided the gateway subnet routing is designed so
+the active node itself still has a valid internet path. A standby node without a
+public IP or the shared EIP still needs to renew/register with DynamoDB, observe
+ASG termination state, complete lifecycle actions, call EC2 route/EIP APIs
+during takeover, and use STS/IAM/SSM checks where configured.
 
 ## Naming
 

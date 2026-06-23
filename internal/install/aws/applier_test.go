@@ -245,6 +245,7 @@ func TestApplyCreatesASGPool(t *testing.T) {
 		AMIID:               "ami-123",
 		InstanceType:        "t4g.small",
 		UseSpot:             true,
+		AssociatePublicIP:   true,
 		IAMRoleName:         "betternat-prod-egress-agent",
 		InstanceProfileName: "betternat-prod-egress-agent",
 		SecurityGroupName:   "betternat-prod-egress-appliance",
@@ -293,6 +294,13 @@ func TestApplyCreatesASGPool(t *testing.T) {
 	if awssdk.ToInt32(metadata.HttpPutResponseHopLimit) != 1 {
 		t.Fatalf("metadata hop limit should be 1: %#v", metadata)
 	}
+	networkInterfaces := ec2Client.createLaunchTemplateInput.LaunchTemplateData.NetworkInterfaces
+	if len(networkInterfaces) != 1 {
+		t.Fatalf("expected one network interface: %#v", networkInterfaces)
+	}
+	if !awssdk.ToBool(networkInterfaces[0].AssociatePublicIpAddress) {
+		t.Fatalf("public IP association should follow install plan: %#v", networkInterfaces[0])
+	}
 	if len(ec2Client.runInputs) != 0 {
 		t.Fatalf("ASG path should not call RunInstances: %#v", ec2Client.runInputs)
 	}
@@ -334,6 +342,55 @@ func TestApplyCreatesASGPool(t *testing.T) {
 	}
 	if result.LaunchTemplates["us-west-2a"] != "lt-123" {
 		t.Fatalf("unexpected launch templates: %#v", result.LaunchTemplates)
+	}
+}
+
+func TestApplyASGPoolCanDisableAssociatedPublicIP(t *testing.T) {
+	ec2Client := &fakeEC2{
+		securityGroupID:  "sg-123",
+		launchTemplateID: "lt-123",
+		allocationID:     "eipalloc-123",
+		publicIP:         "203.0.113.10",
+	}
+	asgClient := &fakeAutoScaling{instanceIDs: []string{"i-owner"}}
+	applier := Applier{EC2: ec2Client, AutoScaling: asgClient, DynamoDB: &fakeDynamoDB{}, IAM: &fakeIAM{}}
+	plan := installplan.Plan{
+		Name:                "prod-egress",
+		VPCID:               "vpc-123",
+		AMIID:               "ami-123",
+		InstanceType:        "t4g.small",
+		AssociatePublicIP:   false,
+		IAMRoleName:         "betternat-prod-egress-agent",
+		InstanceProfileName: "betternat-prod-egress-agent",
+		SecurityGroupName:   "betternat-prod-egress-appliance",
+		LeaseTableName:      "betternat-prod-egress-leases",
+		Pools: []installplan.Pool{
+			{
+				Name:               "prod-egress-us-west-2a",
+				AvailabilityZone:   "us-west-2a",
+				SubnetID:           "subnet-public-a",
+				MinSize:            1,
+				DesiredCapacity:    1,
+				MaxSize:            1,
+				LaunchTemplateName: "betternat-prod-egress-us-west-2a",
+				ASGName:            "betternat-prod-egress-us-west-2a",
+			},
+		},
+		ManagedRoutes: []installplan.ManagedRoute{
+			{RouteTableID: "rtb-a", AvailabilityZone: "us-west-2a", DestinationCIDR: "0.0.0.0/0"},
+		},
+		Tags: map[string]string{"ManagedBy": "betternat"},
+	}
+
+	if _, err := applier.Apply(context.Background(), plan, Inputs{UserData: "#!/bin/bash\ntrue\n"}); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	networkInterfaces := ec2Client.createLaunchTemplateInput.LaunchTemplateData.NetworkInterfaces
+	if len(networkInterfaces) != 1 {
+		t.Fatalf("expected one network interface: %#v", networkInterfaces)
+	}
+	if awssdk.ToBool(networkInterfaces[0].AssociatePublicIpAddress) {
+		t.Fatalf("public IP association should be disabled: %#v", networkInterfaces[0])
 	}
 }
 

@@ -671,6 +671,7 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 		MaxSize:               int32(maxSize),
 		RouteDestinationCIDR:  routeDestinationCIDR,
 		RouteTargetType:       routeTargetType,
+		AssociatePublicIP:     boolPtr(!stableEgressIP),
 		Tags:                  tags,
 	})
 	if err != nil {
@@ -811,6 +812,10 @@ func boolDefault(value types.Bool, fallback bool) bool {
 		return fallback
 	}
 	return value.ValueBool()
+}
+
+func boolPtr(value bool) *bool {
+	return &value
 }
 
 func int64Default(value types.Int64, fallback int64) int64 {

@@ -715,20 +715,19 @@ Current implementation:
 
 Still needed:
 
-- run and validate the Packer build in AWS,
 - publish arm64 and amd64 AMIs,
 - wire provider `ami_channel` resolution to published AMI metadata,
 - add AMI license bundle validation,
 - add private AWS API reachability / no per-node public IP validation.
 
-The production AMI path should also remove the alpha dependency on per-node
-auto-assigned public IPv4 addresses. Alpha bootstrap can use those addresses so
-fresh nodes can download packages and BetterNAT artifacts, but production nodes
-should boot from a prebuilt AMI and use private AWS API reachability instead.
-The provider should only make `AssociatePublicIpAddress=false` the default after
-the install path provisions or validates the required AWS control-plane access
-for standby nodes, including DynamoDB, EC2, Auto Scaling, STS, IAM, SSM, and
-CloudWatch where enabled.
+When `stable_egress_ip=true`, the provider-derived plan now sets
+`AssociatePublicIpAddress=false`. When `stable_egress_ip=false`, nodes may keep
+per-node public IPv4 addresses because failover is allowed to change the public
+source IP. Still needed: validate the standby bootstrap/control-plane path with
+no per-node public IPs. That can be done with VPC endpoints or with a routing
+topology where standby nodes use the current active gateway without breaking the
+active node's own internet path. The path must cover DynamoDB, EC2, Auto
+Scaling, STS, SSM, EC2 Messages, SSM Messages, and CloudWatch where enabled.
 
 ### 9. Advanced Kernel/NIC Tuning Profile
 

@@ -25,6 +25,7 @@ type Input struct {
 	MaxSize               int32
 	RouteDestinationCIDR  string
 	RouteTargetType       string
+	AssociatePublicIP     *bool
 	Tags                  map[string]string
 }
 
@@ -50,6 +51,7 @@ type Plan struct {
 	Appliances            []Appliance       `json:"appliances"`
 	ManagedRoutes         []ManagedRoute    `json:"managed_routes"`
 	RequiredIAMActions    []string          `json:"required_iam_actions"`
+	AssociatePublicIP     bool              `json:"associate_public_ip_address"`
 	Tags                  map[string]string `json:"tags"`
 }
 
@@ -122,6 +124,10 @@ func Build(input Input) (Plan, error) {
 	if routeTargetType != "instance" {
 		return Plan{}, fmt.Errorf("unsupported route target type %q", routeTargetType)
 	}
+	associatePublicIP := true
+	if input.AssociatePublicIP != nil {
+		associatePublicIP = *input.AssociatePublicIP
+	}
 	minSize := input.MinSize
 	if minSize == 0 {
 		minSize = 1
@@ -176,6 +182,7 @@ func Build(input Input) (Plan, error) {
 			"iam:SimulatePrincipalPolicy",
 			"sts:GetCallerIdentity",
 		},
+		AssociatePublicIP: associatePublicIP,
 		Tags: map[string]string{
 			"BetterNATGateway": input.Name,
 			"ManagedBy":        "betternat",

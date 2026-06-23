@@ -777,7 +777,7 @@ func (a Applier) createLaunchTemplate(ctx context.Context, plan installplan.Plan
 		},
 	}
 	networkInterface := ec2types.LaunchTemplateInstanceNetworkInterfaceSpecificationRequest{
-		AssociatePublicIpAddress: awssdk.Bool(true),
+		AssociatePublicIpAddress: awssdk.Bool(plan.AssociatePublicIP),
 		DeleteOnTermination:      awssdk.Bool(true),
 		DeviceIndex:              awssdk.Int32(0),
 	}

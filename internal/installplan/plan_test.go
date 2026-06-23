@@ -37,6 +37,9 @@ func TestBuild(t *testing.T) {
 	if plan.UseSpot {
 		t.Fatalf("use spot should default false: %#v", plan)
 	}
+	if !plan.AssociatePublicIP {
+		t.Fatalf("associate public IP should default true for bootstrap compatibility: %#v", plan)
+	}
 	if plan.AMIChannel != "stable" {
 		t.Fatalf("unexpected ami channel: %#v", plan)
 	}
@@ -102,6 +105,28 @@ func TestBuildUseSpot(t *testing.T) {
 	}
 	if !plan.UseSpot {
 		t.Fatalf("use spot should be preserved: %#v", plan)
+	}
+}
+
+func TestBuildCanDisableAssociatedPublicIP(t *testing.T) {
+	associatePublicIP := false
+	plan, err := Build(Input{
+		Name:   "prod-egress",
+		Region: "us-west-2",
+		VPCID:  "vpc-123",
+		PublicSubnetIDs: map[string]string{
+			"us-west-2a": "subnet-public-a",
+		},
+		PrivateRouteTableIDs: map[string][]string{
+			"us-west-2a": []string{"rtb-a"},
+		},
+		AssociatePublicIP: &associatePublicIP,
+	})
+	if err != nil {
+		t.Fatalf("build plan: %v", err)
+	}
+	if plan.AssociatePublicIP {
+		t.Fatalf("associate public IP should be disabled: %#v", plan)
 	}
 }
 
