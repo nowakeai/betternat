@@ -58,7 +58,7 @@ terraform {
 ```
 
 Provider versions and BetterNAT runtime artifact versions are separate. The
-current alpha provider is `0.1.0-alpha.2`; the current runtime release assets
+current Terraform Registry provider is `0.1.0-alpha.2`; the current runtime release assets
 referenced by the quick start are `v0.1.0-alpha.2`.
 
 If your Terraform currently uses AWS NAT Gateway:

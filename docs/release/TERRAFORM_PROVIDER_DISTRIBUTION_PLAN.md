@@ -225,15 +225,15 @@ Current status:
 Provider release artifacts should follow Terraform provider conventions, for example:
 
 ```text
-terraform-provider-betternat_0.1.0-alpha.2_linux_amd64.zip
-terraform-provider-betternat_0.1.0-alpha.2_linux_arm64.zip
-terraform-provider-betternat_0.1.0-alpha.2_darwin_arm64.zip
-terraform-provider-betternat_0.1.0-alpha.2_SHA256SUMS
-terraform-provider-betternat_0.1.0-alpha.2_SHA256SUMS.sig
-terraform-provider-betternat_0.1.0-alpha.2_manifest.json
+terraform-provider-betternat_0.1.0-alpha.3_linux_amd64.zip
+terraform-provider-betternat_0.1.0-alpha.3_linux_arm64.zip
+terraform-provider-betternat_0.1.0-alpha.3_darwin_arm64.zip
+terraform-provider-betternat_0.1.0-alpha.3_SHA256SUMS
+terraform-provider-betternat_0.1.0-alpha.3_SHA256SUMS.sig
+terraform-provider-betternat_0.1.0-alpha.3_manifest.json
 ```
 
-The first published Terraform Registry provider version is:
+The current Terraform Registry provider version is:
 
 ```text
 0.1.0-alpha.2
@@ -319,7 +319,14 @@ Terraform v1.15.6 filesystem mirror install + validate from provider release zip
 OpenTofu v1.12.3 filesystem mirror install + validate from provider release zip: passed when source explicitly uses registry.terraform.io/nowakeai/betternat
 Terraform v1.15.6 Terraform Registry install + validate for nowakeai/betternat 0.1.0-alpha.2: passed
 OpenTofu v1.12.3 Terraform Registry install + validate for registry.terraform.io/nowakeai/betternat 0.1.0-alpha.2: passed
+GitHub release artifact checksum verification for 0.1.0-alpha.3 Linux amd64, Linux arm64, and manifest: passed
 ```
+
+Provider `0.1.0-alpha.3` was also published to GitHub on 2026-06-23 with
+the BetterNAT main module updated to `v0.1.0-alpha.2`. GitHub release artifact
+checksum verification passed for Linux amd64, Linux arm64, and manifest.
+Terraform Registry installation was not yet available at verification time:
+`terraform init` returned no available release matching `0.1.0-alpha.3`.
 
 Important OpenTofu source-address note:
 

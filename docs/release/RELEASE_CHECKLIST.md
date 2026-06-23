@@ -644,6 +644,8 @@ Provider Registry validation recorded on 2026-06-22:
 - [x] Run the Quick Start from a clean clone using GitHub Release URLs.
   - [x] Clean clone at `v0.1.0-alpha.1` can read release `SHA256SUMS` and resolve arm64 agent/CLI checksums.
   - [x] Clean clone can install `nowakeai/betternat` `0.1.0-alpha.2` from Terraform Registry and validate `examples/terraform`.
+  - [x] Provider `0.1.0-alpha.3` GitHub release artifact checksum verification passed for Linux amd64, Linux arm64, and manifest.
+  - [ ] Provider `0.1.0-alpha.3` Terraform Registry install validation after Registry propagation.
   - [x] Clean clone `examples/terraform-aws-supplemental init` and `validate` passed with `HTTP_PROXY`/`HTTPS_PROXY` set to `http://127.0.0.1:10808`.
 - [x] Add provider installation guide.
 - [x] Add observability guide.
