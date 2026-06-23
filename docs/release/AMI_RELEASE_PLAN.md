@@ -139,25 +139,6 @@ packer build \
 For x86_64, use `packer/betternat-x86_64.pkrvars.hcl` and the
 `linux_amd64` release binaries.
 
-An experimental Ubuntu systemd/LoxiLB `.deb` flavor exists for x86_64, but it
-is currently blocked for release by LoxiLB runtime compatibility:
-
-```sh
-packer build \
-  -var-file=packer/betternat-ubuntu-noble-systemd-x86_64.pkrvars.hcl \
-  -var "version=v0.1.0-alpha.2" \
-  -var "aws_region=us-west-2" \
-  -var "agent_binary_path=tmp/release/v0.1.0-alpha.2/betternat-agent_v0.1.0-alpha.2_linux_amd64" \
-  -var "cli_binary_path=tmp/release/v0.1.0-alpha.2/betternat_v0.1.0-alpha.2_linux_amd64" \
-  packer/betternat.pkr.hcl
-```
-
-This flavor follows the LoxiLB standalone systemd/deb packaging direction. It
-is x86_64-only for now because the upstream LoxiLB GitHub release assets
-currently publish amd64 `.deb` packages, not arm64 `.deb` packages. Do not use
-this flavor as a release AMI until boot validation confirms that `loxilb.service`
-starts with the API enabled and `loxicmd` can reach port `11111`.
-
 Public, all-region publication is intentionally explicit:
 
 ```sh
@@ -185,17 +166,6 @@ The AL2023 Docker flavor:
 - records `/usr/share/doc/betternat/AMI_MANIFEST`.
 - writes a local Packer manifest, `packer-manifest.json`, by default.
 
-The Ubuntu systemd flavor:
-
-- starts from Canonical Ubuntu 24.04 Noble amd64,
-- installs `betternat-agent` and `betternat`,
-- installs the upstream LoxiLB `.deb` package,
-- uses a BetterNAT systemd override for the package-provided `loxilb.service`
-  so LoxiLB starts with `--api --fallback`,
-- installs `betternat-agent.service`,
-- avoids Docker on the runtime path,
-- writes the same sysctl profile, notices, and AMI manifest.
-
 The template is not yet wired into provider `ami_channel` resolution and does
 not publish AMIs automatically.
 
@@ -205,17 +175,16 @@ Validation recorded on 2026-06-23:
 packer init packer/betternat.pkr.hcl
 packer validate -var-file=packer/betternat-al2023.pkrvars.hcl -var-file=packer/betternat-arm64.pkrvars.hcl ...
 packer validate -var-file=packer/betternat-al2023.pkrvars.hcl -var-file=packer/betternat-x86_64.pkrvars.hcl ...
-packer validate -var-file=packer/betternat-ubuntu-noble-systemd-x86_64.pkrvars.hcl ...
 ```
 
-AL2023 arm64, AL2023 x86_64, and Ubuntu systemd x86_64 template validation
-passed. No AMI was created by this validation pass.
+AL2023 arm64 and AL2023 x86_64 template validation passed. No AMI was created
+by this validation pass.
 
 Follow-up build validation found that the upstream LoxiLB `v0.9.7` `.deb`
 pre-install script requires OpenSSL 3. Ubuntu 20.04 Focal ships OpenSSL 1.1.1,
-so the systemd flavor now uses Ubuntu 24.04 Noble.
+so a temporary systemd experiment moved to Ubuntu 24.04 Noble.
 
-Ubuntu 24.04 Noble build validation also found a release blocker on 2026-06-23:
+Ubuntu 24.04 Noble build validation then found a release blocker on 2026-06-23:
 
 - Noble installed and booted successfully on AWS, and SSM came online.
 - The raw `v0.9.7-1` package unit uses `ExecStart=/usr/local/sbin/loxilb`
@@ -225,10 +194,13 @@ Ubuntu 24.04 Noble build validation also found a release blocker on 2026-06-23:
 - In-place upgrade to LoxiLB `v0.9.8-1` with a BetterNAT override
   `ExecStart=/usr/local/sbin/loxilb --api --fallback` still fails eBPF object
   loading and never exposes the API on `127.0.0.1:11111`.
+- LoxiLB issue `#953` and PR `#956` indicate the kernel `6.12+` fix landed
+  after the latest public `.deb` asset, while newer Docker images continue to
+  be published.
 
-Until this is fixed upstream or by a BetterNAT-owned LoxiLB build/package, keep
-the Ubuntu systemd flavor out of provider AMI resolution and release
-publication.
+The Ubuntu systemd `.deb` flavor has been removed from the release path until
+newer upstream `.deb` packages exist or BetterNAT owns a supported package build.
+The release AMI path is AL2023 with Docker and a pinned LoxiLB image digest.
 
 ## Sysctl Profile
 

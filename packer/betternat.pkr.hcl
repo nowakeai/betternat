@@ -99,22 +99,7 @@ variable "cli_binary_path" {
 
 variable "loxilb_image" {
   type    = string
-  default = "ghcr.io/loxilb-io/loxilb@sha256:dacc9b21688d4042b768f2cbc5968360b8753cf92f926ee288346153a23f3052"
-}
-
-variable "loxilb_deb_url" {
-  type    = string
-  default = ""
-}
-
-variable "loxilb_deb_sha256" {
-  type    = string
-  default = ""
-}
-
-variable "loxilb_runtime" {
-  type    = string
-  default = "docker"
+  default = "ghcr.io/loxilb-io/loxilb@sha256:38f08be39aaa57826cbfb818c34442e34b0e456f9f88a74265c4a298208862cb"
 }
 
 variable "provision_script" {
@@ -225,9 +210,6 @@ build {
     environment_vars = [
       "BETTERNAT_VERSION=${var.version}",
       "BETTERNAT_LOXILB_IMAGE=${var.loxilb_image}",
-      "BETTERNAT_LOXILB_DEB_URL=${var.loxilb_deb_url}",
-      "BETTERNAT_LOXILB_DEB_SHA256=${var.loxilb_deb_sha256}",
-      "BETTERNAT_LOXILB_RUNTIME=${var.loxilb_runtime}",
     ]
     inline = [
       "chmod +x /tmp/provision-betternat-ami.sh",
