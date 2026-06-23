@@ -36,6 +36,7 @@ apt-get install -y \
   ca-certificates \
   conntrack \
   curl \
+  golang-go \
   gzip \
   iproute2 \
   iptables \
