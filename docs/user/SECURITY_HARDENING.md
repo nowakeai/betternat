@@ -6,7 +6,7 @@ Date: 2026-06-22
 
 This guide describes the current BetterNAT security posture, first-alpha limits, and production hardening checklist.
 
-BetterNAT is a self-managed network appliance. Treat it as privileged infrastructure: it changes VPC routes, owns egress identity, and runs a local datapath.
+BetterNAT is a self-managed network node. Treat it as privileged infrastructure: it changes VPC routes, owns egress identity, and runs a local datapath.
 
 ## Current Alpha Posture
 
@@ -18,7 +18,7 @@ The first alpha includes:
 - no public SSH requirement,
 - IMDSv2 required in launch templates,
 - source/destination check disabled by the agent,
-- Prometheus metrics endpoint on the appliance,
+- Prometheus metrics endpoint on the node,
 - SHA256 verification for downloaded BetterNAT binaries when checksums are provided,
 - Apache-2.0 project license,
 - third-party notices for LoxiLB and other integrated components.
@@ -64,12 +64,12 @@ Production hardening targets:
 Default intended exposure:
 
 - no inbound SSH,
-- SSM Session Manager for appliance access,
+- SSM Session Manager for node access,
 - private-subnet traffic allowed from configured `private_cidrs`,
-- outbound appliance traffic allowed for egress, AWS APIs, bootstrap, and LoxiLB image/artifact pulls,
+- outbound node traffic allowed for egress, AWS APIs, bootstrap, and LoxiLB image/artifact pulls,
 - Prometheus port reachable only from the monitoring network.
 
-Alpha provider-created appliance security group allows forwarded traffic from configured private CIDRs and outbound traffic to `0.0.0.0/0`.
+Alpha provider-created node security group allows forwarded traffic from configured private CIDRs and outbound traffic to `0.0.0.0/0`.
 
 Hardening recommendations:
 
@@ -77,7 +77,7 @@ Hardening recommendations:
 - do not expose port `9108` publicly,
 - use SSM instead of public SSH,
 - if SSH is added manually, restrict it to a controlled bastion or VPN source,
-- keep BetterNAT appliances in public subnets only because they need public egress; route private workloads through them from private subnets,
+- keep BetterNAT nodes in public subnets only because they need public egress; route private workloads through them from private subnets,
 - avoid cross-AZ routing unless it is intentional and costed.
 
 ## Instance Metadata
@@ -110,6 +110,8 @@ Current gaps:
 - no generated SBOM attached to release assets,
 - no pinned OS package repository snapshot,
 - LoxiLB image is pulled at boot in the alpha path.
+- alpha bootstrap may rely on auto-assigned per-node public IPv4 addresses for
+  package and artifact downloads.
 
 Recommended alpha usage:
 
@@ -123,6 +125,8 @@ Production targets:
 
 - publish versioned AMIs,
 - bake BetterNAT binaries and LoxiLB into the AMI,
+- avoid per-node public IPv4 addresses by default; use the shared EIP for egress
+  identity and private AWS API reachability for standby control-plane access,
 - attach SBOM and dependency inventory to releases,
 - sign release metadata or artifacts,
 - record third-party license notices inside the AMI,
@@ -193,7 +197,7 @@ Do not commit:
 - private keys,
 - presigned artifact URLs,
 - Terraform state files,
-- copied agent configs from production appliances.
+- copied agent configs from production nodes.
 
 The Terraform provider marks generated user data and agent config as sensitive, but Terraform state can still contain operational metadata. Protect state with encryption, access controls, and normal Terraform backend hygiene.
 

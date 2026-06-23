@@ -2,6 +2,7 @@ package tfprovider
 
 import (
 	"context"
+	cryptorand "crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -24,6 +25,8 @@ import (
 
 var _ resource.Resource = (*GatewayResource)(nil)
 var _ resource.ResourceWithConfigure = (*GatewayResource)(nil)
+
+const providerInfrastructureRevision = "2026-06-23-handover-v1"
 
 type GatewayResource struct {
 	installerFactory  InstallerFactory
@@ -80,6 +83,9 @@ type GatewayResourceModel struct {
 	AllowDestroyNoRollback   types.Bool   `tfsdk:"allow_destroy_without_rollback"`
 	Tags                     types.Map    `tfsdk:"tags"`
 	LeaseTableName           types.String `tfsdk:"lease_table_name"`
+	CoordinationTableName    types.String `tfsdk:"coordination_table_name"`
+	PeerAPIAuthToken         types.String `tfsdk:"peer_api_auth_token"`
+	ProviderInfraRevision    types.String `tfsdk:"provider_infrastructure_revision"`
 	AgentConfigJSON          types.String `tfsdk:"agent_config_json"`
 	AgentConfigHash          types.String `tfsdk:"agent_config_hash"`
 	UserData                 types.String `tfsdk:"user_data"`
@@ -114,7 +120,7 @@ func (r *GatewayResource) Configure(_ context.Context, req resource.ConfigureReq
 
 func (r *GatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "BetterNAT gateway resource. v0 installs appliance infrastructure and records runtime metadata.",
+		MarkdownDescription: "BetterNAT gateway resource. v0 installs gateway node infrastructure and records runtime metadata.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -174,7 +180,7 @@ func (r *GatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"cli_binary_url": schema.StringAttribute{
 				Optional:            true,
 				Sensitive:           true,
-				MarkdownDescription: "Optional URL for the BetterNAT CLI binary installed on each appliance. Set this for bootstrap-based alpha installs so betternat doctor can run locally.",
+				MarkdownDescription: "Optional URL for the BetterNAT CLI binary installed on each gateway node. Set this for bootstrap-based alpha installs so betternat doctor can run locally.",
 			},
 			"cli_binary_sha256": schema.StringAttribute{
 				Optional:            true,
@@ -216,10 +222,10 @@ func (r *GatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Default:  booldefault.StaticBool(true),
 			},
 			"ha_profile": schema.StringAttribute{
-				MarkdownDescription: "High availability timing profile. Use stable for production defaults, balanced for moderate failover speed, or fast for test/low-latency environments.",
+				MarkdownDescription: "High availability timing profile. Use default. Legacy values stable, balanced, and fast are accepted as aliases for default.",
 				Optional:            true,
 				Computed:            true,
-				Default:             stringdefault.StaticString("stable"),
+				Default:             stringdefault.StaticString("default"),
 			},
 			"ha_lease_ttl_seconds": schema.Int64Attribute{
 				MarkdownDescription: "Advanced override for the HA lease TTL in seconds. Leave unset to use ha_profile defaults.",
@@ -267,6 +273,21 @@ func (r *GatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			},
 			"lease_table_name": schema.StringAttribute{
 				Computed: true,
+			},
+			"coordination_table_name": schema.StringAttribute{
+				Computed:            true,
+				MarkdownDescription: "Provider-owned coordination table used for HA lease, agent registry, and future backend-mediated agent coordination records.",
+			},
+			"peer_api_auth_token": schema.StringAttribute{
+				Computed:            true,
+				Sensitive:           true,
+				MarkdownDescription: "Provider-generated peer API bearer token stored in state and rendered into node config for authenticated agent-to-agent handover coordination.",
+			},
+			"provider_infrastructure_revision": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				Default:             stringdefault.StaticString(providerInfrastructureRevision),
+				MarkdownDescription: "Internal provider-owned infrastructure revision. Provider upgrades may change this to trigger an in-place reconciliation of safe supporting resources such as IAM policy and coordination tables.",
 			},
 			"agent_config_json": schema.StringAttribute{
 				Computed:  true,
@@ -350,6 +371,9 @@ func (r *GatewayResource) Update(ctx context.Context, req resource.UpdateRequest
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+	if (plan.PeerAPIAuthToken.IsNull() || plan.PeerAPIAuthToken.IsUnknown()) && !state.PeerAPIAuthToken.IsNull() && !state.PeerAPIAuthToken.IsUnknown() {
+		plan.PeerAPIAuthToken = state.PeerAPIAuthToken
 	}
 	resp.Diagnostics.Append(applyGatewayPlan(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
@@ -517,7 +541,7 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 		}
 	}
 	stableEgressIP := boolDefault(plan.StableEgressIP, true)
-	haProfile := stringDefault(plan.HAProfile, "stable")
+	haProfile := normalizeHAProfile(stringDefault(plan.HAProfile, "default"))
 	haTTLSeconds, haRenewSeconds, err := haTiming(plan.HALeaseTTLSeconds, plan.HARenewIntervalSeconds, haProfile)
 	if err != nil {
 		return GatewayResourceModel{}, err
@@ -544,6 +568,11 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 		return GatewayResourceModel{}, fmt.Errorf("unsupported route_target_type %q", routeTargetType)
 	}
 	leaseTable := "betternat-" + plan.Name.ValueString() + "-leases"
+	coordinationTable := "betternat-" + plan.Name.ValueString() + "-coordination"
+	peerAPIAuthToken, err := peerAPIAuthTokenForPlan(plan)
+	if err != nil {
+		return GatewayResourceModel{}, err
+	}
 
 	azs := sortedKeys(routeTablesByAZ)
 	firstAZ := azs[0]
@@ -567,6 +596,16 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 			RouteDestinationCIDR:  routeDestinationCIDR,
 			RouteTargetType:       routeTargetType,
 		},
+		Coordination: provider.CoordinationSpec{
+			Backend: "dynamodb",
+			Table:   coordinationTable,
+		},
+		Control: provider.ControlSpec{
+			PeerAPIEnabled:       true,
+			PeerAPIListenAddress: "0.0.0.0",
+			PeerAPIListenPort:    9109,
+			PeerAPIAuthToken:     peerAPIAuthToken,
+		},
 		Observability: provider.ObservabilitySpec{
 			PrometheusListenAddress: "0.0.0.0",
 			PrometheusListenPort:    9108,
@@ -579,7 +618,7 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	if !prometheusEnabled {
 		gatewaySpec.Observability.PrometheusListenPort = 0
 	}
-	agentConfig, err := provider.RenderAgentConfig(gatewaySpec, provider.ApplianceSpec{
+	agentConfig, err := provider.RenderAgentConfig(gatewaySpec, provider.NodeSpec{
 		HAGroupID:            plan.Name.ValueString() + "-" + firstAZ,
 		InstanceID:           "auto",
 		AvailabilityZone:     firstAZ,
@@ -613,25 +652,26 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 		return GatewayResourceModel{}, err
 	}
 	installPlan, err := installplan.Build(installplan.Input{
-		Name:                 plan.Name.ValueString(),
-		Region:               plan.Region.ValueString(),
-		VPCID:                plan.VPCID.ValueString(),
-		PublicSubnetIDs:      publicSubnetsByAZ,
-		PrivateRouteTableIDs: routeTablesByAZ,
-		PrivateCIDRs:         privateCIDRs,
-		StableEgressIP:       stableEgressIP,
-		LeaseTableName:       leaseTable,
-		AgentConfigHash:      hex.EncodeToString(configHash[:]),
-		AMIID:                stringDefault(plan.AMIID, ""),
-		AMIChannel:           amiChannel,
-		InstanceType:         instanceType,
-		UseSpot:              useSpot,
-		MinSize:              int32(minSize),
-		DesiredCapacity:      int32(desiredCapacity),
-		MaxSize:              int32(maxSize),
-		RouteDestinationCIDR: routeDestinationCIDR,
-		RouteTargetType:      routeTargetType,
-		Tags:                 tags,
+		Name:                  plan.Name.ValueString(),
+		Region:                plan.Region.ValueString(),
+		VPCID:                 plan.VPCID.ValueString(),
+		PublicSubnetIDs:       publicSubnetsByAZ,
+		PrivateRouteTableIDs:  routeTablesByAZ,
+		PrivateCIDRs:          privateCIDRs,
+		StableEgressIP:        stableEgressIP,
+		LeaseTableName:        leaseTable,
+		CoordinationTableName: coordinationTable,
+		AgentConfigHash:       hex.EncodeToString(configHash[:]),
+		AMIID:                 stringDefault(plan.AMIID, ""),
+		AMIChannel:            amiChannel,
+		InstanceType:          instanceType,
+		UseSpot:               useSpot,
+		MinSize:               int32(minSize),
+		DesiredCapacity:       int32(desiredCapacity),
+		MaxSize:               int32(maxSize),
+		RouteDestinationCIDR:  routeDestinationCIDR,
+		RouteTargetType:       routeTargetType,
+		Tags:                  tags,
 	})
 	if err != nil {
 		return GatewayResourceModel{}, err
@@ -662,6 +702,9 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	result.RollbackOnDestroy = types.BoolValue(rollbackOnDestroy)
 	result.AllowDestroyNoRollback = types.BoolValue(allowDestroyNoRollback)
 	result.LeaseTableName = types.StringValue(leaseTable)
+	result.CoordinationTableName = types.StringValue(coordinationTable)
+	result.PeerAPIAuthToken = types.StringValue(peerAPIAuthToken)
+	result.ProviderInfraRevision = types.StringValue(providerInfrastructureRevision)
 	result.AgentConfigJSON = types.StringValue(string(configBytes))
 	result.AgentConfigHash = types.StringValue(hex.EncodeToString(configHash[:]))
 	result.UserData = types.StringValue(userData)
@@ -676,19 +719,24 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	return result, nil
 }
 
+func peerAPIAuthTokenForPlan(plan *GatewayResourceModel) (string, error) {
+	if !plan.PeerAPIAuthToken.IsNull() && !plan.PeerAPIAuthToken.IsUnknown() && plan.PeerAPIAuthToken.ValueString() != "" {
+		return plan.PeerAPIAuthToken.ValueString(), nil
+	}
+	token := make([]byte, 32)
+	if _, err := cryptorand.Read(token); err != nil {
+		return "", fmt.Errorf("generate peer API auth token: %w", err)
+	}
+	return hex.EncodeToString(token), nil
+}
+
 func haTiming(ttlValue types.Int64, renewValue types.Int64, profile string) (int64, int64, error) {
-	var ttl int64
-	var renew int64
 	switch profile {
-	case "stable":
-		ttl, renew = 30, 5
-	case "balanced":
-		ttl, renew = 20, 4
-	case "fast":
-		ttl, renew = 10, 3
+	case "default":
 	default:
 		return 0, 0, fmt.Errorf("unsupported ha_profile %q", profile)
 	}
+	ttl, renew := int64(10), int64(1)
 	if !ttlValue.IsNull() && !ttlValue.IsUnknown() {
 		ttl = ttlValue.ValueInt64()
 	}
@@ -705,6 +753,15 @@ func haTiming(ttlValue types.Int64, renewValue types.Int64, profile string) (int
 		return 0, 0, fmt.Errorf("ha_renew_interval_seconds must be less than ha_lease_ttl_seconds")
 	}
 	return ttl, renew, nil
+}
+
+func normalizeHAProfile(profile string) string {
+	switch profile {
+	case "stable", "balanced", "fast":
+		return "default"
+	default:
+		return profile
+	}
 }
 
 func plannedRollbackJSON(routeTablesByAZ map[string][]string, destinationCIDR string) (string, error) {

@@ -231,6 +231,91 @@ func TestEnsureOwnershipDoesNotMutateWhenAlreadyOwned(t *testing.T) {
 	}
 }
 
+func TestHandoverMovesCloudOwnershipThenTransfersLease(t *testing.T) {
+	leaseManager := &fakeLease{}
+	current, err := leaseManager.Acquire(context.Background(), "i-active")
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	cloudProvider := &fakeCloud{
+		routes: map[string]cloud.RouteTarget{
+			"rtb-a:0.0.0.0/0": {RouteTableID: "rtb-a", DestinationCIDR: "0.0.0.0/0", Target: "i-active"},
+			"rtb-b:0.0.0.0/0": {RouteTableID: "rtb-b", DestinationCIDR: "0.0.0.0/0", Target: "i-active"},
+		},
+		identity: cloud.PublicIdentity{AllocationID: "eipalloc-123", InstanceID: "i-active", PublicIP: "198.51.100.10"},
+	}
+	controller := Controller{Cloud: cloudProvider, Lease: leaseManager}
+
+	result, err := controller.Handover(context.Background(), validHAConfig(), "i-active", "i-standby", current)
+	if err != nil {
+		t.Fatalf("handover: %v", err)
+	}
+	if result.NewLease.OwnerInstanceID != "i-standby" || result.NewLease.Generation != current.Generation+1 {
+		t.Fatalf("unexpected new lease: %#v", result.NewLease)
+	}
+	wantCalls := []string{
+		"associate:eipalloc-123:i-standby",
+		"replace:rtb-a:0.0.0.0/0:i-standby",
+		"replace:rtb-b:0.0.0.0/0:i-standby",
+		"describe-route:rtb-a:0.0.0.0/0",
+		"describe-route:rtb-b:0.0.0.0/0",
+		"describe-eip:eipalloc-123",
+	}
+	if !equalStrings(cloudProvider.calls, wantCalls) {
+		t.Fatalf("unexpected calls: got %#v want %#v", cloudProvider.calls, wantCalls)
+	}
+}
+
+func TestHandoverRejectsNonActiveRequester(t *testing.T) {
+	leaseManager := &fakeLease{}
+	current, err := leaseManager.Acquire(context.Background(), "i-active")
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	cloudProvider := &fakeCloud{}
+	controller := Controller{Cloud: cloudProvider, Lease: leaseManager}
+
+	_, err = controller.Handover(context.Background(), validHAConfig(), "i-standby", "i-other", current)
+	if err == nil {
+		t.Fatal("expected non-active handover rejection")
+	}
+	if len(cloudProvider.calls) != 0 {
+		t.Fatalf("non-active requester must not mutate cloud: %#v", cloudProvider.calls)
+	}
+}
+
+func TestHandoverRevertsCloudOwnershipWhenLeaseTransferFails(t *testing.T) {
+	leaseManager := &fakeLease{transferErr: errors.New("fenced")}
+	current, err := leaseManager.Acquire(context.Background(), "i-active")
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	cloudProvider := &fakeCloud{
+		routes: map[string]cloud.RouteTarget{
+			"rtb-a:0.0.0.0/0": {RouteTableID: "rtb-a", DestinationCIDR: "0.0.0.0/0", Target: "i-active"},
+			"rtb-b:0.0.0.0/0": {RouteTableID: "rtb-b", DestinationCIDR: "0.0.0.0/0", Target: "i-active"},
+		},
+		identity: cloud.PublicIdentity{AllocationID: "eipalloc-123", InstanceID: "i-active", PublicIP: "198.51.100.10"},
+	}
+	controller := Controller{Cloud: cloudProvider, Lease: leaseManager}
+
+	result, err := controller.Handover(context.Background(), validHAConfig(), "i-active", "i-standby", current)
+	if err == nil {
+		t.Fatal("expected transfer failure")
+	}
+	if !result.Reverted {
+		t.Fatalf("expected revert flag: %#v", result)
+	}
+	if cloudProvider.identity.InstanceID != "i-active" {
+		t.Fatalf("EIP should be reverted to active: %#v", cloudProvider.identity)
+	}
+	for _, route := range cloudProvider.routes {
+		if route.Target != "i-active" {
+			t.Fatalf("routes should be reverted to active: %#v", cloudProvider.routes)
+		}
+	}
+}
+
 type fakeCloud struct {
 	calls      []string
 	routes     map[string]cloud.RouteTarget
@@ -293,6 +378,7 @@ type fakeLease struct {
 	record       lease.Record
 	expiresAt    time.Time
 	releaseCount int
+	transferErr  error
 }
 
 func (f *fakeLease) Acquire(_ context.Context, owner string) (lease.Record, error) {
@@ -318,6 +404,18 @@ func (f *fakeLease) Release(context.Context, lease.Record) error {
 	f.releaseCount++
 	f.record = lease.Record{}
 	return nil
+}
+
+func (f *fakeLease) Transfer(_ context.Context, record lease.Record, newOwner string) (lease.Record, error) {
+	if f.transferErr != nil {
+		return lease.Record{}, f.transferErr
+	}
+	if f.record.OwnerInstanceID != record.OwnerInstanceID || f.record.Generation != record.Generation {
+		return lease.Record{}, errors.New("lease fencing check failed")
+	}
+	f.record.OwnerInstanceID = newOwner
+	f.record.Generation++
+	return f.record, nil
 }
 
 func (f *fakeLease) Current(context.Context) (lease.Record, error) {

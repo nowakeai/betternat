@@ -72,3 +72,30 @@ func TestMemoryManagerFencesStaleRenew(t *testing.T) {
 		t.Fatal("expected stale renew to fail")
 	}
 }
+
+func TestMemoryManagerTransferMovesOwnerAndFencesOldGeneration(t *testing.T) {
+	now := time.Unix(100, 0)
+	manager := NewMemoryManager("ha-a", 10*time.Second, func() time.Time { return now })
+
+	record, err := manager.Acquire(context.Background(), "i-a")
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	transferred, err := manager.Transfer(context.Background(), record, "i-b")
+	if err != nil {
+		t.Fatalf("transfer: %v", err)
+	}
+	if transferred.OwnerInstanceID != "i-b" || transferred.Generation != record.Generation+1 {
+		t.Fatalf("unexpected transferred lease: %#v", transferred)
+	}
+	if _, err := manager.Renew(context.Background(), record); err == nil {
+		t.Fatal("expected old generation renew to be fenced")
+	}
+	current, err := manager.Current(context.Background())
+	if err != nil {
+		t.Fatalf("current: %v", err)
+	}
+	if current.OwnerInstanceID != "i-b" {
+		t.Fatalf("unexpected current owner: %#v", current)
+	}
+}

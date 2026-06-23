@@ -10,7 +10,7 @@ The first release is decentralized:
 
 - each gateway instance runs `betternat-agent`,
 - each instance exposes Prometheus metrics,
-- local CLI diagnostics run on the appliance,
+- local CLI diagnostics run on each gateway node,
 - cloud state is inspected through AWS APIs, Terraform outputs, or AWS CLI.
 
 There is no central BetterNAT server in the first release.
@@ -19,11 +19,11 @@ There is no central BetterNAT server in the first release.
 
 For each HA group, verify:
 
-- one active appliance exists,
-- at least one standby appliance is healthy,
-- private route tables point to the active appliance,
-- shared EIP is associated to the active appliance when stable egress IP is enabled,
-- DynamoDB lease owner matches the active appliance,
+- one active gateway node exists,
+- at least one standby gateway node is healthy,
+- private route tables point to the active gateway node,
+- shared EIP is associated to the active gateway node when stable egress IP is enabled,
+- DynamoDB lease owner matches the active gateway node,
 - datapath is ready,
 - Prometheus metrics are fresh,
 - ASG desired capacity equals healthy capacity,
@@ -35,30 +35,37 @@ Current CLI commands:
 
 ```sh
 betternat status --config /etc/betternat/agent.json
+betternat status --watch --interval 2s
 betternat doctor --config /etc/betternat/agent.json
 betternat doctor --live --config /etc/betternat/agent.json
 betternat failover status --config /etc/betternat/agent.json
 betternat datapath status --config /etc/betternat/agent.json
 betternat datapath ready --config /etc/betternat/agent.json
+betternat handover current
+betternat handover history --limit 20
+betternat handover inspect <request-id>
 betternat cost estimate --gb 10240
 betternat version
 ```
 
 Current behavior:
 
-- `status` reads local config and prints a summary.
+- `status` reads the local daemon by default, uses cached registry and metrics data, and prints fleet, active/standby, version, IP, lease, cache freshness, peer control, registry age, and traffic summary data.
+- `status --watch` refreshes the same view until interrupted. Use `--output json` for newline-delimited machine-readable snapshots.
 - `doctor` performs static/config-level checks.
-- `doctor --live` adds local datapath, IAM runtime permission simulation, ASG fleet health, lease, route, EIP, source/destination check, Prometheus, and outbound source-IP probe checks where configured.
+- `doctor --live` adds local datapath, IAM runtime permission simulation, lease, route, EIP, source/destination check, Prometheus, and outbound source-IP probe checks where configured. In registry-backed installs, ASG discovery is skipped; use `status` for fleet health.
 - `failover status` prints configured HA/failover settings.
 - `datapath status` prints configured datapath settings.
 - `datapath ready` performs live local datapath checks through LoxiLB.
+- `handover current` shows the local daemon's current handover state.
+- `handover history` and `handover inspect` read durable handover operation records from the coordination table.
 - `cost estimate` estimates NAT Gateway processing-cost avoidance.
 
 Important:
 
-- Run datapath commands on the gateway appliance, usually through SSM Session Manager.
+- Run datapath commands on the gateway node, usually through SSM Session Manager.
 - The CLI does not currently connect to a central BetterNAT API.
-- The CLI now has a first live doctor path for AWS IAM/ASG/DynamoDB/route/EIP/datapath/Prometheus checks, but it is still appliance-local and not a central dashboard.
+- The CLI now has a live doctor path for AWS IAM/DynamoDB/route/EIP/datapath/Prometheus checks, but it is still node-local. Fleet-level visibility comes from the coordination registry and per-agent metrics.
 
 ## Metrics Collection
 
@@ -128,7 +135,7 @@ betternat_failover_duration_seconds
 
 ## Suggested Alerts
 
-No active appliance:
+No active gateway node:
 
 ```promql
 sum by (gateway, ha_group) (betternat_active) != 1
@@ -217,7 +224,7 @@ The expected healthy state is:
 - Private route target equals current active instance or active ENI.
 - Shared EIP association points to current active instance in stable mode.
 
-## Accessing An Appliance
+## Accessing A Gateway Node
 
 Preferred access path:
 
@@ -231,7 +238,7 @@ Default release posture:
 - no inbound SSH rule by default,
 - no key pair required by default.
 
-Useful commands on the appliance:
+Useful commands on the gateway node:
 
 ```sh
 sudo systemctl status betternat-agent.service
@@ -283,9 +290,9 @@ Do not treat the measured timing as a universal SLA. It depends on:
 
 Check:
 
-1. Private route table has `0.0.0.0/0` target pointing to active BetterNAT appliance.
-2. Source/destination check is disabled on active appliance.
-3. Appliance security group allows forwarded traffic.
+1. Private route table has `0.0.0.0/0` target pointing to the active BetterNAT gateway node.
+2. Source/destination check is disabled on the active gateway node.
+3. Gateway node security group allows forwarded traffic.
 4. LoxiLB datapath is ready.
 5. IP forwarding sysctl is enabled.
 6. Private source CIDR is included in `datapath.private_cidrs`.
@@ -299,7 +306,7 @@ Check:
 2. `betternat_route_target_match`.
 3. Agent logs around lease acquisition and route replacement.
 4. IAM permission for `ec2:ReplaceRoute`.
-5. Whether an old appliance is still renewing lease.
+5. Whether an old gateway node is still renewing lease.
 
 ### Stable EIP Not Preserved
 
@@ -353,7 +360,7 @@ Do not manually delete route tables or EIPs before Terraform destroy unless reco
 
 These are known first-release gaps to track:
 
-- `doctor --live` is appliance-local. Run it on each gateway instance or pair it with Prometheus/AWS CLI for fleet-wide review.
+- `doctor --live` is node-local. Run it on each gateway node or pair it with Prometheus/AWS CLI for fleet-wide review.
 - No central CLI command yet aggregates every HA group across AWS accounts, DynamoDB, ASG, datapath, and metrics.
 - No bundled Grafana dashboard yet.
 - No support bundle command yet.

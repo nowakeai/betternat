@@ -6,7 +6,7 @@ Date: 2026-06-22
 
 BetterNAT is designed for private-subnet workloads where NAT Gateway data processing charges dominate the bill.
 
-It does not make AWS networking free. It replaces the managed NAT Gateway per-GB processing line item with a self-owned EC2 appliance pool, while normal AWS costs still apply.
+It does not make AWS networking free. It replaces the managed NAT Gateway per-GB processing line item with a self-owned EC2 node pool, while normal AWS costs still apply.
 
 ## The Bill Line BetterNAT Targets
 
@@ -71,7 +71,7 @@ These examples use:
 - `50 TB/month` through the NAT layer,
 - `$0.045/GB` NAT Gateway processing,
 - one NAT Gateway at `$0.045/hour`,
-- two BetterNAT appliances at `$0.05/hour` each,
+- two BetterNAT nodes at `$0.05/hour` each,
 - `730` hours/month,
 - illustrative standard internet egress transfer at `$0.09/GB`.
 
@@ -86,7 +86,7 @@ Assumptions:
 - `1 TB = 1024 GB`,
 - `730` hours/month,
 - NAT Gateway design includes one NAT Gateway hourly charge, NAT Gateway processed GB, and illustrative standard internet egress transfer,
-- BetterNAT design includes EC2 appliance instance hours and the same illustrative standard internet egress transfer,
+- BetterNAT design includes EC2 node instance hours and the same illustrative standard internet egress transfer,
 - ingress/download is from the private workload's point of view,
 - egress/upload is traffic from the private workload to the internet,
 - excludes EBS, EIP/public IPv4, DynamoDB, monitoring, and operational costs.
@@ -117,8 +117,8 @@ This CLI example uses:
 - `$0.045/hour` NAT Gateway hourly price,
 - `$0.045/GB` NAT Gateway processing price,
 - `730` hours/month,
-- two BetterNAT appliances,
-- `$0.05/hour` per appliance.
+- two BetterNAT nodes,
+- `$0.05/hour` per node.
 
 Run:
 
@@ -127,8 +127,8 @@ betternat cost estimate \
   --gb 51200 \
   --nat-gateway-hourly 0.045 \
   --nat-gateway-processing-per-gb 0.045 \
-  --appliance-hourly 0.05 \
-  --appliances 2
+  --node-hourly 0.05 \
+  --nodes 2
 ```
 
 Example output:
@@ -163,7 +163,7 @@ Approximate BetterNAT monthly cost:
 
 ```text
 betternat_specific_cost =
-  appliance_count * appliance_hourly_price * monthly_hours
+  node_count * node_hourly_price * monthly_hours
   + ebs_monthly_cost
   + public_ipv4_or_eip_monthly_cost
   + dynamodb_monthly_cost
@@ -197,14 +197,14 @@ BetterNAT can reduce or remove:
 - NAT Gateway hourly charges for NAT Gateways you delete,
 - cross-AZ NAT path costs when you deploy per-AZ and keep routes aligned.
 
-BetterNAT can also make NAT spend easier to reason about through appliance metrics and owner labels.
+BetterNAT can also make NAT spend easier to reason about through node metrics and owner labels.
 
 ## Costs BetterNAT Does Not Remove
 
 BetterNAT does not remove:
 
 - standard internet data transfer charges,
-- EC2 appliance instance charges,
+- EC2 node instance charges,
 - EBS volume charges,
 - public IPv4/EIP charges where applicable,
 - DynamoDB lease table costs,
@@ -261,11 +261,11 @@ betternat cost estimate \
   --gb 30720 \
   --nat-gateway-hourly <price-per-hour> \
   --nat-gateway-processing-per-gb <price-per-gb> \
-  --appliance-hourly <your-ec2-price> \
-  --appliances 2
+  --node-hourly <your-ec2-price> \
+  --nodes 2
 ```
 
-Use your own EC2 price, expected appliance count, and region-specific NAT Gateway price.
+Use your own EC2 price, expected node count, and region-specific NAT Gateway price.
 
 ## Sources
 

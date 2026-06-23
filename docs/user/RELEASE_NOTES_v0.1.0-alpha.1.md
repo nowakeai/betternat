@@ -82,7 +82,7 @@ Validated before this release candidate:
 - ASG repair,
 - replacement standby behavior,
 - bootstrap artifact install,
-- appliance-local `doctor --live`,
+- node-local `doctor --live`,
 - IAM negative test,
 - Terraform destroy and artifact cleanup.
 

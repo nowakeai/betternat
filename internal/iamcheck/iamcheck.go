@@ -6,14 +6,16 @@ import (
 )
 
 var RequiredRuntimeActions = []string{
-	"autoscaling:DescribeAutoScalingGroups",
+	"autoscaling:CompleteLifecycleAction",
 	"ec2:AssociateAddress",
 	"ec2:DescribeAddresses",
 	"ec2:DescribeInstanceAttribute",
 	"ec2:DescribeRouteTables",
+	"ec2:ModifyInstanceAttribute",
 	"ec2:ReplaceRoute",
 	"dynamodb:DeleteItem",
 	"dynamodb:GetItem",
+	"dynamodb:Query",
 	"dynamodb:UpdateItem",
 	"iam:SimulatePrincipalPolicy",
 	"sts:GetCallerIdentity",

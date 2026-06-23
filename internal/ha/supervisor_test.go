@@ -296,6 +296,69 @@ func TestSupervisorOnlyOneCandidateWinsExpiredLease(t *testing.T) {
 	}
 }
 
+func TestSupervisorReleasesOwnedLeaseOnShutdown(t *testing.T) {
+	now := time.Unix(100, 0)
+	manager := lease.NewMemoryManager("prod-egress-a", 10*time.Second, func() time.Time { return now })
+	ctx, cancel := context.WithCancel(context.Background())
+	supervisor := Supervisor{
+		Controller: Controller{Cloud: &fakeCloud{}, Lease: manager, Datapath: &fakeDatapath{}},
+		Now:        func() time.Time { return now },
+		Reporter:   cancelOnStateReporter{State: StateActive, Cancel: cancel},
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- supervisor.Run(ctx, validSupervisorConfig(), "i-local", time.Hour)
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("run: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("supervisor did not stop")
+	}
+	if _, err := manager.Current(context.Background()); err == nil {
+		t.Fatal("expected shutdown to release local lease")
+	}
+}
+
+func TestSupervisorDoesNotReleaseOtherOwnerLeaseOnShutdown(t *testing.T) {
+	now := time.Unix(100, 0)
+	manager := lease.NewMemoryManager("prod-egress-a", 10*time.Second, func() time.Time { return now })
+	if _, err := manager.Acquire(context.Background(), "i-owner"); err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	supervisor := Supervisor{
+		Controller: Controller{Cloud: &fakeCloud{}, Lease: manager, Datapath: &fakeDatapath{}},
+		Now:        func() time.Time { return now },
+		Reporter:   cancelOnStateReporter{State: StateStandby, Cancel: cancel},
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- supervisor.Run(ctx, validSupervisorConfig(), "i-local", time.Hour)
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("run: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("supervisor did not stop")
+	}
+	current, err := manager.Current(context.Background())
+	if err != nil {
+		t.Fatalf("current: %v", err)
+	}
+	if current.OwnerInstanceID != "i-owner" {
+		t.Fatalf("shutdown should not release another owner: %#v", current)
+	}
+}
+
 type fakeDatapath struct {
 	reconcileCount        int
 	reconcileErr          error
@@ -401,4 +464,19 @@ func validSupervisorConfig() config.Config {
 	cfg.HA.Lease.TTLSeconds = 10
 	cfg.HA.Lease.RenewIntervalSeconds = 3
 	return cfg
+}
+
+type cancelOnStateReporter struct {
+	State  State
+	Cancel context.CancelFunc
+}
+
+func (r cancelOnStateReporter) Report(result StepResult) {
+	if result.State == r.State && r.Cancel != nil {
+		r.Cancel()
+	}
+}
+
+func (r cancelOnStateReporter) Snapshot() StatusSnapshot {
+	return StatusSnapshot{}
 }

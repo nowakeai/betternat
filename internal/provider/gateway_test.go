@@ -13,11 +13,21 @@ func TestRenderAgentConfig(t *testing.T) {
 			LeaseTable:            "betternat-prod-leases",
 			SharedEIPAllocationID: "eipalloc-123",
 		},
+		Coordination: CoordinationSpec{
+			Table:              "betternat-prod-coordination",
+			HandoverTTLSeconds: 120,
+		},
+		Control: ControlSpec{
+			PeerAPIEnabled:       true,
+			PeerAPIListenAddress: "0.0.0.0",
+			PeerAPIListenPort:    9109,
+			PeerAPIAuthToken:     "secret",
+		},
 		Observability: ObservabilitySpec{
 			OutboundProbeURL:        "https://checkip.amazonaws.com",
 			OutboundProbeExpectedIP: "203.0.113.10",
 		},
-	}, ApplianceSpec{
+	}, NodeSpec{
 		HAGroupID:            "prod-egress-us-west-2a",
 		InstanceID:           "auto",
 		AvailabilityZone:     "us-west-2a",
@@ -41,6 +51,15 @@ func TestRenderAgentConfig(t *testing.T) {
 	if cfg.HA.Lease.Table != "betternat-prod-leases" || cfg.HA.Lease.Key != "prod-egress-us-west-2a" {
 		t.Fatalf("unexpected lease config: %#v", cfg.HA.Lease)
 	}
+	if cfg.Coordination.Table != "betternat-prod-coordination" || cfg.Coordination.Backend != "dynamodb" {
+		t.Fatalf("unexpected coordination config: %#v", cfg.Coordination)
+	}
+	if cfg.Coordination.HandoverTTLSeconds != 120 {
+		t.Fatalf("unexpected handover ttl: %#v", cfg.Coordination)
+	}
+	if !cfg.Control.PeerAPI.Enabled || cfg.Control.PeerAPI.AuthToken != "secret" || cfg.Control.PeerAPI.ListenPort != 9109 {
+		t.Fatalf("unexpected peer control config: %#v", cfg.Control.PeerAPI)
+	}
 	if cfg.HA.PublicIdentity.Mode != "shared_eip" || cfg.HA.PublicIdentity.AllocationID != "eipalloc-123" {
 		t.Fatalf("unexpected public identity: %#v", cfg.HA.PublicIdentity)
 	}
@@ -62,7 +81,7 @@ func TestRenderAgentConfigWithoutStablePublicIdentity(t *testing.T) {
 			Enabled:    true,
 			LeaseTable: "betternat-prod-leases",
 		},
-	}, ApplianceSpec{
+	}, NodeSpec{
 		HAGroupID:        "prod-egress-us-west-2a",
 		PrimaryInterface: "ens5",
 		RouteTableIDs:    []string{"rtb-a"},
@@ -80,7 +99,7 @@ func TestRenderAgentConfigRequiresPrivateCIDRs(t *testing.T) {
 		Name:   "prod-egress",
 		Cloud:  "aws",
 		Region: "us-west-2",
-	}, ApplianceSpec{
+	}, NodeSpec{
 		HAGroupID:        "prod-egress-us-west-2a",
 		PrimaryInterface: "ens5",
 	})

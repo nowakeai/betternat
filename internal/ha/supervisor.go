@@ -44,9 +44,15 @@ func (s Supervisor) Run(ctx context.Context, cfg config.Config, localInstanceID 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
+	var owned lease.Record
+	defer func() {
+		s.releaseOwnedLease(owned, localInstanceID)
+	}()
+
 	for {
 		result := s.Step(ctx, cfg, localInstanceID)
 		s.report(result)
+		owned = latestOwnedLease(owned, result, localInstanceID, s.now())
 		if result.Err != nil && result.State == StateError {
 			return result.Err
 		}
@@ -56,6 +62,41 @@ func (s Supervisor) Run(ctx context.Context, cfg config.Config, localInstanceID 
 		case <-ticker.C:
 		}
 	}
+}
+
+func latestOwnedLease(current lease.Record, result StepResult, localInstanceID string, now time.Time) lease.Record {
+	if result.Lease.OwnerInstanceID == localInstanceID && now.Before(result.Lease.ExpiresAt) {
+		return result.Lease
+	}
+	if result.Lease.OwnerInstanceID != "" && result.Lease.OwnerInstanceID != localInstanceID && now.Before(result.Lease.ExpiresAt) {
+		return lease.Record{}
+	}
+	return current
+}
+
+func (s Supervisor) releaseOwnedLease(record lease.Record, localInstanceID string) {
+	if record.OwnerInstanceID == "" || record.OwnerInstanceID != localInstanceID {
+		return
+	}
+	if s.Controller.Lease == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownReleaseTimeout)
+	defer cancel()
+	if err := s.Controller.Lease.Release(ctx, record); err != nil {
+		log.Printf(
+			"betternat_ha_shutdown_release result=error lease_owner=%s lease_generation=%d err=%q",
+			record.OwnerInstanceID,
+			record.Generation,
+			err.Error(),
+		)
+		return
+	}
+	log.Printf(
+		"betternat_ha_shutdown_release result=success lease_owner=%s lease_generation=%d",
+		record.OwnerInstanceID,
+		record.Generation,
+	)
 }
 
 func (s Supervisor) Step(ctx context.Context, cfg config.Config, localInstanceID string) StepResult {
@@ -200,3 +241,5 @@ func haStepTimeout(cfg config.Config) time.Duration {
 	}
 	return 5 * time.Second
 }
+
+const shutdownReleaseTimeout = 3 * time.Second

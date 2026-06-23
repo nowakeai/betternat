@@ -18,6 +18,8 @@ type PublicIdentity struct {
 type InstanceInfo struct {
 	InstanceID             string
 	SourceDestCheckEnabled bool
+	PrivateIP              string
+	PublicIP               string
 }
 
 type ASGInstance struct {
@@ -33,6 +35,14 @@ type ASGInfo struct {
 	DesiredCapacity int32
 	MaxSize         int32
 	Instances       []ASGInstance
+}
+
+type LifecycleAction struct {
+	AutoScalingGroupName string
+	LifecycleHookName    string
+	InstanceID           string
+	Result               string
+	Reason               string
 }
 
 type InstancePreparer interface {

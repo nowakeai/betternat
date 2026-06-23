@@ -11,7 +11,7 @@ Use this guide before deleting gateway instances, route tables, EIPs, Auto Scali
 BetterNAT sends private-subnet egress through AWS private route table entries such as:
 
 ```text
-0.0.0.0/0 -> active BetterNAT appliance
+0.0.0.0/0 -> active BetterNAT gateway node
 ```
 
 During install, the provider snapshots the previous target for every managed private route table. During destroy, it can restore those routes before deleting BetterNAT-managed resources.
@@ -84,7 +84,7 @@ aws ec2 describe-route-tables \
   --query 'RouteTables[].Routes[?DestinationCidrBlock==`0.0.0.0/0`]'
 ```
 
-Confirm that `0.0.0.0/0` no longer points to a BetterNAT appliance instance or ENI unless that is the route state you intentionally chose.
+Confirm that `0.0.0.0/0` no longer points to a BetterNAT gateway node or ENI unless that is the route state you intentionally chose.
 
 Also scan for tagged residual resources:
 

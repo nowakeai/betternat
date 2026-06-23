@@ -1,6 +1,6 @@
 # BetterNAT Release Checklist
 
-Date: 2026-06-21
+Date: 2026-06-23
 
 ## Purpose
 
@@ -61,7 +61,7 @@ Production release requires:
 - stable Terraform provider release,
 - complete user documentation,
 - documented IAM/security model,
-- stable HA timing defaults,
+- default HA timing,
 - rollback and recovery documentation,
 - repeatable AWS acceptance tests,
 - documented limitations and SLO language.
@@ -428,10 +428,8 @@ Alpha minimum:
 - [x] disposable-test-VPC install guide exists.
 - [x] user-facing architecture diagram exists.
 - [x] Stable vs non-stable egress IP behavior explained.
-- [x] HA profiles explained:
-  - [x] `stable`
-  - [x] `balanced`
-  - [x] `fast`
+- [x] Default HA timing explained.
+- [x] Legacy HA profile aliases documented.
 - [x] Failover limitations explained.
 - [x] Cleanup procedure included.
 - [x] pricing/cost caveats explained:
@@ -552,8 +550,9 @@ Do not mark BetterNAT production-ready until alpha checklist is complete plus:
 - [ ] retry/backoff policy for AWS/DynamoDB transient failures is implemented.
 - [ ] explicit-failure fast path is evaluated or implemented:
   - [ ] EC2 owner state check,
-  - [ ] graceful lease release on systemd stop,
-  - [ ] ASG lifecycle hook or interruption notice handling.
+  - [x] graceful lease release on systemd stop,
+  - [x] ASG lifecycle hook or interruption notice handling implemented locally,
+  - [ ] ASG lifecycle hook and Spot interruption handling verified in AWS.
 - [ ] transient non-EIP leakage in stable mode is fixed or documented with clear conditions.
 - [ ] IAM least-privilege policy is reviewed.
 - [ ] provider release process is documented.
@@ -623,8 +622,9 @@ Provider Registry validation recorded on 2026-06-22:
 ### Reliability
 
 - [ ] Add AWS SDK retry/backoff policy review and tests.
-- [ ] Add graceful shutdown lease release on systemd stop.
-- [ ] Evaluate ASG lifecycle hook or Spot interruption notice handling.
+- [x] Add graceful shutdown lease release on systemd stop.
+- [x] Add ASG termination lifecycle hook and IMDS Spot/ASG termination watcher.
+- [ ] Verify ASG lifecycle hook and Spot interruption behavior in AWS.
 - [ ] Add LoxiLB restart reconciliation test.
 - [ ] Run a low-cost soak test with periodic egress probes and agent restarts.
 - [ ] Document transient public-IP leakage conditions in non-stable and stable modes, or fix them if observed.
@@ -740,8 +740,10 @@ As of 2026-06-21:
 
 - Low-cost AWS complete-loop testing is complete for the current cloud-init development path.
 - `stable_egress_ip=true` and `stable_egress_ip=false` modes have both passed owner-termination HA tests.
-- Terraform provider exposes `ha_profile` plus advanced lease timing overrides.
+- Terraform provider exposes `ha_profile = "default"` plus advanced lease timing overrides.
 - ASG repair and replacement standby behavior have passed.
-- The main blocker for alpha is now publishing and verifying GitHub Release assets, not AMI packaging.
+- GitHub Release assets and checksums have been published and verified for the first alpha path.
 - User-facing install docs use GitHub Release asset URLs; internal AWS test runbooks may still use temporary S3 URLs for unreleased binaries.
-- The main blockers for production are AMI release pipeline, retry/backoff hardening, stable-profile soak, and production operations documentation.
+- The agent handles SIGTERM/SIGINT and releases the locally owned HA lease on graceful shutdown using the fenced lease generation.
+- The provider creates ASG termination lifecycle hooks, and the agent watches IMDS Spot/ASG termination notices to release lease and complete the lifecycle action.
+- The main blockers for production are AMI release pipeline, retry/backoff hardening, stable-profile soak, and broader production hardening.

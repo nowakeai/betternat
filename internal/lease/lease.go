@@ -23,6 +23,11 @@ type Manager interface {
 	Current(ctx context.Context) (Record, error)
 }
 
+// Transferer moves an unexpired fenced lease from the current owner to a new owner.
+type Transferer interface {
+	Transfer(ctx context.Context, record Record, newOwner string) (Record, error)
+}
+
 type Clock func() time.Time
 
 // MemoryManager is a deterministic in-process lease manager for tests and local dry runs.
@@ -88,6 +93,26 @@ func (m *MemoryManager) Release(_ context.Context, record Record) error {
 	}
 	m.record = Record{}
 	return nil
+}
+
+func (m *MemoryManager) Transfer(_ context.Context, record Record, newOwner string) (Record, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if newOwner == "" {
+		return Record{}, fmt.Errorf("new lease owner is required")
+	}
+	if !sameOwnerAndGeneration(m.record, record) {
+		return Record{}, fmt.Errorf("lease fencing check failed")
+	}
+	now := m.now()
+	if !now.Before(m.record.ExpiresAt) {
+		return Record{}, fmt.Errorf("lease expired at %s", m.record.ExpiresAt.UTC().Format(time.RFC3339))
+	}
+	m.record.OwnerInstanceID = newOwner
+	m.record.Generation++
+	m.record.ExpiresAt = now.Add(m.ttl)
+	m.record.UpdatedAt = now
+	return m.record, nil
 }
 
 func (m *MemoryManager) Current(_ context.Context) (Record, error) {

@@ -12,6 +12,7 @@ import (
 )
 
 type AutoScalingAPI interface {
+	CompleteLifecycleAction(ctx context.Context, params *autoscaling.CompleteLifecycleActionInput, optFns ...func(*autoscaling.Options)) (*autoscaling.CompleteLifecycleActionOutput, error)
 	DescribeAutoScalingGroups(ctx context.Context, params *autoscaling.DescribeAutoScalingGroupsInput, optFns ...func(*autoscaling.Options)) (*autoscaling.DescribeAutoScalingGroupsOutput, error)
 }
 
@@ -63,4 +64,33 @@ func (p *ASGProvider) DescribeASG(ctx context.Context, name string) (cloud.ASGIn
 		})
 	}
 	return info, nil
+}
+
+func (p *ASGProvider) CompleteLifecycleAction(ctx context.Context, action cloud.LifecycleAction) error {
+	if p.asg == nil {
+		return fmt.Errorf("autoscaling client is required")
+	}
+	if action.AutoScalingGroupName == "" {
+		return fmt.Errorf("autoscaling group name is required")
+	}
+	if action.LifecycleHookName == "" {
+		return fmt.Errorf("lifecycle hook name is required")
+	}
+	if action.InstanceID == "" {
+		return fmt.Errorf("instance id is required")
+	}
+	result := action.Result
+	if result == "" {
+		result = "CONTINUE"
+	}
+	_, err := p.asg.CompleteLifecycleAction(ctx, &autoscaling.CompleteLifecycleActionInput{
+		AutoScalingGroupName:  awssdk.String(action.AutoScalingGroupName),
+		LifecycleActionResult: awssdk.String(result),
+		LifecycleHookName:     awssdk.String(action.LifecycleHookName),
+		InstanceId:            awssdk.String(action.InstanceID),
+	})
+	if err != nil {
+		return fmt.Errorf("aws autoscaling CompleteLifecycleAction: %w", err)
+	}
+	return nil
 }

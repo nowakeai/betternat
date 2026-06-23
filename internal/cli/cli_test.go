@@ -3,16 +3,21 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/nowakeai/betternat/internal/agentapi"
 	"github.com/nowakeai/betternat/internal/cloud"
 	"github.com/nowakeai/betternat/internal/config"
+	dynamodbcoord "github.com/nowakeai/betternat/internal/coordination/dynamodb"
 	"github.com/nowakeai/betternat/internal/datapath"
 	"github.com/nowakeai/betternat/internal/doctor"
 	"github.com/nowakeai/betternat/internal/iamcheck"
@@ -164,7 +169,7 @@ func TestRunDoctorLiveUsesFakeDependencies(t *testing.T) {
 
 func TestRunCostEstimate(t *testing.T) {
 	var out bytes.Buffer
-	err := run(context.Background(), []string{"cost", "estimate", "--gb", "10240", "--appliance-hourly", "0.05", "--appliances", "2"}, &out)
+	err := run(context.Background(), []string{"cost", "estimate", "--gb", "10240", "--node-hourly", "0.05", "--nodes", "2"}, &out)
 	if err != nil {
 		t.Fatalf("run cost estimate: %v", err)
 	}
@@ -183,7 +188,28 @@ func TestRunStatus(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 	var out bytes.Buffer
-	if err := run(context.Background(), []string{"status", "--config", configPath}, &out); err != nil {
+	if err := run(context.Background(), []string{"status", "--direct", "--config", configPath}, &out); err != nil {
+		t.Fatalf("run status: %v", err)
+	}
+	if !strings.Contains(out.String(), "prod-egress") {
+		t.Fatalf("missing gateway id: %s", out.String())
+	}
+	if !strings.Contains(out.String(), "loxilb") {
+		t.Fatalf("missing datapath: %s", out.String())
+	}
+	if strings.ContainsAny(out.String(), "┌┬┐└┴┘│├┼┤─") {
+		t.Fatalf("status table should not render box borders: %s", out.String())
+	}
+}
+
+func TestRunStatusJSON(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "agent.json")
+	if err := os.WriteFile(configPath, []byte(validConfigJSON()), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	var out bytes.Buffer
+	if err := run(context.Background(), []string{"status", "--direct", "--config", configPath, "--output", "json", "--sample", "0s"}, &out); err != nil {
 		t.Fatalf("run status: %v", err)
 	}
 	if !strings.Contains(out.String(), `"gateway_id":"prod-egress"`) {
@@ -191,6 +217,319 @@ func TestRunStatus(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), `"metrics_addr":"0.0.0.0:9108"`) {
 		t.Fatalf("missing metrics addr: %s", out.String())
+	}
+}
+
+func TestRunStatusUsesDefaultConfigPath(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "agent.json")
+	if err := os.WriteFile(configPath, []byte(validConfigJSON()), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	restore := defaultConfigPath
+	defaultConfigPath = configPath
+	defer func() { defaultConfigPath = restore }()
+
+	var out bytes.Buffer
+	if err := run(context.Background(), []string{"status", "--direct", "--output", "json", "--sample", "0s"}, &out); err != nil {
+		t.Fatalf("run status: %v", err)
+	}
+	if !strings.Contains(out.String(), `"gateway_id":"prod-egress"`) {
+		t.Fatalf("missing gateway id: %s", out.String())
+	}
+}
+
+func TestRunStatusUsesRegistryWhenConfigured(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "agent.json")
+	raw := strings.Replace(validConfigJSON(), `"observability": {}`, `"coordination":{"backend":"dynamodb","table":"coordination"},"observability": {}`, 1)
+	if err := os.WriteFile(configPath, []byte(raw), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	restoreRegistry := newStatusRegistry
+	restoreResolveInstance := resolveLocalInstanceID
+	defer func() {
+		newStatusRegistry = restoreRegistry
+		resolveLocalInstanceID = restoreResolveInstance
+	}()
+	newStatusRegistry = func(context.Context, config.Config) (statusRegistry, error) {
+		return fakeStatusRegistry{}, nil
+	}
+	resolveLocalInstanceID = func(context.Context, string) (string, error) {
+		return "", nil
+	}
+
+	var out bytes.Buffer
+	if err := run(context.Background(), []string{"status", "--direct", "--config", configPath, "--output", "json", "--sample", "0s"}, &out); err != nil {
+		t.Fatalf("run status: %v", err)
+	}
+	body := out.String()
+	if !strings.Contains(body, `"instance_count":2`) {
+		t.Fatalf("missing registry instances: %s", body)
+	}
+	if !strings.Contains(body, `"node_id":"i-active","role":"active"`) {
+		t.Fatalf("missing active registry row: %s", body)
+	}
+	if !strings.Contains(body, `"version":"v-registry"`) {
+		t.Fatalf("missing registry version: %s", body)
+	}
+	if !strings.Contains(body, `"public_ip":"35.85.131.212"`) {
+		t.Fatalf("missing active public ip: %s", body)
+	}
+}
+
+func TestRunStatusUsesDaemonByDefault(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != agentapi.StatusPath {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		_ = json.NewEncoder(w).Encode(agentapi.StatusResponse{
+			SchemaVersion:   "v1",
+			GatewayID:       "prod-egress",
+			HAGroupID:       "prod-egress-a",
+			Region:          "us-west-2",
+			Datapath:        "loxilb",
+			MetricsAddr:     "0.0.0.0:9108",
+			RouteTarget:     "i-active",
+			LeaseGeneration: 7,
+			LeaseExpiresIn:  8.5,
+			InstanceCount:   1,
+			Instances: []agentapi.StatusInstance{{
+				NodeID:     "i-active",
+				Role:       "active",
+				ControlURL: "http://10.0.1.10:9109",
+				Version:    "v-test",
+				Metrics:    "ok",
+				Fresh:      true,
+				AgeSeconds: 1.2,
+			}},
+			Cache: agentapi.CacheInfo{Mode: "cached", Fresh: true},
+		})
+	}))
+	defer server.Close()
+
+	var out bytes.Buffer
+	if err := run(context.Background(), []string{"status", "--host", server.URL, "--output", "json"}, &out); err != nil {
+		t.Fatalf("run status: %v", err)
+	}
+	body := out.String()
+	if !strings.Contains(body, `"schema_version":"v1"`) {
+		t.Fatalf("missing daemon schema: %s", body)
+	}
+	if !strings.Contains(body, `"node_id":"i-active"`) {
+		t.Fatalf("missing daemon node: %s", body)
+	}
+	if !strings.Contains(body, `"lease_generation":7`) {
+		t.Fatalf("missing lease generation: %s", body)
+	}
+	if !strings.Contains(body, `"cache_mode":"cached"`) {
+		t.Fatalf("missing cache mode: %s", body)
+	}
+	if !strings.Contains(body, `"control_url":"http://10.0.1.10:9109"`) {
+		t.Fatalf("missing control url: %s", body)
+	}
+}
+
+func TestRunStatusWatchUsesDaemonUntilContextCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var calls int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != agentapi.StatusPath {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		call := atomic.AddInt32(&calls, 1)
+		_ = json.NewEncoder(w).Encode(agentapi.StatusResponse{
+			SchemaVersion: "v1",
+			GatewayID:     "prod-egress",
+			HAGroupID:     "prod-egress-a",
+			Region:        "us-west-2",
+			Datapath:      "loxilb",
+			MetricsAddr:   "0.0.0.0:9108",
+			InstanceCount: 1,
+			Instances: []agentapi.StatusInstance{{
+				NodeID:  "i-active",
+				Role:    "active",
+				Version: "v-test",
+				Metrics: "ok",
+			}},
+			Cache: agentapi.CacheInfo{Mode: "cached", Fresh: true},
+		})
+		if call >= 3 {
+			go cancel()
+		}
+	}))
+	defer server.Close()
+
+	var out bytes.Buffer
+	if err := run(ctx, []string{"status", "--watch", "--interval", "1ms", "--host", server.URL, "--output", "json"}, &out); err != nil {
+		t.Fatalf("run status watch: %v", err)
+	}
+	if atomic.LoadInt32(&calls) < 2 {
+		t.Fatalf("expected repeated status requests, got %d", calls)
+	}
+	if strings.Count(out.String(), `"schema_version":"v1"`) < 2 {
+		t.Fatalf("expected repeated json output: %s", out.String())
+	}
+}
+
+func TestRunHandoverStartUsesDaemon(t *testing.T) {
+	var sawPost bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != agentapi.HandoverPath {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		if r.Method != http.MethodPost {
+			t.Fatalf("unexpected method %s", r.Method)
+		}
+		sawPost = true
+		_ = json.NewEncoder(w).Encode(agentapi.HandoverResponse{
+			SchemaVersion:   "v1",
+			Status:          "completed",
+			SourceNodeID:    "i-active",
+			TargetNodeID:    "i-standby",
+			LeaseGeneration: 2,
+		})
+	}))
+	defer server.Close()
+
+	var out bytes.Buffer
+	if err := run(context.Background(), []string{"handover", "start", "--host", server.URL, "--to", "i-standby", "--output", "json"}, &out); err != nil {
+		t.Fatalf("run handover start: %v", err)
+	}
+	if !sawPost {
+		t.Fatal("daemon was not called")
+	}
+	if !strings.Contains(out.String(), `"status":"completed"`) {
+		t.Fatalf("missing completion response: %s", out.String())
+	}
+}
+
+func TestRunHandoverStartReturnsDaemonRejection(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(agentapi.HandoverResponse{
+			SchemaVersion: "v1",
+			Status:        "rejected",
+			Error:         "local daemon is not the active route target",
+		})
+	}))
+	defer server.Close()
+
+	var out bytes.Buffer
+	err := run(context.Background(), []string{"handover", "start", "--host", server.URL, "--to", "i-standby"}, &out)
+	if err == nil {
+		t.Fatal("expected handover rejection")
+	}
+	if !strings.Contains(err.Error(), "not the active") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunHandoverHistoryUsesCoordinationRecords(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "agent.json")
+	raw := strings.Replace(validConfigJSON(), `"observability": {}`, `"coordination":{"backend":"dynamodb","table":"coordination"},"observability": {}`, 1)
+	if err := os.WriteFile(configPath, []byte(raw), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	restore := newHandoverStoreReader
+	defer func() { newHandoverStoreReader = restore }()
+	newHandoverStoreReader = func(context.Context, config.Config) (handoverStoreReader, error) {
+		return fakeHandoverReader{records: []dynamodbcoord.HandoverRecord{
+			{
+				RequestID:       "old",
+				Status:          "failed",
+				SourceNodeID:    "i-old",
+				TargetNodeID:    "i-standby",
+				LeaseGeneration: 1,
+				UpdatedAt:       time.Unix(100, 0),
+			},
+			{
+				RequestID:       "new",
+				Status:          "completed",
+				SourceNodeID:    "i-active",
+				TargetNodeID:    "i-standby",
+				LeaseGeneration: 2,
+				UpdatedAt:       time.Unix(200, 0),
+			},
+		}}, nil
+	}
+
+	var out bytes.Buffer
+	if err := run(context.Background(), []string{"handover", "history", "--config", configPath, "--status", "completed", "--output", "json"}, &out); err != nil {
+		t.Fatalf("run handover history: %v", err)
+	}
+	body := out.String()
+	if !strings.Contains(body, `"request_id":"new"`) || strings.Contains(body, `"request_id":"old"`) {
+		t.Fatalf("unexpected history output: %s", body)
+	}
+	if !strings.Contains(body, `"source_node_id":"i-active"`) {
+		t.Fatalf("missing source node: %s", body)
+	}
+}
+
+func TestRunHandoverHistoryDefaultsToTable(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "agent.json")
+	raw := strings.Replace(validConfigJSON(), `"observability": {}`, `"coordination":{"backend":"dynamodb","table":"coordination"},"observability": {}`, 1)
+	if err := os.WriteFile(configPath, []byte(raw), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	restore := newHandoverStoreReader
+	defer func() { newHandoverStoreReader = restore }()
+	newHandoverStoreReader = func(context.Context, config.Config) (handoverStoreReader, error) {
+		return fakeHandoverReader{records: []dynamodbcoord.HandoverRecord{{
+			RequestID:       "req-1",
+			Status:          "completed",
+			SourceNodeID:    "i-active",
+			TargetNodeID:    "i-standby",
+			LeaseGeneration: 2,
+			UpdatedAt:       time.Unix(200, 0),
+		}}}, nil
+	}
+
+	var out bytes.Buffer
+	if err := run(context.Background(), []string{"handover", "history", "--config", configPath}, &out); err != nil {
+		t.Fatalf("run handover history: %v", err)
+	}
+	body := out.String()
+	if strings.Contains(body, `"records"`) {
+		t.Fatalf("expected table output, got json: %s", body)
+	}
+	for _, want := range []string{"REQUEST", "STATUS", "req-1", "completed", "i-active", "i-standby"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("missing %q in table output: %s", want, body)
+		}
+	}
+}
+
+func TestRunHandoverInspectUsesCoordinationRecord(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "agent.json")
+	raw := strings.Replace(validConfigJSON(), `"observability": {}`, `"coordination":{"backend":"dynamodb","table":"coordination"},"observability": {}`, 1)
+	if err := os.WriteFile(configPath, []byte(raw), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	restore := newHandoverStoreReader
+	defer func() { newHandoverStoreReader = restore }()
+	newHandoverStoreReader = func(context.Context, config.Config) (handoverStoreReader, error) {
+		return fakeHandoverReader{records: []dynamodbcoord.HandoverRecord{{
+			RequestID:       "req-1",
+			Status:          "completed",
+			SourceNodeID:    "i-active",
+			TargetNodeID:    "i-standby",
+			LeaseGeneration: 2,
+			Message:         "handover completed",
+		}}}, nil
+	}
+
+	var out bytes.Buffer
+	if err := run(context.Background(), []string{"handover", "inspect", "handover#req-1", "--config", configPath, "--output", "json"}, &out); err != nil {
+		t.Fatalf("run handover inspect: %v", err)
+	}
+	if !strings.Contains(out.String(), `"request_id":"req-1"`) || !strings.Contains(out.String(), `"message":"handover completed"`) {
+		t.Fatalf("unexpected inspect output: %s", out.String())
 	}
 }
 
@@ -204,11 +543,26 @@ func TestRunDatapathStatus(t *testing.T) {
 	if err := run(context.Background(), []string{"datapath", "status", "--config", configPath}, &out); err != nil {
 		t.Fatalf("run datapath status: %v", err)
 	}
-	if !strings.Contains(out.String(), `"engine":"loxilb"`) {
+	if !strings.Contains(out.String(), "loxilb") {
 		t.Fatalf("missing datapath engine: %s", out.String())
 	}
+	if strings.Contains(out.String(), "fallback") {
+		t.Fatalf("fallback should be hidden in table output: %s", out.String())
+	}
+}
+
+func TestRunDatapathStatusJSONIncludesFallback(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "agent.json")
+	if err := os.WriteFile(configPath, []byte(validConfigJSON()), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	var out bytes.Buffer
+	if err := run(context.Background(), []string{"datapath", "status", "--config", configPath, "--output", "json"}, &out); err != nil {
+		t.Fatalf("run datapath status: %v", err)
+	}
 	if !strings.Contains(out.String(), `"fallback_engine":"nftables"`) {
-		t.Fatalf("missing fallback engine: %s", out.String())
+		t.Fatalf("missing fallback engine in json output: %s", out.String())
 	}
 }
 
@@ -257,7 +611,7 @@ func TestRunFailoverStatus(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 	var out bytes.Buffer
-	if err := run(context.Background(), []string{"failover", "status", "--config", configPath}, &out); err != nil {
+	if err := run(context.Background(), []string{"failover", "status", "--config", configPath, "--output", "json"}, &out); err != nil {
 		t.Fatalf("run failover status: %v", err)
 	}
 	if !strings.Contains(out.String(), `"enabled":true`) {
@@ -277,6 +631,36 @@ func TestRunFailoverStatus(t *testing.T) {
 type fakeReadinessEngine struct {
 	status   datapath.Status
 	counters datapath.Counters
+}
+
+type fakeStatusRegistry struct{}
+
+type fakeHandoverReader struct {
+	records []dynamodbcoord.HandoverRecord
+}
+
+func (f fakeHandoverReader) GetHandover(_ context.Context, requestID string) (dynamodbcoord.HandoverRecord, error) {
+	for _, record := range f.records {
+		if record.RequestID == requestID {
+			return record, nil
+		}
+	}
+	return dynamodbcoord.HandoverRecord{}, os.ErrNotExist
+}
+
+func (f fakeHandoverReader) ListHandovers(context.Context) ([]dynamodbcoord.HandoverRecord, error) {
+	return append([]dynamodbcoord.HandoverRecord(nil), f.records...), nil
+}
+
+func (fakeStatusRegistry) Current(context.Context) (lease.Record, error) {
+	return lease.Record{HAGroupID: "prod-egress-a", OwnerInstanceID: "i-active", Generation: 3}, nil
+}
+
+func (fakeStatusRegistry) ListAgents(context.Context) ([]dynamodbcoord.AgentRecord, error) {
+	return []dynamodbcoord.AgentRecord{
+		{NodeID: "i-active", PrivateIP: "10.0.1.10", PublicIP: "35.85.131.212", Version: "v-registry", DatapathReady: true, HAState: "active"},
+		{NodeID: "i-standby", PrivateIP: "10.0.1.11", Version: "v-registry", DatapathReady: true, HAState: "standby"},
+	}, nil
 }
 
 func (f fakeReadinessEngine) Name() string { return "fake" }
@@ -316,7 +700,11 @@ func (fakeLiveCloud) DescribePublicIdentity(context.Context, string) (cloud.Publ
 }
 
 func (fakeLiveCloud) DescribeInstance(context.Context, string) (cloud.InstanceInfo, error) {
-	return cloud.InstanceInfo{InstanceID: "i-active", SourceDestCheckEnabled: false}, nil
+	return cloud.InstanceInfo{InstanceID: "i-active", SourceDestCheckEnabled: false, PrivateIP: "10.0.1.10", PublicIP: "35.85.131.212"}, nil
+}
+
+func (fakeLiveCloud) SourceDestCheckEnabled(context.Context, string) (bool, error) {
+	return false, nil
 }
 
 type fakeASGInspector struct{}

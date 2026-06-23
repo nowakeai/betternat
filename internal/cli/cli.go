@@ -7,12 +7,17 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
+
+	"github.com/jedib0t/go-pretty/v6/table"
+	"github.com/spf13/cobra"
 
 	"github.com/nowakeai/betternat/internal/buildinfo"
 	"github.com/nowakeai/betternat/internal/cloud"
 	awscloud "github.com/nowakeai/betternat/internal/cloud/aws"
 	"github.com/nowakeai/betternat/internal/config"
+	dynamodbcoord "github.com/nowakeai/betternat/internal/coordination/dynamodb"
 	"github.com/nowakeai/betternat/internal/cost"
 	"github.com/nowakeai/betternat/internal/datapath"
 	"github.com/nowakeai/betternat/internal/datapath/loxilb"
@@ -24,17 +29,7 @@ import (
 	"github.com/nowakeai/betternat/internal/probe"
 )
 
-const usage = `BetterNAT CLI
-
-Usage:
-  betternat doctor [--live] --config <path>
-  betternat cost estimate --gb <processed-gb>
-  betternat status --config <path>
-  betternat datapath status --config <path>
-  betternat datapath ready --config <path>
-  betternat failover status --config <path>
-  betternat version
-`
+var defaultConfigPath = "/etc/betternat/agent.json"
 
 // Run executes the user-facing BetterNAT CLI.
 func Run(ctx context.Context, args []string) error {
@@ -42,31 +37,142 @@ func Run(ctx context.Context, args []string) error {
 }
 
 func run(ctx context.Context, args []string, out io.Writer) error {
-	if len(args) == 0 {
-		_, _ = fmt.Fprint(out, usage)
-		return nil
-	}
+	cmd := newRootCommand(ctx, out)
+	cmd.SetArgs(args)
+	return cmd.Execute()
+}
 
-	switch args[0] {
-	case "version":
-		_, _ = fmt.Fprintln(out, buildinfo.Current("betternat").String())
-		return nil
-	case "doctor":
-		return runDoctor(args[1:], out)
-	case "cost":
-		return runCost(args[1:], out)
-	case "status":
-		return runStatus(args[1:], out)
-	case "datapath":
-		return runDatapath(ctx, args[1:], out)
-	case "failover":
-		return runFailover(args[1:], out)
-	case "help", "-h", "--help":
-		_, _ = fmt.Fprint(out, usage)
-		return nil
-	default:
-		return fmt.Errorf("unknown command %q", args[0])
+func newRootCommand(ctx context.Context, out io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:           "betternat",
+		Short:         "Operate a BetterNAT gateway",
+		SilenceUsage:  true,
+		SilenceErrors: true,
 	}
+	cmd.SetOut(out)
+	cmd.SetErr(out)
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "version",
+		Short: "Print the BetterNAT CLI version",
+		RunE: func(*cobra.Command, []string) error {
+			_, _ = fmt.Fprintln(out, buildinfo.Current("betternat").String())
+			return nil
+		},
+	})
+	cmd.AddCommand(newDoctorCommand(out))
+	cmd.AddCommand(newStatusCommand(ctx, out))
+	cmd.AddCommand(newCostCommand(out))
+	cmd.AddCommand(newDatapathCommand(ctx, out))
+	cmd.AddCommand(newFailoverCommand(out))
+	cmd.AddCommand(newHandoverCommand(ctx, out))
+	return cmd
+}
+
+func newDoctorCommand(out io.Writer) *cobra.Command {
+	opts := doctorOptions{configPath: defaultConfigPath}
+	cmd := &cobra.Command{
+		Use:   "doctor",
+		Short: "Run static or live gateway diagnostics",
+		RunE: func(*cobra.Command, []string) error {
+			args := []string{"--config", opts.configPath}
+			if opts.live {
+				args = append(args, "--live")
+			}
+			return runDoctor(args, out)
+		},
+	}
+	cmd.Flags().StringVar(&opts.configPath, "config", opts.configPath, "agent config path")
+	cmd.Flags().BoolVar(&opts.live, "live", opts.live, "include live AWS, datapath, lease, and metrics checks")
+	return cmd
+}
+
+func newCostCommand(out io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "cost",
+		Short: "Estimate BetterNAT cost savings",
+	}
+	input := cost.DefaultInput()
+	estimate := &cobra.Command{
+		Use:   "estimate",
+		Short: "Estimate monthly NAT Gateway replacement savings",
+		RunE: func(_ *cobra.Command, args []string) error {
+			estimate, err := cost.EstimateMonthly(input)
+			if err != nil {
+				return err
+			}
+			return json.NewEncoder(out).Encode(estimate)
+		},
+	}
+	estimate.Flags().Float64Var(&input.ProcessedGB, "gb", input.ProcessedGB, "monthly processed GB")
+	estimate.Flags().Float64Var(&input.Hours, "hours", input.Hours, "monthly gateway hours")
+	estimate.Flags().Float64Var(&input.NATGatewayHourlyUSD, "nat-gateway-hourly", input.NATGatewayHourlyUSD, "NAT Gateway hourly price in USD")
+	estimate.Flags().Float64Var(&input.NATGatewayProcessingUSDGB, "nat-gateway-processing-per-gb", input.NATGatewayProcessingUSDGB, "NAT Gateway processing price per GB in USD")
+	estimate.Flags().Float64Var(&input.NodeHourlyUSD, "node-hourly", input.NodeHourlyUSD, "BetterNAT node hourly price in USD")
+	estimate.Flags().IntVar(&input.NodeCount, "nodes", input.NodeCount, "BetterNAT node count")
+	estimate.Flags().Float64Var(&input.NodeHourlyUSD, "appliance-hourly", input.NodeHourlyUSD, "deprecated alias for --node-hourly")
+	estimate.Flags().IntVar(&input.NodeCount, "appliances", input.NodeCount, "deprecated alias for --nodes")
+	_ = estimate.Flags().MarkHidden("appliance-hourly")
+	_ = estimate.Flags().MarkHidden("appliances")
+	cmd.AddCommand(estimate)
+	return cmd
+}
+
+func newDatapathCommand(ctx context.Context, out io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "datapath",
+		Short: "Inspect datapath configuration and readiness",
+	}
+	cmd.AddCommand(newDatapathStatusCommand(ctx, out))
+	cmd.AddCommand(newDatapathReadyCommand(ctx, out))
+	return cmd
+}
+
+func newDatapathStatusCommand(ctx context.Context, out io.Writer) *cobra.Command {
+	opts := configOutputOptions{configPath: defaultConfigPath, output: outputTable}
+	cmd := &cobra.Command{
+		Use:   "status",
+		Short: "Show configured datapath state",
+		RunE: func(*cobra.Command, []string) error {
+			return runDatapath(ctx, []string{"status", "--config", opts.configPath, "--output", string(opts.output)}, out)
+		},
+	}
+	cmd.Flags().StringVar(&opts.configPath, "config", opts.configPath, "agent config path")
+	cmd.Flags().VarP((*outputFlag)(&opts.output), "output", "o", "output format: table or json")
+	return cmd
+}
+
+func newDatapathReadyCommand(ctx context.Context, out io.Writer) *cobra.Command {
+	opts := configOutputOptions{configPath: defaultConfigPath, output: outputJSON}
+	cmd := &cobra.Command{
+		Use:   "ready",
+		Short: "Check live datapath readiness",
+		RunE: func(*cobra.Command, []string) error {
+			return runDatapath(ctx, []string{"ready", "--config", opts.configPath, "--output", string(opts.output)}, out)
+		},
+	}
+	cmd.Flags().StringVar(&opts.configPath, "config", opts.configPath, "agent config path")
+	cmd.Flags().VarP((*outputFlag)(&opts.output), "output", "o", "output format: table or json")
+	return cmd
+}
+
+func newFailoverCommand(out io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "failover",
+		Short: "Inspect failover configuration",
+	}
+	opts := configOutputOptions{configPath: defaultConfigPath, output: outputTable}
+	status := &cobra.Command{
+		Use:   "status",
+		Short: "Show failover configuration",
+		RunE: func(*cobra.Command, []string) error {
+			return runFailover([]string{"status", "--config", opts.configPath, "--output", string(opts.output)}, out)
+		},
+	}
+	status.Flags().StringVar(&opts.configPath, "config", opts.configPath, "agent config path")
+	status.Flags().VarP((*outputFlag)(&opts.output), "output", "o", "output format: table or json")
+	cmd.AddCommand(status)
+	return cmd
 }
 
 type failoverStatusOutput struct {
@@ -88,15 +194,15 @@ func runFailover(args []string, out io.Writer) error {
 	if len(args) == 0 || args[0] != "status" {
 		return fmt.Errorf("failover requires subcommand status")
 	}
-	configPath, err := parseConfigPath(args[1:])
+	opts, err := parseConfigOutputArgs(args[1:])
 	if err != nil {
 		return err
 	}
-	cfg, err := config.LoadFile(configPath)
+	cfg, err := config.LoadFile(opts.configPath)
 	if err != nil {
 		return err
 	}
-	return json.NewEncoder(out).Encode(failoverStatusOutput{
+	status := failoverStatusOutput{
 		Enabled:              cfg.HA.Enabled,
 		LeaseBackend:         cfg.HA.Lease.Backend,
 		LeaseTable:           cfg.HA.Lease.Table,
@@ -109,45 +215,12 @@ func runFailover(args []string, out io.Writer) error {
 		StableEgressIPLikely: cfg.HA.PublicIdentity.Mode == "shared_eip" && cfg.HA.PublicIdentity.AllocationID != "",
 		OutboundProbeEnabled: cfg.Observability.OutboundProbe.Enabled,
 		OutboundProbeURL:     cfg.Observability.OutboundProbe.URL,
-	})
-}
-
-type statusOutput struct {
-	GatewayID   string `json:"gateway_id"`
-	HAGroupID   string `json:"ha_group_id"`
-	Cloud       string `json:"cloud"`
-	Region      string `json:"region"`
-	HAEnabled   bool   `json:"ha_enabled"`
-	Datapath    string `json:"datapath"`
-	MetricsAddr string `json:"metrics_addr"`
-}
-
-func runStatus(args []string, out io.Writer) error {
-	configPath, err := parseConfigPath(args)
-	if err != nil {
-		return err
 	}
-	cfg, err := config.LoadFile(configPath)
-	if err != nil {
-		return err
+	if opts.output == outputJSON {
+		return json.NewEncoder(out).Encode(status)
 	}
-	addr := cfg.Observability.Prometheus.ListenAddress
-	if addr == "" {
-		addr = "0.0.0.0"
-	}
-	port := cfg.Observability.Prometheus.ListenPort
-	if port == 0 {
-		port = 9108
-	}
-	return json.NewEncoder(out).Encode(statusOutput{
-		GatewayID:   cfg.GatewayID,
-		HAGroupID:   cfg.HAGroupID,
-		Cloud:       cfg.Cloud,
-		Region:      cfg.Region,
-		HAEnabled:   cfg.HA.Enabled,
-		Datapath:    cfg.Datapath.Engine,
-		MetricsAddr: fmt.Sprintf("%s:%d", addr, port),
-	})
+	renderFailoverStatusTable(out, status)
+	return nil
 }
 
 type datapathStatusOutput struct {
@@ -171,23 +244,28 @@ func runDatapath(ctx context.Context, args []string, out io.Writer) error {
 	if len(args) == 0 {
 		return fmt.Errorf("datapath requires subcommand status or ready")
 	}
-	configPath, err := parseConfigPath(args[1:])
+	opts, err := parseConfigOutputArgs(args[1:])
 	if err != nil {
 		return err
 	}
-	cfg, err := config.LoadFile(configPath)
+	cfg, err := config.LoadFile(opts.configPath)
 	if err != nil {
 		return err
 	}
 	switch args[0] {
 	case "status":
-		return json.NewEncoder(out).Encode(datapathStatusOutput{
+		status := datapathStatusOutput{
 			Engine:         cfg.Datapath.Engine,
 			FallbackEngine: cfg.Datapath.FallbackEngine,
 			PrivateCIDRs:   cfg.Datapath.PrivateCIDRs,
 			LoxiLBSNATTo:   cfg.Datapath.LoxiLB.SNATTo,
 			SNATInterface:  cfg.Datapath.LoxiLB.SNATInterface,
-		})
+		}
+		if opts.output == outputJSON {
+			return json.NewEncoder(out).Encode(status)
+		}
+		renderDatapathStatusTable(out, status)
+		return nil
 	case "ready":
 		engine, err := newDatapathEngine(cfg.Datapath)
 		if err != nil {
@@ -272,8 +350,10 @@ func runCost(args []string, out io.Writer) error {
 	flags.Float64Var(&input.Hours, "hours", input.Hours, "monthly gateway hours")
 	flags.Float64Var(&input.NATGatewayHourlyUSD, "nat-gateway-hourly", input.NATGatewayHourlyUSD, "NAT Gateway hourly price in USD")
 	flags.Float64Var(&input.NATGatewayProcessingUSDGB, "nat-gateway-processing-per-gb", input.NATGatewayProcessingUSDGB, "NAT Gateway processing price per GB in USD")
-	flags.Float64Var(&input.ApplianceHourlyUSD, "appliance-hourly", input.ApplianceHourlyUSD, "BetterNAT appliance hourly price in USD")
-	flags.IntVar(&input.ApplianceCount, "appliances", input.ApplianceCount, "BetterNAT appliance count")
+	flags.Float64Var(&input.NodeHourlyUSD, "node-hourly", input.NodeHourlyUSD, "BetterNAT node hourly price in USD")
+	flags.IntVar(&input.NodeCount, "nodes", input.NodeCount, "BetterNAT node count")
+	flags.Float64Var(&input.NodeHourlyUSD, "appliance-hourly", input.NodeHourlyUSD, "deprecated alias for --node-hourly")
+	flags.IntVar(&input.NodeCount, "appliances", input.NodeCount, "deprecated alias for --nodes")
 	if err := flags.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -327,7 +407,7 @@ type doctorOptions struct {
 }
 
 func parseDoctorArgs(args []string) (doctorOptions, error) {
-	opts := doctorOptions{}
+	opts := doctorOptions{configPath: defaultConfigPath}
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--config":
@@ -342,15 +422,13 @@ func parseDoctorArgs(args []string) (doctorOptions, error) {
 			return doctorOptions{}, fmt.Errorf("unknown doctor argument %q", args[i])
 		}
 	}
-	if opts.configPath == "" {
-		return doctorOptions{}, fmt.Errorf("--config <path> is required")
-	}
 	return opts, nil
 }
 
 type liveCloudProvider interface {
 	cloud.Provider
 	doctor.InstanceInspector
+	doctor.SourceDestCheckInspector
 }
 
 var (
@@ -384,7 +462,7 @@ func liveDoctorCheckers(ctx context.Context, cfg config.Config) ([]doctor.Checke
 	}
 	checkers := []doctor.Checker{doctor.DatapathChecker{Engine: engine}}
 
-	localInstanceID := cfg.Local.InstanceID
+	localInstanceID := cfg.Local.NodeID
 	if localInstanceID == "auto" {
 		localInstanceID, err = resolveLocalInstanceID(ctx, cfg.Region)
 		if err != nil {
@@ -415,7 +493,9 @@ func liveDoctorCheckers(ctx context.Context, cfg config.Config) ([]doctor.Checke
 		}
 	}
 
-	if cfg.Local.AvailabilityZone == "" || cfg.Local.AvailabilityZone == "auto" {
+	if cfg.Coordination.Table != "" {
+		checkers = append(checkers, doctor.StaticWarningChecker{Name: "asg", Message: "ASG discovery skipped because coordination registry is configured; use betternat status for fleet health"})
+	} else if cfg.Local.AvailabilityZone == "" || cfg.Local.AvailabilityZone == "auto" {
 		checkers = append(checkers, doctor.StaticWarningChecker{Name: "asg", Message: "local availability zone is not resolved"})
 	} else {
 		asgInspector, err := newLiveASGInspector(ctx, cfg.Region)
@@ -431,8 +511,8 @@ func liveDoctorCheckers(ctx context.Context, cfg config.Config) ([]doctor.Checke
 	}
 
 	expectedOwner := ""
-	if cfg.HA.Enabled && cfg.HA.Lease.Backend == "dynamodb" && cfg.HA.Lease.Table != "" {
-		leaseManager, err := newLiveLeaseManager(ctx, cfg.Region, cfg.HA.Lease.Table, doctorLeaseKey(cfg), doctorLeaseTTL(cfg))
+	if cfg.HA.Enabled && cfg.HA.Lease.Backend == "dynamodb" && doctorLeaseTable(cfg) != "" {
+		leaseManager, err := liveDoctorLeaseManager(ctx, cfg)
 		if err != nil {
 			checkers = append(checkers, doctor.StaticErrorChecker{Name: "lease_setup", Message: err.Error()})
 		} else {
@@ -517,6 +597,20 @@ func doctorLeaseKey(cfg config.Config) string {
 	return cfg.HAGroupID
 }
 
+func doctorLeaseTable(cfg config.Config) string {
+	if cfg.Coordination.Table != "" {
+		return cfg.Coordination.Table
+	}
+	return cfg.HA.Lease.Table
+}
+
+func liveDoctorLeaseManager(ctx context.Context, cfg config.Config) (lease.Manager, error) {
+	if cfg.Coordination.Table != "" {
+		return dynamodbcoord.New(ctx, cfg.Region, cfg.Coordination.Table, doctorLeaseKey(cfg), doctorLeaseTTL(cfg))
+	}
+	return newLiveLeaseManager(ctx, cfg.Region, cfg.HA.Lease.Table, doctorLeaseKey(cfg), doctorLeaseTTL(cfg))
+}
+
 func doctorLeaseTTL(cfg config.Config) time.Duration {
 	if cfg.HA.Lease.TTLSeconds > 0 {
 		return time.Duration(cfg.HA.Lease.TTLSeconds) * time.Second
@@ -524,17 +618,89 @@ func doctorLeaseTTL(cfg config.Config) time.Duration {
 	return 15 * time.Second
 }
 
-func parseConfigPath(args []string) (string, error) {
+type outputFormat string
+
+const (
+	outputTable outputFormat = "table"
+	outputJSON  outputFormat = "json"
+)
+
+type configOutputOptions struct {
+	configPath string
+	output     outputFormat
+}
+
+func parseConfigOutputArgs(args []string) (configOutputOptions, error) {
+	opts := configOutputOptions{configPath: defaultConfigPath, output: outputTable}
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--config":
 			if i+1 >= len(args) {
-				return "", fmt.Errorf("--config requires a path")
+				return configOutputOptions{}, fmt.Errorf("--config requires a path")
 			}
-			return args[i+1], nil
+			opts.configPath = args[i+1]
+			i++
+		case "--output", "-o":
+			if i+1 >= len(args) {
+				return configOutputOptions{}, fmt.Errorf("--output requires table or json")
+			}
+			switch outputFormat(args[i+1]) {
+			case outputTable, outputJSON:
+				opts.output = outputFormat(args[i+1])
+			default:
+				return configOutputOptions{}, fmt.Errorf("unsupported output format %q", args[i+1])
+			}
+			i++
 		default:
-			return "", fmt.Errorf("unknown argument %q", args[i])
+			return configOutputOptions{}, fmt.Errorf("unknown argument %q", args[i])
 		}
 	}
-	return "", fmt.Errorf("--config <path> is required")
+	return opts, nil
+}
+
+func renderDatapathStatusTable(out io.Writer, status datapathStatusOutput) {
+	t := table.NewWriter()
+	t.SetOutputMirror(out)
+	t.SetStyle(table.StyleLight)
+	t.AppendHeader(table.Row{"Field", "Value"})
+	t.AppendRows([]table.Row{
+		{"Engine", valueOrUnknown(status.Engine)},
+		{"Private CIDRs", stringsJoin(status.PrivateCIDRs)},
+		{"SNAT interface", valueOrUnknown(status.SNATInterface)},
+		{"LoxiLB SNAT to", valueOrUnknown(status.LoxiLBSNATTo)},
+	})
+	t.Render()
+}
+
+func renderFailoverStatusTable(out io.Writer, status failoverStatusOutput) {
+	t := table.NewWriter()
+	t.SetOutputMirror(out)
+	t.SetStyle(table.StyleLight)
+	t.AppendHeader(table.Row{"Field", "Value"})
+	t.AppendRows([]table.Row{
+		{"Enabled", status.Enabled},
+		{"Lease backend", valueOrUnknown(status.LeaseBackend)},
+		{"Lease table", valueOrUnknown(status.LeaseTable)},
+		{"Route mode", valueOrUnknown(status.RouteFailoverMode)},
+		{"Route tables", stringsJoin(status.RouteTableIDs)},
+		{"Destination", valueOrUnknown(status.DestinationCIDR)},
+		{"Public identity", valueOrUnknown(status.PublicIdentityMode)},
+		{"Stable egress IP", status.StableEgressIPLikely},
+		{"Outbound probe", status.OutboundProbeEnabled},
+	})
+	t.Render()
+}
+
+func valueOrUnknown(value string) string {
+	if value == "" {
+		return "unknown"
+	}
+	return value
+}
+
+func stringsJoin(values []string) string {
+	if len(values) == 0 {
+		return "none"
+	}
+	return strings.Join(values, ", ")
 }

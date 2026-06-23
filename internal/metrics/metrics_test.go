@@ -20,7 +20,18 @@ func TestRenderPrometheus(t *testing.T) {
 		HAState:            "active",
 		HAStatusAgeSeconds: 1.5,
 		LeaseGeneration:    42,
-		Datapath:           datapath.Status{Ready: true, Engine: "loxilb"},
+		Interface: InterfaceStats{
+			Name:      "ens5",
+			RXBytes:   100,
+			RXPackets: 10,
+			RXErrors:  1,
+			RXDropped: 2,
+			TXBytes:   200,
+			TXPackets: 20,
+			TXErrors:  3,
+			TXDropped: 4,
+		},
+		Datapath: datapath.Status{Ready: true, Engine: "loxilb"},
 		Counters: datapath.Counters{
 			Rules: []datapath.RuleCounter{
 				{CIDR: "10.1.0.0/16", Packets: 20, Bytes: 2000},
@@ -58,6 +69,14 @@ func TestRenderPrometheus(t *testing.T) {
 	assertContains(t, text, `betternat_ha_status_age_seconds{gateway="gw\"one",ha_group="ha\\a",node="i-123"} 1.500000`)
 	assertContains(t, text, `betternat_ha_status_stale{gateway="gw\"one",ha_group="ha\\a",node="i-123"} 0`)
 	assertContains(t, text, `betternat_lease_generation{gateway="gw\"one",ha_group="ha\\a",node="i-123"} 42`)
+	assertContains(t, text, `betternat_interface_rx_bytes_total{gateway="gw\"one",ha_group="ha\\a",interface="ens5",node="i-123"} 100`)
+	assertContains(t, text, `betternat_interface_rx_packets_total{gateway="gw\"one",ha_group="ha\\a",interface="ens5",node="i-123"} 10`)
+	assertContains(t, text, `betternat_interface_rx_errors_total{gateway="gw\"one",ha_group="ha\\a",interface="ens5",node="i-123"} 1`)
+	assertContains(t, text, `betternat_interface_rx_dropped_total{gateway="gw\"one",ha_group="ha\\a",interface="ens5",node="i-123"} 2`)
+	assertContains(t, text, `betternat_interface_tx_bytes_total{gateway="gw\"one",ha_group="ha\\a",interface="ens5",node="i-123"} 200`)
+	assertContains(t, text, `betternat_interface_tx_packets_total{gateway="gw\"one",ha_group="ha\\a",interface="ens5",node="i-123"} 20`)
+	assertContains(t, text, `betternat_interface_tx_errors_total{gateway="gw\"one",ha_group="ha\\a",interface="ens5",node="i-123"} 3`)
+	assertContains(t, text, `betternat_interface_tx_dropped_total{gateway="gw\"one",ha_group="ha\\a",interface="ens5",node="i-123"} 4`)
 	assertContains(t, text, `betternat_datapath_engine_info{engine="loxilb",gateway="gw\"one",ha_group="ha\\a"} 1`)
 	assertContains(t, text, `betternat_conntrack_entries{engine="loxilb",gateway="gw\"one",ha_group="ha\\a"} 7`)
 	assertContains(t, text, `betternat_conntrack_established{engine="loxilb",gateway="gw\"one",ha_group="ha\\a",protocol="tcp"} 4`)

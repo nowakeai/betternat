@@ -43,6 +43,9 @@ func TestBuild(t *testing.T) {
 	if plan.LeaseTableName != "betternat-prod-egress-leases" {
 		t.Fatalf("unexpected lease table: %#v", plan)
 	}
+	if plan.CoordinationTableName != "betternat-prod-egress-coordination" {
+		t.Fatalf("unexpected coordination table: %#v", plan)
+	}
 	if len(plan.Pools) != 2 {
 		t.Fatalf("expected 2 pools, got %#v", plan.Pools)
 	}
@@ -72,6 +75,12 @@ func TestBuild(t *testing.T) {
 	}
 	if !containsString(plan.RequiredIAMActions, "ec2:ModifyInstanceAttribute") {
 		t.Fatalf("runtime policy must allow agent source/dest check self-disable: %#v", plan.RequiredIAMActions)
+	}
+	if !containsString(plan.RequiredIAMActions, "autoscaling:CompleteLifecycleAction") {
+		t.Fatalf("runtime policy must allow lifecycle hook completion: %#v", plan.RequiredIAMActions)
+	}
+	if !containsString(plan.RequiredIAMActions, "dynamodb:Query") {
+		t.Fatalf("runtime policy must allow registry query: %#v", plan.RequiredIAMActions)
 	}
 }
 

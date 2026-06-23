@@ -13,6 +13,8 @@ type GatewaySpec struct {
 	PrivateCIDRs  []string
 	Datapath      DatapathSpec
 	HA            HASpec
+	Coordination  CoordinationSpec
+	Control       ControlSpec
 	Observability ObservabilitySpec
 }
 
@@ -37,6 +39,21 @@ type HASpec struct {
 	RouteTargetType       string
 }
 
+type CoordinationSpec struct {
+	Backend                        string
+	Table                          string
+	RegistryRefreshIntervalSeconds int
+	RegistryTTLSeconds             int
+	HandoverTTLSeconds             int
+}
+
+type ControlSpec struct {
+	PeerAPIEnabled       bool
+	PeerAPIListenAddress string
+	PeerAPIListenPort    int
+	PeerAPIAuthToken     string
+}
+
 type ObservabilitySpec struct {
 	PrometheusListenAddress string
 	PrometheusListenPort    int
@@ -44,7 +61,7 @@ type ObservabilitySpec struct {
 	OutboundProbeExpectedIP string
 }
 
-type ApplianceSpec struct {
+type NodeSpec struct {
 	HAGroupID            string
 	InstanceID           string
 	AvailabilityZone     string
@@ -53,7 +70,7 @@ type ApplianceSpec struct {
 	RouteDestinationCIDR string
 }
 
-func RenderAgentConfig(gateway GatewaySpec, appliance ApplianceSpec) (config.Config, error) {
+func RenderAgentConfig(gateway GatewaySpec, node NodeSpec) (config.Config, error) {
 	if gateway.Name == "" {
 		return config.Config{}, fmt.Errorf("gateway name is required")
 	}
@@ -63,17 +80,17 @@ func RenderAgentConfig(gateway GatewaySpec, appliance ApplianceSpec) (config.Con
 	if gateway.Region == "" {
 		return config.Config{}, fmt.Errorf("region is required")
 	}
-	if appliance.HAGroupID == "" {
-		return config.Config{}, fmt.Errorf("appliance ha group id is required")
+	if node.HAGroupID == "" {
+		return config.Config{}, fmt.Errorf("node ha group id is required")
 	}
 
 	datapathEngine := defaultString(gateway.Datapath.Engine, "loxilb")
 	fallbackEngine := defaultString(gateway.Datapath.FallbackEngine, "nftables")
-	snatInterface := defaultString(gateway.Datapath.SNATInterface, appliance.PrimaryInterface)
+	snatInterface := defaultString(gateway.Datapath.SNATInterface, node.PrimaryInterface)
 	if snatInterface == "" {
 		return config.Config{}, fmt.Errorf("snat interface is required")
 	}
-	primaryInterface := defaultString(appliance.PrimaryInterface, snatInterface)
+	primaryInterface := defaultString(node.PrimaryInterface, snatInterface)
 
 	publicIdentity := config.PublicIdentityConfig{}
 	if gateway.HA.SharedEIPAllocationID != "" {
@@ -86,12 +103,12 @@ func RenderAgentConfig(gateway GatewaySpec, appliance ApplianceSpec) (config.Con
 	cfg := config.Config{
 		Version:   "v0",
 		GatewayID: gateway.Name,
-		HAGroupID: appliance.HAGroupID,
+		HAGroupID: node.HAGroupID,
 		Cloud:     gateway.Cloud,
 		Region:    gateway.Region,
 		Local: config.LocalConfig{
-			InstanceID:       defaultString(appliance.InstanceID, "auto"),
-			AvailabilityZone: defaultString(appliance.AvailabilityZone, "auto"),
+			NodeID:           defaultString(node.InstanceID, "auto"),
+			AvailabilityZone: defaultString(node.AvailabilityZone, "auto"),
 			PrimaryInterface: primaryInterface,
 		},
 		Datapath: config.DatapathConfig{
@@ -116,17 +133,32 @@ func RenderAgentConfig(gateway GatewaySpec, appliance ApplianceSpec) (config.Con
 			Lease: config.LeaseConfig{
 				Backend:              defaultString(gateway.HA.LeaseBackend, "dynamodb"),
 				Table:                gateway.HA.LeaseTable,
-				Key:                  appliance.HAGroupID,
+				Key:                  node.HAGroupID,
 				TTLSeconds:           defaultInt(gateway.HA.TTLSeconds, 10),
 				RenewIntervalSeconds: defaultInt(gateway.HA.RenewSeconds, 3),
 			},
 			RouteFailover: config.RouteFailoverConfig{
 				Mode:            defaultString(gateway.HA.RouteMode, "replace_route"),
-				RouteTableIDs:   append([]string(nil), appliance.RouteTableIDs...),
-				DestinationCIDR: defaultString(appliance.RouteDestinationCIDR, defaultString(gateway.HA.RouteDestinationCIDR, "0.0.0.0/0")),
+				RouteTableIDs:   append([]string(nil), node.RouteTableIDs...),
+				DestinationCIDR: defaultString(node.RouteDestinationCIDR, defaultString(gateway.HA.RouteDestinationCIDR, "0.0.0.0/0")),
 				TargetType:      defaultString(gateway.HA.RouteTargetType, "instance"),
 			},
 			PublicIdentity: publicIdentity,
+		},
+		Coordination: config.CoordinationConfig{
+			Backend:                        defaultString(gateway.Coordination.Backend, defaultString(gateway.HA.LeaseBackend, "dynamodb")),
+			Table:                          gateway.Coordination.Table,
+			RegistryRefreshIntervalSeconds: defaultInt(gateway.Coordination.RegistryRefreshIntervalSeconds, 5),
+			RegistryTTLSeconds:             defaultInt(gateway.Coordination.RegistryTTLSeconds, 20),
+			HandoverTTLSeconds:             defaultInt(gateway.Coordination.HandoverTTLSeconds, 3600),
+		},
+		Control: config.ControlConfig{
+			PeerAPI: config.PeerAPIConfig{
+				Enabled:       gateway.Control.PeerAPIEnabled,
+				ListenAddress: defaultString(gateway.Control.PeerAPIListenAddress, "0.0.0.0"),
+				ListenPort:    defaultInt(gateway.Control.PeerAPIListenPort, 9109),
+				AuthToken:     gateway.Control.PeerAPIAuthToken,
+			},
 		},
 		Observability: config.ObservabilityConfig{
 			Prometheus: config.PrometheusConfig{

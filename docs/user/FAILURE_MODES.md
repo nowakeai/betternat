@@ -1,6 +1,6 @@
 # BetterNAT Failure Modes And Limitations
 
-Date: 2026-06-21
+Date: 2026-06-23
 
 ## Purpose
 
@@ -18,7 +18,7 @@ It does not promise:
 - zero packet loss,
 - active connection preservation,
 - active-active NAT,
-- transparent state migration between appliances.
+- transparent state migration between nodes.
 
 When failover happens:
 
@@ -32,11 +32,12 @@ When failover happens:
 | Failure | Expected Behavior | User Impact | Primary Signals | Recovery |
 | --- | --- | --- | --- | --- |
 | Active EC2 terminates | Standby acquires lease, claims EIP if configured, replaces route | Short new-connection outage; active flows reset | lease generation changes, route/EIP owner changes, failover metrics | Automatic if standby is healthy |
+| Active ASG scale-in or Spot interruption notice | Agent observes IMDS termination signal, releases local lease, and completes the ASG lifecycle action | Shorter new-connection outage than waiting for lease TTL when notice arrives in time | termination event log, lease release, lifecycle action completion, route/EIP owner changes | Automatic if standby is healthy |
 | Standby EC2 terminates | Active continues serving; ASG launches replacement | HA degraded until replacement ready | ASG unhealthy, no standby, stale standby metrics | Automatic ASG repair |
 | LoxiLB process restarts | Agent reconciles missing datapath rules | Possible datapath interruption on affected instance | `betternat_datapath_ready=0`, LoxiLB command errors | Automatic reconcile if process returns |
-| Agent process stops on active | Lease stops renewing; standby takes over after timeout | Outage depends on HA profile and detection path | stale HA status, lease expiry, takeover attempt | Automatic after lease timeout |
+| Agent process stops on active | Graceful SIGTERM releases the local lease; crashes rely on lease expiry | Outage depends on HA profile, stop path, and detection timing | stale HA status, lease expiry or release, takeover attempt | Automatic if standby is healthy |
 | DynamoDB temporarily unavailable | Current active may keep datapath but lease renew can fail | Failover decisions may be delayed or conservative | lease renew errors | Automatic after DDB recovers |
-| `ReplaceRoute` fails | Lease may move but traffic still points to old target | New traffic may fail or continue through old appliance | route target mismatch | Agent retry/future rollback needed |
+| `ReplaceRoute` fails | Lease may move but traffic still points to old target | New traffic may fail or continue through old node | route target mismatch | Agent retry/future rollback needed |
 | EIP association fails | Route may move but stable public IP not attached | Stable mode can leak different public IP or lose egress | public identity mismatch, outbound probe mismatch | Agent retry; manual AWS check |
 | ASG cannot launch replacement | Active may continue, but HA remains degraded | No standby protection | ASG activity failure | Fix capacity/quota/AMI/subnet/IAM |
 | Terraform destroy interrupted | Some resources may remain | Cost leak or route drift | residual resource scan | Rerun destroy or manual cleanup |
@@ -46,7 +47,7 @@ When failover happens:
 
 Scenario:
 
-- current active appliance is terminated or becomes unreachable.
+- current active node is terminated or becomes unreachable.
 
 Expected:
 
@@ -99,17 +100,19 @@ Scenario:
 
 Expected:
 
-- if the process stops renewing lease, standby eventually takes over,
+- if the process receives graceful SIGTERM/systemd stop, it releases its currently owned HA lease before exit,
+- if IMDS reports a Spot interruption or ASG target termination state, the agent releases its currently owned HA lease and completes the ASG lifecycle action,
+- if the process crashes or cannot run shutdown logic, standby eventually takes over after lease expiry,
 - if the process is still alive but unable to update status, stale HA metrics should prevent false-active reporting.
 
 Impact:
 
-- outage can last until lease expiry or explicit failure detection,
+- outage can be shorter on graceful stop, but crashes can last until lease expiry or explicit failure detection,
 - active flows may reset after route/EIP moves.
 
 Mitigations:
 
-- stable HA profile defaults,
+- default HA timing,
 - systemd restart policy,
 - lease TTL/renew interval tuning,
 - future explicit health/failure fast path.
@@ -191,7 +194,7 @@ betternat_takeover_success_total
 
 Scenario:
 
-- shared EIP cannot be associated to the new active appliance.
+- shared EIP cannot be associated to the new active node.
 
 Expected:
 
@@ -219,7 +222,7 @@ Scenario:
 
 Expected:
 
-- route failover moves private egress to another appliance,
+- route failover moves private egress to another node,
 - public source IP can change to standby's public IP.
 
 Impact:
@@ -337,7 +340,7 @@ Users must monitor:
 
 Users must also understand:
 
-- self-managed appliances require operational ownership,
+- self-managed nodes require operational ownership,
 - EC2 instance type and capacity affect throughput,
 - AWS API availability affects failover,
 - BetterNAT does not remove normal AWS data-transfer charges.

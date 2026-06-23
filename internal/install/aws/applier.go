@@ -48,7 +48,9 @@ type EC2API interface {
 type AutoScalingAPI interface {
 	CreateAutoScalingGroup(ctx context.Context, params *autoscaling.CreateAutoScalingGroupInput, optFns ...func(*autoscaling.Options)) (*autoscaling.CreateAutoScalingGroupOutput, error)
 	DeleteAutoScalingGroup(ctx context.Context, params *autoscaling.DeleteAutoScalingGroupInput, optFns ...func(*autoscaling.Options)) (*autoscaling.DeleteAutoScalingGroupOutput, error)
+	DeleteLifecycleHook(ctx context.Context, params *autoscaling.DeleteLifecycleHookInput, optFns ...func(*autoscaling.Options)) (*autoscaling.DeleteLifecycleHookOutput, error)
 	DescribeAutoScalingGroups(ctx context.Context, params *autoscaling.DescribeAutoScalingGroupsInput, optFns ...func(*autoscaling.Options)) (*autoscaling.DescribeAutoScalingGroupsOutput, error)
+	PutLifecycleHook(ctx context.Context, params *autoscaling.PutLifecycleHookInput, optFns ...func(*autoscaling.Options)) (*autoscaling.PutLifecycleHookOutput, error)
 	UpdateAutoScalingGroup(ctx context.Context, params *autoscaling.UpdateAutoScalingGroupInput, optFns ...func(*autoscaling.Options)) (*autoscaling.UpdateAutoScalingGroupOutput, error)
 }
 
@@ -132,6 +134,9 @@ func (a Applier) Apply(ctx context.Context, plan installplan.Plan, inputs Inputs
 	if err := a.createLeaseTable(ctx, plan); err != nil {
 		return Result{}, err
 	}
+	if err := a.createCoordinationTable(ctx, plan); err != nil {
+		return Result{}, err
+	}
 	result := Result{
 		AllocatedEIPs:        map[string]string{},
 		AllocatedPublicIPs:   map[string]string{},
@@ -154,6 +159,9 @@ func (a Applier) Apply(ctx context.Context, plan installplan.Plan, inputs Inputs
 			}
 			result.LaunchTemplates[pool.AvailabilityZone] = launchTemplateID
 			if err := a.createAutoScalingGroup(ctx, plan, pool, launchTemplateID); err != nil {
+				return Result{}, err
+			}
+			if err := a.putTerminationLifecycleHook(ctx, pool); err != nil {
 				return Result{}, err
 			}
 			result.AutoScalingGroups[pool.AvailabilityZone] = pool.ASGName
@@ -250,6 +258,19 @@ func (a Applier) UpdateCapacity(ctx context.Context, plan installplan.Plan) erro
 	return nil
 }
 
+func (a Applier) ReconcileInfrastructure(ctx context.Context, plan installplan.Plan) error {
+	if a.DynamoDB == nil {
+		return fmt.Errorf("dynamodb client is required")
+	}
+	if a.IAM == nil {
+		return fmt.Errorf("iam client is required")
+	}
+	if err := a.createCoordinationTable(ctx, plan); err != nil {
+		return err
+	}
+	return a.createIAM(ctx, plan)
+}
+
 func (a Applier) RestoreRoutes(ctx context.Context, routes []RollbackRoute) error {
 	if a.EC2 == nil {
 		return fmt.Errorf("ec2 client is required")
@@ -300,6 +321,9 @@ func (a Applier) Cleanup(ctx context.Context, plan installplan.Plan, inputs Clea
 	if err := a.deleteLeaseTable(ctx, plan); err != nil {
 		return err
 	}
+	if err := a.deleteCoordinationTable(ctx, plan); err != nil {
+		return err
+	}
 	if err := a.deleteIAM(ctx, plan); err != nil {
 		return err
 	}
@@ -312,6 +336,12 @@ func (a Applier) Cleanup(ctx context.Context, plan installplan.Plan, inputs Clea
 func (a Applier) deletePools(ctx context.Context, plan installplan.Plan) error {
 	for _, pool := range plan.Pools {
 		if pool.ASGName != "" {
+			if _, err := a.AutoScaling.DeleteLifecycleHook(ctx, &autoscaling.DeleteLifecycleHookInput{
+				AutoScalingGroupName: awssdk.String(pool.ASGName),
+				LifecycleHookName:    awssdk.String(terminationLifecycleHookName(pool)),
+			}); err != nil && !isAPIError(err, "ValidationError") && !isAPIError(err, "ResourceContention") {
+				return fmt.Errorf("delete lifecycle hook %s: %w", terminationLifecycleHookName(pool), err)
+			}
 			if _, err := a.AutoScaling.UpdateAutoScalingGroup(ctx, &autoscaling.UpdateAutoScalingGroupInput{
 				AutoScalingGroupName: awssdk.String(pool.ASGName),
 				MinSize:              awssdk.Int32(0),
@@ -456,6 +486,19 @@ func (a Applier) deleteLeaseTable(ctx context.Context, plan installplan.Plan) er
 			return nil
 		}
 		return fmt.Errorf("delete lease table %s: %w", plan.LeaseTableName, err)
+	}
+	return nil
+}
+
+func (a Applier) deleteCoordinationTable(ctx context.Context, plan installplan.Plan) error {
+	if plan.CoordinationTableName == "" {
+		return nil
+	}
+	if _, err := a.DynamoDB.DeleteTable(ctx, &dynamodb.DeleteTableInput{TableName: awssdk.String(plan.CoordinationTableName)}); err != nil {
+		if isAPIError(err, "ResourceNotFoundException") {
+			return nil
+		}
+		return fmt.Errorf("delete coordination table %s: %w", plan.CoordinationTableName, err)
 	}
 	return nil
 }
@@ -807,6 +850,28 @@ func (a Applier) createAutoScalingGroup(ctx context.Context, plan installplan.Pl
 	return nil
 }
 
+func (a Applier) putTerminationLifecycleHook(ctx context.Context, pool installplan.Pool) error {
+	if pool.ASGName == "" {
+		return fmt.Errorf("asg name is required")
+	}
+	hookName := terminationLifecycleHookName(pool)
+	_, err := a.AutoScaling.PutLifecycleHook(ctx, &autoscaling.PutLifecycleHookInput{
+		AutoScalingGroupName: awssdk.String(pool.ASGName),
+		DefaultResult:        awssdk.String("CONTINUE"),
+		HeartbeatTimeout:     awssdk.Int32(120),
+		LifecycleHookName:    awssdk.String(hookName),
+		LifecycleTransition:  awssdk.String("autoscaling:EC2_INSTANCE_TERMINATING"),
+	})
+	if err != nil {
+		return fmt.Errorf("put lifecycle hook %s: %w", hookName, err)
+	}
+	return nil
+}
+
+func terminationLifecycleHookName(pool installplan.Pool) string {
+	return pool.ASGName + "-terminating"
+}
+
 func (a Applier) waitForPoolOwner(ctx context.Context, asgName string) (string, error) {
 	var lastInstanceID string
 	for attempt := 0; attempt < 30; attempt++ {
@@ -1010,6 +1075,44 @@ func (a Applier) createLeaseTable(ctx context.Context, plan installplan.Plan) er
 			return nil
 		}
 		return fmt.Errorf("create lease table %s: %w", plan.LeaseTableName, err)
+	}
+	return nil
+}
+
+func (a Applier) createCoordinationTable(ctx context.Context, plan installplan.Plan) error {
+	if plan.CoordinationTableName == "" {
+		return nil
+	}
+	_, err := a.DynamoDB.CreateTable(ctx, &dynamodb.CreateTableInput{
+		TableName: awssdk.String(plan.CoordinationTableName),
+		AttributeDefinitions: []ddbtypes.AttributeDefinition{
+			{
+				AttributeName: awssdk.String("ha_group_id"),
+				AttributeType: ddbtypes.ScalarAttributeTypeS,
+			},
+			{
+				AttributeName: awssdk.String("record_id"),
+				AttributeType: ddbtypes.ScalarAttributeTypeS,
+			},
+		},
+		KeySchema: []ddbtypes.KeySchemaElement{
+			{
+				AttributeName: awssdk.String("ha_group_id"),
+				KeyType:       ddbtypes.KeyTypeHash,
+			},
+			{
+				AttributeName: awssdk.String("record_id"),
+				KeyType:       ddbtypes.KeyTypeRange,
+			},
+		},
+		BillingMode: ddbtypes.BillingModePayPerRequest,
+		Tags:        dynamoTags(plan.Tags),
+	})
+	if err != nil {
+		if isAPIError(err, "ResourceInUseException") {
+			return nil
+		}
+		return fmt.Errorf("create coordination table %s: %w", plan.CoordinationTableName, err)
 	}
 	return nil
 }

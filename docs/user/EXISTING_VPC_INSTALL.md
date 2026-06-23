@@ -19,7 +19,7 @@ BetterNAT replaces the private subnet default route:
 with:
 
 ```text
-0.0.0.0/0 -> active BetterNAT appliance instance
+0.0.0.0/0 -> active BetterNAT gateway node
 ```
 
 The BetterNAT agent owns runtime route failover after deployment.
@@ -31,7 +31,7 @@ You need:
 - one public subnet in the target AZ,
 - one or more private route tables in the same AZ,
 - private CIDR ranges allowed to use the gateway,
-- IAM permission to create the BetterNAT appliance stack,
+- IAM permission to create the BetterNAT gateway node stack,
 - SSM access to gateway instances,
 - a rollback plan.
 
@@ -72,7 +72,7 @@ resource "betternat_gateway" "egress" {
   private_cidrs = [var.vpc_cidr]
 
   stable_egress_ip    = true
-  ha_profile          = "stable"
+  ha_profile          = "default"
   prometheus_enabled  = true
   rollback_on_destroy = true
 }
@@ -84,14 +84,14 @@ Before apply:
 
 - record current private route targets,
 - confirm no managed Terraform `aws_route` resource will fight BetterNAT for the same default route,
-- confirm security groups allow private CIDRs to reach the appliance,
+- confirm security groups allow private CIDRs to reach gateway nodes,
 - confirm SSM access works in the VPC,
 - choose a maintenance window for first migration.
 
 After apply:
 
 - verify ASG has two healthy instances,
-- run `betternat doctor --live` on the active appliance,
+- run `betternat doctor --live` on the active gateway node,
 - verify route target matches the active lease owner,
 - verify EIP association when `stable_egress_ip=true`,
 - test private subnet egress,

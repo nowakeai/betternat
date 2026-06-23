@@ -94,6 +94,11 @@ func TestDescribeRouteReturnsTarget(t *testing.T) {
 func TestDescribeInstanceReadsSourceDestCheck(t *testing.T) {
 	client := &fakeEC2{
 		sourceDestCheck: true,
+		instances: []types.Instance{{
+			InstanceId:       awssdk.String("i-123"),
+			PrivateIpAddress: awssdk.String("10.0.1.10"),
+			PublicIpAddress:  awssdk.String("198.51.100.10"),
+		}},
 	}
 	provider := NewFromClient(client)
 
@@ -103,6 +108,9 @@ func TestDescribeInstanceReadsSourceDestCheck(t *testing.T) {
 	}
 	if !info.SourceDestCheckEnabled {
 		t.Fatalf("expected source/dest check enabled: %#v", info)
+	}
+	if info.PrivateIP != "10.0.1.10" || info.PublicIP != "198.51.100.10" {
+		t.Fatalf("unexpected instance addresses: %#v", info)
 	}
 	if awssdk.ToString(client.describeInstanceAttributeInput.InstanceId) != "i-123" {
 		t.Fatalf("unexpected describe input: %#v", client.describeInstanceAttributeInput)
@@ -163,6 +171,7 @@ type fakeEC2 struct {
 	modifyInstanceAttributeInput   *ec2.ModifyInstanceAttributeInput
 	routeTables                    []types.RouteTable
 	addresses                      []types.Address
+	instances                      []types.Instance
 	sourceDestCheck                bool
 }
 
@@ -183,6 +192,12 @@ func (f *fakeEC2) DescribeRouteTables(_ context.Context, _ *ec2.DescribeRouteTab
 func (f *fakeEC2) DescribeAddresses(_ context.Context, params *ec2.DescribeAddressesInput, _ ...func(*ec2.Options)) (*ec2.DescribeAddressesOutput, error) {
 	f.describeAddressesInput = params
 	return &ec2.DescribeAddressesOutput{Addresses: f.addresses}, nil
+}
+
+func (f *fakeEC2) DescribeInstances(_ context.Context, _ *ec2.DescribeInstancesInput, _ ...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error) {
+	return &ec2.DescribeInstancesOutput{
+		Reservations: []types.Reservation{{Instances: f.instances}},
+	}, nil
 }
 
 func (f *fakeEC2) DescribeInstanceAttribute(_ context.Context, params *ec2.DescribeInstanceAttributeInput, _ ...func(*ec2.Options)) (*ec2.DescribeInstanceAttributeOutput, error) {

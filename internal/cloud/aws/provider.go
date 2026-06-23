@@ -19,6 +19,7 @@ type EC2API interface {
 	AssociateAddress(ctx context.Context, params *ec2.AssociateAddressInput, optFns ...func(*ec2.Options)) (*ec2.AssociateAddressOutput, error)
 	DescribeRouteTables(ctx context.Context, params *ec2.DescribeRouteTablesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error)
 	DescribeAddresses(ctx context.Context, params *ec2.DescribeAddressesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeAddressesOutput, error)
+	DescribeInstances(ctx context.Context, params *ec2.DescribeInstancesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error)
 	DescribeInstanceAttribute(ctx context.Context, params *ec2.DescribeInstanceAttributeInput, optFns ...func(*ec2.Options)) (*ec2.DescribeInstanceAttributeOutput, error)
 	ModifyInstanceAttribute(ctx context.Context, params *ec2.ModifyInstanceAttributeInput, optFns ...func(*ec2.Options)) (*ec2.ModifyInstanceAttributeOutput, error)
 }
@@ -203,27 +204,52 @@ func (p *Provider) DescribePublicIdentity(ctx context.Context, allocationID stri
 }
 
 func (p *Provider) DescribeInstance(ctx context.Context, instanceID string) (cloud.InstanceInfo, error) {
+	sourceDestCheck, err := p.SourceDestCheckEnabled(ctx, instanceID)
+	if err != nil {
+		return cloud.InstanceInfo{}, err
+	}
+	info := cloud.InstanceInfo{
+		InstanceID:             instanceID,
+		SourceDestCheckEnabled: sourceDestCheck,
+	}
+	instances, err := p.ec2.DescribeInstances(ctx, &ec2.DescribeInstancesInput{
+		InstanceIds: []string{instanceID},
+	})
+	if err != nil {
+		return cloud.InstanceInfo{}, fmt.Errorf("aws ec2 DescribeInstances: %w", err)
+	}
+	for _, reservation := range instances.Reservations {
+		for _, instance := range reservation.Instances {
+			if awssdk.ToString(instance.InstanceId) != instanceID {
+				continue
+			}
+			info.PrivateIP = awssdk.ToString(instance.PrivateIpAddress)
+			info.PublicIP = awssdk.ToString(instance.PublicIpAddress)
+			return info, nil
+		}
+	}
+	return info, nil
+}
+
+func (p *Provider) SourceDestCheckEnabled(ctx context.Context, instanceID string) (bool, error) {
 	if p.ec2 == nil {
-		return cloud.InstanceInfo{}, fmt.Errorf("ec2 client is required")
+		return false, fmt.Errorf("ec2 client is required")
 	}
 	if instanceID == "" {
-		return cloud.InstanceInfo{}, fmt.Errorf("instance id is required")
+		return false, fmt.Errorf("instance id is required")
 	}
 	output, err := p.ec2.DescribeInstanceAttribute(ctx, &ec2.DescribeInstanceAttributeInput{
 		InstanceId: awssdk.String(instanceID),
 		Attribute:  types.InstanceAttributeNameSourceDestCheck,
 	})
 	if err != nil {
-		return cloud.InstanceInfo{}, fmt.Errorf("aws ec2 DescribeInstanceAttribute sourceDestCheck: %w", err)
+		return false, fmt.Errorf("aws ec2 DescribeInstanceAttribute sourceDestCheck: %w", err)
 	}
 	sourceDestCheck := false
 	if output.SourceDestCheck != nil {
 		sourceDestCheck = awssdk.ToBool(output.SourceDestCheck.Value)
 	}
-	return cloud.InstanceInfo{
-		InstanceID:             instanceID,
-		SourceDestCheckEnabled: sourceDestCheck,
-	}, nil
+	return sourceDestCheck, nil
 }
 
 func (p *Provider) DisableSourceDestCheck(ctx context.Context, instanceID string) error {

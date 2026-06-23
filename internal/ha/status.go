@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nowakeai/betternat/internal/cloud"
 	"github.com/nowakeai/betternat/internal/lease"
 )
 
@@ -20,6 +21,7 @@ type StatusSnapshot struct {
 	HasRouteTargetCheck     bool
 	HasPublicIdentityCheck  bool
 	SecondsUntilLeaseExpiry float64
+	PublicIdentity          cloud.PublicIdentity
 }
 
 type StatusReporter interface {
@@ -65,6 +67,7 @@ func (s *MemoryStatus) Report(result StepResult) {
 	s.snapshot.RouteTargetMatches = s.snapshot.HasRouteTargetCheck && result.Err == nil
 	s.snapshot.HasPublicIdentityCheck = result.Activation.PublicIdentity.AllocationID != ""
 	s.snapshot.PublicIdentityMatches = s.snapshot.HasPublicIdentityCheck && result.Err == nil
+	s.snapshot.PublicIdentity = result.Activation.PublicIdentity
 	s.snapshot.SecondsUntilLeaseExpiry = 0
 	if !result.Lease.ExpiresAt.IsZero() {
 		s.snapshot.SecondsUntilLeaseExpiry = result.Lease.ExpiresAt.Sub(now).Seconds()

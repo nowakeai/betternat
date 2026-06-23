@@ -6,49 +6,51 @@ import (
 )
 
 type Input struct {
-	Name                 string
-	Region               string
-	VPCID                string
-	PublicSubnetIDs      map[string]string
-	PrivateRouteTableIDs map[string][]string
-	PrivateCIDRs         []string
-	StableEgressIP       bool
-	LeaseTableName       string
-	AgentConfigHash      string
-	AMIID                string
-	AMIChannel           string
-	InstanceType         string
-	UseSpot              bool
-	MinSize              int32
-	DesiredCapacity      int32
-	MaxSize              int32
-	RouteDestinationCIDR string
-	RouteTargetType      string
-	Tags                 map[string]string
+	Name                  string
+	Region                string
+	VPCID                 string
+	PublicSubnetIDs       map[string]string
+	PrivateRouteTableIDs  map[string][]string
+	PrivateCIDRs          []string
+	StableEgressIP        bool
+	LeaseTableName        string
+	CoordinationTableName string
+	AgentConfigHash       string
+	AMIID                 string
+	AMIChannel            string
+	InstanceType          string
+	UseSpot               bool
+	MinSize               int32
+	DesiredCapacity       int32
+	MaxSize               int32
+	RouteDestinationCIDR  string
+	RouteTargetType       string
+	Tags                  map[string]string
 }
 
 type Plan struct {
-	Name                string            `json:"name"`
-	Region              string            `json:"region"`
-	VPCID               string            `json:"vpc_id"`
-	PrivateCIDRs        []string          `json:"private_cidrs"`
-	AMIID               string            `json:"ami_id,omitempty"`
-	AMIChannel          string            `json:"ami_channel,omitempty"`
-	InstanceType        string            `json:"instance_type"`
-	UseSpot             bool              `json:"use_spot,omitempty"`
-	MinSize             int32             `json:"min_size"`
-	DesiredCapacity     int32             `json:"desired_capacity"`
-	MaxSize             int32             `json:"max_size"`
-	IAMRoleName         string            `json:"iam_role_name"`
-	InstanceProfileName string            `json:"instance_profile_name"`
-	SecurityGroupName   string            `json:"security_group_name"`
-	LeaseTableName      string            `json:"lease_table_name"`
-	EIPAllocationNames  map[string]string `json:"eip_allocation_names"`
-	Pools               []Pool            `json:"pools"`
-	Appliances          []Appliance       `json:"appliances"`
-	ManagedRoutes       []ManagedRoute    `json:"managed_routes"`
-	RequiredIAMActions  []string          `json:"required_iam_actions"`
-	Tags                map[string]string `json:"tags"`
+	Name                  string            `json:"name"`
+	Region                string            `json:"region"`
+	VPCID                 string            `json:"vpc_id"`
+	PrivateCIDRs          []string          `json:"private_cidrs"`
+	AMIID                 string            `json:"ami_id,omitempty"`
+	AMIChannel            string            `json:"ami_channel,omitempty"`
+	InstanceType          string            `json:"instance_type"`
+	UseSpot               bool              `json:"use_spot,omitempty"`
+	MinSize               int32             `json:"min_size"`
+	DesiredCapacity       int32             `json:"desired_capacity"`
+	MaxSize               int32             `json:"max_size"`
+	IAMRoleName           string            `json:"iam_role_name"`
+	InstanceProfileName   string            `json:"instance_profile_name"`
+	SecurityGroupName     string            `json:"security_group_name"`
+	LeaseTableName        string            `json:"lease_table_name"`
+	CoordinationTableName string            `json:"coordination_table_name,omitempty"`
+	EIPAllocationNames    map[string]string `json:"eip_allocation_names"`
+	Pools                 []Pool            `json:"pools"`
+	Appliances            []Appliance       `json:"appliances"`
+	ManagedRoutes         []ManagedRoute    `json:"managed_routes"`
+	RequiredIAMActions    []string          `json:"required_iam_actions"`
+	Tags                  map[string]string `json:"tags"`
 }
 
 type Pool struct {
@@ -97,6 +99,10 @@ func Build(input Input) (Plan, error) {
 	if leaseTable == "" {
 		leaseTable = "betternat-" + input.Name + "-leases"
 	}
+	coordinationTable := input.CoordinationTableName
+	if coordinationTable == "" {
+		coordinationTable = "betternat-" + input.Name + "-coordination"
+	}
 	instanceType := input.InstanceType
 	if instanceType == "" {
 		instanceType = "t3.small"
@@ -138,33 +144,34 @@ func Build(input Input) (Plan, error) {
 		return Plan{}, fmt.Errorf("max_size cannot be less than desired_capacity")
 	}
 	plan := Plan{
-		Name:                input.Name,
-		Region:              input.Region,
-		VPCID:               input.VPCID,
-		PrivateCIDRs:        append([]string{}, input.PrivateCIDRs...),
-		AMIID:               input.AMIID,
-		AMIChannel:          amiChannel,
-		InstanceType:        instanceType,
-		UseSpot:             input.UseSpot,
-		MinSize:             minSize,
-		DesiredCapacity:     desiredCapacity,
-		MaxSize:             maxSize,
-		IAMRoleName:         "betternat-" + input.Name + "-agent",
-		InstanceProfileName: "betternat-" + input.Name + "-agent",
-		SecurityGroupName:   "betternat-" + input.Name + "-appliance",
-		LeaseTableName:      leaseTable,
-		EIPAllocationNames:  map[string]string{},
+		Name:                  input.Name,
+		Region:                input.Region,
+		VPCID:                 input.VPCID,
+		PrivateCIDRs:          append([]string{}, input.PrivateCIDRs...),
+		AMIID:                 input.AMIID,
+		AMIChannel:            amiChannel,
+		InstanceType:          instanceType,
+		UseSpot:               input.UseSpot,
+		MinSize:               minSize,
+		DesiredCapacity:       desiredCapacity,
+		MaxSize:               maxSize,
+		IAMRoleName:           "betternat-" + input.Name + "-agent",
+		InstanceProfileName:   "betternat-" + input.Name + "-agent",
+		SecurityGroupName:     "betternat-" + input.Name + "-appliance",
+		LeaseTableName:        leaseTable,
+		CoordinationTableName: coordinationTable,
+		EIPAllocationNames:    map[string]string{},
 		RequiredIAMActions: []string{
-			"autoscaling:DescribeAutoScalingGroups",
+			"autoscaling:CompleteLifecycleAction",
 			"ec2:AssociateAddress",
 			"ec2:DescribeAddresses",
-			"ec2:DescribeInstances",
 			"ec2:DescribeInstanceAttribute",
 			"ec2:DescribeRouteTables",
 			"ec2:ModifyInstanceAttribute",
 			"ec2:ReplaceRoute",
 			"dynamodb:DeleteItem",
 			"dynamodb:GetItem",
+			"dynamodb:Query",
 			"dynamodb:UpdateItem",
 			"iam:SimulatePrincipalPolicy",
 			"sts:GetCallerIdentity",

@@ -1,6 +1,6 @@
 # BetterNAT Upgrade And Replacement Guide
 
-Date: 2026-06-22
+Date: 2026-06-23
 
 ## Purpose
 
@@ -9,6 +9,7 @@ This guide explains how to change a BetterNAT deployment safely in the first alp
 The short version:
 
 - capacity-only changes are supported in-place,
+- provider-owned infrastructure migrations should be reconciled in-place when they do not affect runtime or route/EIP ownership,
 - runtime, bootstrap, datapath, HA timing, route, subnet, AMI, and EIP-mode changes require explicit replacement,
 - the first alpha does not provide seamless rolling software or AMI upgrades,
 - use blue/green replacement for safer upgrades of real workloads.
@@ -55,11 +56,13 @@ cli_binary_url      = var.cli_binary_url
 cli_binary_sha256   = var.cli_binary_sha256
 ```
 
-Changing the provider version does not automatically upgrade running gateway appliances.
+Changing the provider version does not automatically upgrade running gateway nodes.
+
+Provider upgrades can still reconcile provider-owned infrastructure in place. For example, a newer provider may update the BetterNAT-managed IAM inline policy, create a new coordination table, update tags, or record migration metadata without replacing the gateway nodes.
 
 ## Supported In-Place Updates
 
-The first alpha supports in-place updates only for capacity fields:
+The first alpha supports user-requested in-place updates for capacity fields:
 
 ```hcl
 min_size         = 2
@@ -73,7 +76,7 @@ Use this for:
 
 - adding standby capacity,
 - restoring a degraded standby pool,
-- shrinking from three appliances to two after a test.
+- shrinking from three nodes to two after a test.
 
 Before applying a capacity change, verify:
 
@@ -91,12 +94,41 @@ terraform output active_instance_ids
 terraform output standby_instance_ids
 ```
 
-Then check metrics or appliance-local diagnostics:
+Then check metrics or node-local diagnostics:
 
 ```sh
 sudo betternat doctor --live --config /etc/betternat/agent.json
 sudo betternat datapath ready --config /etc/betternat/agent.json
 ```
+
+## Provider-Owned Infrastructure Reconciliation
+
+Provider-owned infrastructure changes are different from user-requested runtime changes.
+
+The provider should reconcile its own supporting infrastructure in place when the change is safe and does not affect the active datapath.
+
+Safe in-place reconciliation examples:
+
+- overwriting the BetterNAT-managed IAM inline policy named `betternat-runtime`,
+- removing permissions that a newer provider no longer needs,
+- adding permissions for a new provider-owned coordination backend,
+- creating a provider-owned DynamoDB coordination table,
+- updating provider-owned tags or metadata,
+- recording migration metadata in Terraform state.
+
+These changes must not:
+
+- stop or replace running gateway nodes,
+- mutate private route table targets,
+- associate or disassociate EIPs,
+- change bootstrap user data,
+- change the agent runtime config without an explicit runtime rollout.
+
+The provider may only reconcile resources it owns by contract. If you attach your own IAM policy to the BetterNAT role, the provider should leave that user-managed policy alone. The provider can replace the content of its own `betternat-runtime` inline policy because that policy is generated and owned by BetterNAT.
+
+This means a provider upgrade that tightens permissions should converge the BetterNAT-managed policy on the next apply without requiring a gateway replacement.
+
+The provider records an internal `provider_infrastructure_revision` value in resource state. When a newer provider needs a safe infrastructure-only migration, it can bump that revision so Terraform plans an in-place update even if the user's configuration did not change. That update path reconciles provider-owned infrastructure such as IAM policy documents and coordination tables, but it must not roll nodes or mutate route/EIP ownership.
 
 ## Changes That Require Replacement
 
@@ -161,7 +193,7 @@ From a private client:
 curl -fsS https://checkip.amazonaws.com
 ```
 
-On the active appliance:
+On the active node:
 
 ```sh
 sudo betternat doctor --live --config /etc/betternat/agent.json
@@ -204,13 +236,13 @@ Before creating the new gateway:
 
 - record the old gateway outputs,
 - confirm `rollback_route_targets_json` contains concrete route targets,
-- confirm the old gateway has at least one healthy active appliance,
+- confirm the old gateway has at least one healthy active node,
 - decide which private route tables will be used for testing.
 
 After creating the new gateway:
 
 - verify ASG healthy capacity,
-- verify one active appliance,
+- verify one active node,
 - verify standby capacity if `desired_capacity >= 2`,
 - verify `betternat_datapath_ready == 1`,
 - verify `betternat_route_target_match == 1`,
@@ -284,24 +316,24 @@ Use it when you want more spare capacity, not because it turns alpha replacement
 
 The first alpha does not yet:
 
-- replace standby appliances before active appliances,
+- replace standby nodes before active nodes,
 - trigger planned failover,
-- ask the active appliance to step down,
+- ask the active node to step down,
 - run ASG instance refresh safely around BetterNAT ownership,
 - protect the active owner from ASG scale-in,
 - expose an `upgrade_strategy` field,
-- provide a graceful shutdown hook for systemd stop, ASG scale-in, or Spot interruption.
+- provide a user-triggered planned drain command.
 
-Because these controls are not implemented yet, software and AMI changes are modeled as explicit replacement, not as a transparent rolling upgrade.
+The agent releases its locally owned HA lease on graceful SIGTERM/systemd stop. It also watches IMDS for Spot interruption and ASG target termination state, then completes the ASG termination lifecycle hook after release. These paths help a standby take over without waiting for the full lease TTL when AWS provides notice in time, but they are not yet a complete planned failover or rolling-upgrade workflow. Software and AMI changes are still modeled as explicit replacement, not as a transparent rolling upgrade.
 
 ## Future Production Direction
 
 A production-grade rolling upgrade should eventually:
 
 1. create a new launch template or AMI version,
-2. replace standby appliances first,
+2. replace standby nodes first,
 3. verify new standby readiness,
-4. trigger planned failover to a ready new appliance,
+4. trigger planned failover to a ready new node,
 5. verify lease, route, EIP, metrics, and egress probe,
 6. replace the old active after it becomes standby,
 7. abort and keep the old active if readiness fails.

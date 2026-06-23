@@ -22,12 +22,13 @@ func TestApply(t *testing.T) {
 	iamClient := &fakeIAM{}
 	applier := Applier{EC2: ec2Client, DynamoDB: ddbClient, IAM: iamClient}
 	plan := installplan.Plan{
-		Name:                "prod-egress",
-		VPCID:               "vpc-123",
-		IAMRoleName:         "betternat-prod-egress-agent",
-		InstanceProfileName: "betternat-prod-egress-agent",
-		SecurityGroupName:   "betternat-prod-egress-appliance",
-		LeaseTableName:      "betternat-prod-egress-leases",
+		Name:                  "prod-egress",
+		VPCID:                 "vpc-123",
+		IAMRoleName:           "betternat-prod-egress-agent",
+		InstanceProfileName:   "betternat-prod-egress-agent",
+		SecurityGroupName:     "betternat-prod-egress-appliance",
+		LeaseTableName:        "betternat-prod-egress-leases",
+		CoordinationTableName: "betternat-prod-egress-coordination",
 		EIPAllocationNames: map[string]string{
 			"us-west-2a": "betternat-prod-egress-us-west-2a",
 		},
@@ -51,8 +52,15 @@ func TestApply(t *testing.T) {
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	if awssdk.ToString(ddbClient.createTableInput.TableName) != "betternat-prod-egress-leases" {
-		t.Fatalf("unexpected table: %#v", ddbClient.createTableInput)
+	if !ddbClient.hasCreatedTable("betternat-prod-egress-leases") {
+		t.Fatalf("missing lease table create: %#v", ddbClient.createTableInputs)
+	}
+	coordinationTable := ddbClient.createdTable("betternat-prod-egress-coordination")
+	if coordinationTable == nil {
+		t.Fatalf("missing coordination table create: %#v", ddbClient.createTableInputs)
+	}
+	if len(coordinationTable.KeySchema) != 2 || awssdk.ToString(coordinationTable.KeySchema[1].AttributeName) != "record_id" {
+		t.Fatalf("coordination table must use ha_group_id + record_id key: %#v", coordinationTable)
 	}
 	if awssdk.ToString(ec2Client.createSecurityGroupInput.GroupName) != "betternat-prod-egress-appliance" {
 		t.Fatalf("unexpected security group: %#v", ec2Client.createSecurityGroupInput)
@@ -296,6 +304,21 @@ func TestApplyCreatesASGPool(t *testing.T) {
 	}
 	if awssdk.ToString(asgClient.createInput.VPCZoneIdentifier) != "subnet-public-a" {
 		t.Fatalf("unexpected asg subnet: %#v", asgClient.createInput)
+	}
+	if asgClient.putLifecycleHookInput == nil {
+		t.Fatal("expected ASG termination lifecycle hook")
+	}
+	if awssdk.ToString(asgClient.putLifecycleHookInput.AutoScalingGroupName) != "betternat-prod-egress-us-west-2a" {
+		t.Fatalf("unexpected lifecycle hook asg: %#v", asgClient.putLifecycleHookInput)
+	}
+	if awssdk.ToString(asgClient.putLifecycleHookInput.LifecycleHookName) != "betternat-prod-egress-us-west-2a-terminating" {
+		t.Fatalf("unexpected lifecycle hook name: %#v", asgClient.putLifecycleHookInput)
+	}
+	if awssdk.ToString(asgClient.putLifecycleHookInput.LifecycleTransition) != "autoscaling:EC2_INSTANCE_TERMINATING" {
+		t.Fatalf("unexpected lifecycle hook transition: %#v", asgClient.putLifecycleHookInput)
+	}
+	if awssdk.ToString(asgClient.putLifecycleHookInput.DefaultResult) != "CONTINUE" {
+		t.Fatalf("unexpected lifecycle hook default: %#v", asgClient.putLifecycleHookInput)
 	}
 	if awssdk.ToString(ec2Client.associateAddressInput.InstanceId) != "i-owner" {
 		t.Fatalf("EIP should associate to pool owner: %#v", ec2Client.associateAddressInput)
@@ -779,11 +802,13 @@ func (f *fakeEC2) hasTaggedResource(resourceID string) bool {
 }
 
 type fakeAutoScaling struct {
-	instanceIDs   []string
-	createInput   *autoscaling.CreateAutoScalingGroupInput
-	deleteInput   *autoscaling.DeleteAutoScalingGroupInput
-	describeInput *autoscaling.DescribeAutoScalingGroupsInput
-	updateInput   *autoscaling.UpdateAutoScalingGroupInput
+	instanceIDs              []string
+	createInput              *autoscaling.CreateAutoScalingGroupInput
+	deleteInput              *autoscaling.DeleteAutoScalingGroupInput
+	deleteLifecycleHookInput *autoscaling.DeleteLifecycleHookInput
+	describeInput            *autoscaling.DescribeAutoScalingGroupsInput
+	putLifecycleHookInput    *autoscaling.PutLifecycleHookInput
+	updateInput              *autoscaling.UpdateAutoScalingGroupInput
 }
 
 func (f *fakeAutoScaling) CreateAutoScalingGroup(_ context.Context, params *autoscaling.CreateAutoScalingGroupInput, _ ...func(*autoscaling.Options)) (*autoscaling.CreateAutoScalingGroupOutput, error) {
@@ -794,6 +819,11 @@ func (f *fakeAutoScaling) CreateAutoScalingGroup(_ context.Context, params *auto
 func (f *fakeAutoScaling) DeleteAutoScalingGroup(_ context.Context, params *autoscaling.DeleteAutoScalingGroupInput, _ ...func(*autoscaling.Options)) (*autoscaling.DeleteAutoScalingGroupOutput, error) {
 	f.deleteInput = params
 	return &autoscaling.DeleteAutoScalingGroupOutput{}, nil
+}
+
+func (f *fakeAutoScaling) DeleteLifecycleHook(_ context.Context, params *autoscaling.DeleteLifecycleHookInput, _ ...func(*autoscaling.Options)) (*autoscaling.DeleteLifecycleHookOutput, error) {
+	f.deleteLifecycleHookInput = params
+	return &autoscaling.DeleteLifecycleHookOutput{}, nil
 }
 
 func (f *fakeAutoScaling) DescribeAutoScalingGroups(_ context.Context, params *autoscaling.DescribeAutoScalingGroupsInput, _ ...func(*autoscaling.Options)) (*autoscaling.DescribeAutoScalingGroupsOutput, error) {
@@ -812,23 +842,41 @@ func (f *fakeAutoScaling) DescribeAutoScalingGroups(_ context.Context, params *a
 	}, nil
 }
 
+func (f *fakeAutoScaling) PutLifecycleHook(_ context.Context, params *autoscaling.PutLifecycleHookInput, _ ...func(*autoscaling.Options)) (*autoscaling.PutLifecycleHookOutput, error) {
+	f.putLifecycleHookInput = params
+	return &autoscaling.PutLifecycleHookOutput{}, nil
+}
+
 func (f *fakeAutoScaling) UpdateAutoScalingGroup(_ context.Context, params *autoscaling.UpdateAutoScalingGroupInput, _ ...func(*autoscaling.Options)) (*autoscaling.UpdateAutoScalingGroupOutput, error) {
 	f.updateInput = params
 	return &autoscaling.UpdateAutoScalingGroupOutput{}, nil
 }
 
 type fakeDynamoDB struct {
-	createTableInput *dynamodb.CreateTableInput
-	deleteTableInput *dynamodb.DeleteTableInput
-	createTableError error
+	createTableInputs []*dynamodb.CreateTableInput
+	deleteTableInput  *dynamodb.DeleteTableInput
+	createTableError  error
 }
 
 func (f *fakeDynamoDB) CreateTable(_ context.Context, params *dynamodb.CreateTableInput, _ ...func(*dynamodb.Options)) (*dynamodb.CreateTableOutput, error) {
-	f.createTableInput = params
+	f.createTableInputs = append(f.createTableInputs, params)
 	return &dynamodb.CreateTableOutput{}, f.createTableError
 }
 
 func (f *fakeDynamoDB) DeleteTable(_ context.Context, params *dynamodb.DeleteTableInput, _ ...func(*dynamodb.Options)) (*dynamodb.DeleteTableOutput, error) {
 	f.deleteTableInput = params
 	return &dynamodb.DeleteTableOutput{}, nil
+}
+
+func (f *fakeDynamoDB) hasCreatedTable(name string) bool {
+	return f.createdTable(name) != nil
+}
+
+func (f *fakeDynamoDB) createdTable(name string) *dynamodb.CreateTableInput {
+	for _, input := range f.createTableInputs {
+		if awssdk.ToString(input.TableName) == name {
+			return input
+		}
+	}
+	return nil
 }

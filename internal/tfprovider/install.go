@@ -21,6 +21,7 @@ import (
 type Installer interface {
 	Install(ctx context.Context, plan installplan.Plan, inputs awsinstall.Inputs) (awsinstall.Result, error)
 	UpdateCapacity(ctx context.Context, plan installplan.Plan) error
+	ReconcileInfrastructure(ctx context.Context, plan installplan.Plan) error
 }
 
 type Rollbacker interface {
@@ -57,6 +58,10 @@ func (i awsInstaller) Install(ctx context.Context, plan installplan.Plan, inputs
 
 func (i awsInstaller) UpdateCapacity(ctx context.Context, plan installplan.Plan) error {
 	return i.applier.UpdateCapacity(ctx, plan)
+}
+
+func (i awsInstaller) ReconcileInfrastructure(ctx context.Context, plan installplan.Plan) error {
+	return i.applier.ReconcileInfrastructure(ctx, plan)
 }
 
 func (i awsInstaller) RestoreRoutes(ctx context.Context, routes []awsinstall.RollbackRoute) error {
@@ -229,6 +234,9 @@ func updateGatewayCapacity(ctx context.Context, state GatewayResourceModel, fact
 	}
 	installer, err := factory(ctx, state.Region.ValueString())
 	if err != nil {
+		return err
+	}
+	if err := installer.ReconcileInfrastructure(ctx, plan); err != nil {
 		return err
 	}
 	return installer.UpdateCapacity(ctx, plan)

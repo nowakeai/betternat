@@ -1,6 +1,6 @@
 # BetterNAT Alpha Bootstrap Release Path
 
-Date: 2026-06-21
+Date: 2026-06-23
 
 ## Purpose
 
@@ -199,17 +199,23 @@ For `v0.1.0-alpha.1`, this is a conservative baseline, not a high-volume perform
 
 Before using this path for `v0.1.0-alpha.1`:
 
-- [ ] release artifact build succeeds,
-- [ ] `SHA256SUMS` contains the Linux arm64 agent,
-- [ ] `SHA256SUMS` contains the Linux arm64 CLI,
-- [ ] GitHub Release contains the Linux arm64 agent,
-- [ ] GitHub Release contains the Linux arm64 CLI,
-- [ ] GitHub Release contains `SHA256SUMS`,
-- [ ] Terraform validates with `agent_binary_sha256` and `cli_binary_sha256`,
-- [ ] AWS supplemental apply uses the checksum,
-- [ ] cloud-init verifies both checksums successfully,
-- [ ] cloud-init applies `/etc/sysctl.d/99-betternat.conf`,
-- [ ] agent service starts,
-- [ ] LoxiLB datapath becomes ready,
-- [ ] private client egress works,
-- [ ] destroy and residual cleanup pass.
+- [x] release artifact build succeeds,
+- [x] `SHA256SUMS` contains the Linux arm64 agent,
+- [x] `SHA256SUMS` contains the Linux arm64 CLI,
+- [x] GitHub Release contains the Linux arm64 agent,
+- [x] GitHub Release contains the Linux arm64 CLI,
+- [x] GitHub Release contains `SHA256SUMS`,
+- [x] Terraform validates with `agent_binary_sha256` and `cli_binary_sha256`,
+- [x] AWS supplemental apply uses the checksum,
+- [x] cloud-init verifies both checksums successfully,
+- [x] cloud-init applies `/etc/sysctl.d/99-betternat.conf`,
+- [x] agent service starts,
+- [x] LoxiLB datapath becomes ready,
+- [x] private client egress works,
+- [x] destroy and residual cleanup pass.
+
+Evidence is recorded in:
+
+- `docs/release/RELEASE_CHECKLIST.md`
+- `docs/research/035-p0-open-source-release-acceptance-results.md`
+- `docs/research/037-v0.1.0-alpha-aws-release-candidate-results.md`

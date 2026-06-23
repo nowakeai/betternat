@@ -58,6 +58,26 @@ func TestReleaseUsesGenerationFence(t *testing.T) {
 	}
 }
 
+func TestTransferUsesGenerationFence(t *testing.T) {
+	now := time.Unix(100, 0)
+	db := &fakeDynamoDB{item: item("ha-a", "i-b", 3, 110, 100)}
+	manager := NewFromClient(db, "leases", "ha-a", 10*time.Second, func() time.Time { return now })
+
+	record, err := manager.Transfer(context.Background(), mustRecord(item("ha-a", "i-a", 2, 105, 95)), "i-b")
+	if err != nil {
+		t.Fatalf("transfer: %v", err)
+	}
+	if record.OwnerInstanceID != "i-b" || record.Generation != 3 {
+		t.Fatalf("unexpected transferred record: %#v", record)
+	}
+	if got := *db.updateInput.ConditionExpression; got != "owner_instance_id = :owner AND generation = :generation AND expires_at > :now" {
+		t.Fatalf("unexpected condition: %s", got)
+	}
+	if got := db.updateInput.ExpressionAttributeValues[":new_owner"].(*types.AttributeValueMemberS).Value; got != "i-b" {
+		t.Fatalf("unexpected new owner: %s", got)
+	}
+}
+
 func TestCurrentReturnsRecord(t *testing.T) {
 	db := &fakeDynamoDB{item: item("ha-a", "i-a", 2, 105, 95)}
 	manager := NewFromClient(db, "leases", "ha-a", 10*time.Second, time.Now)

@@ -1,6 +1,6 @@
 # BetterNAT Engineering Release Gap List
 
-Date: 2026-06-21
+Date: 2026-06-23
 
 ## Purpose
 
@@ -56,7 +56,7 @@ P2:
 Current:
 
 - `betternat doctor` performs static/config-level checks.
-- `betternat doctor --live` adds first-pass appliance-local live checks.
+- `betternat doctor --live` adds first-pass node-local live checks.
 
 Implemented:
 
@@ -73,13 +73,13 @@ Implemented:
 
 Still needed:
 
-- P1 polish for the static rollback-config warning when running on a gateway appliance.
+- P1 polish for the static rollback-config warning when running on a gateway node.
 
 Acceptance:
 
 - command returns JSON,
 - exits nonzero on critical failure,
-- works on the gateway appliance,
+- works on the gateway node,
 - does not mutate AWS state,
 - has unit tests with fake checker dependencies,
 - documented in operations guide.
@@ -401,7 +401,212 @@ Should aggregate:
 
 Can overlap with `doctor --live`.
 
-### 3. Prometheus Alert Rules
+### 3. Agent Registry Coordination Backend
+
+Current:
+
+- `betternat status` can aggregate gateway instances through AWS ASG/EC2 discovery plus metrics scraping.
+- This is useful for alpha validation but too AWS-specific and permission-heavy as the long-term CLI/status path.
+
+Planned:
+
+- [x] Add a provider-neutral coordination backend abstraction.
+- [x] On AWS, use DynamoDB as the first coordination backend implementation.
+- [x] Move the target AWS shape to one coordination table keyed by `ha_group_id` and `record_id`.
+- [x] Store fenced HA ownership in `record_id=lease`.
+- [x] Store agent registry records in `record_id=agent#<node_id>`.
+- [x] Reserve the same table for future message, drain, and upgrade-intent records.
+- [x] Have each agent register its own identity, version, private IP, metrics URL, HA state, datapath readiness, and freshness TTL.
+- [x] Add provider-owned infrastructure reconciliation so provider upgrades can create the coordination table and replace the BetterNAT-managed `betternat-runtime` IAM policy in place.
+- [x] Make `betternat status` registry-first:
+  - read lease owner,
+  - query fresh agent records,
+  - scrape each agent's metrics URL,
+  - render active/standby, versions, IPs, and traffic.
+
+Reference:
+
+- `docs/research/038-agent-registry-control-plane-plan.md`
+
+Acceptance:
+
+- [x] `betternat status` does not require `autoscaling:DescribeAutoScalingGroups` or `ec2:DescribeInstances` in normal operation.
+- [x] stale records disappear after TTL.
+- [x] graceful shutdown removes the local record on clean agent exit.
+- [x] route/EIP mutation safety remains tied to lease generation, not registry state.
+- [x] provider upgrade can add/remove BetterNAT-managed IAM permissions and create provider-owned coordination resources without replacing gateway nodes or mutating route/EIP ownership.
+
+AWS validation on 2026-06-23:
+
+- Test environment: `bnat-lifecycle-20260623023753`, `us-west-2a`, all gateway nodes on Spot.
+- Coordination table created: `betternat-bnat-lifecycle-20260623023753-coordination`.
+- Runtime IAM policy updated in place:
+  - added `dynamodb:Query`,
+  - removed `autoscaling:DescribeAutoScalingGroups`,
+  - removed `ec2:DescribeInstances`.
+- First rolling update to `v0.1.0-alpha.coord-20260623055746` exposed a registry-refresh bug: active agent registry publishing could stall when datapath status sampling blocked.
+- Fixed by timing out registry datapath status sampling and still publishing the agent record with `datapath_ready=false` when the sample is unavailable.
+- Second rolling update to `v0.1.0-alpha.coordfix-20260623061100` succeeded:
+  - ASG instance refresh `cc201797-ecc0-4503-81ac-9001e0ffa376`,
+  - status `Successful`,
+  - active `i-0eea9f6ca48b64e7a`,
+  - standby `i-045bcb415c357b5e8`,
+  - route `0.0.0.0/0` points at `i-0eea9f6ca48b64e7a`,
+  - shared EIP `52.24.117.43` is associated with `i-0eea9f6ca48b64e7a`,
+  - `betternat status --output json` reports both instances with version `v0.1.0-alpha.coordfix-20260623061100`, roles `active` and `standby`, and `metrics:"ok"`.
+- `doctor --live` on the active instance passed IAM, lease, route, EIP, source/destination check, Prometheus, and source-IP probe checks with the reduced runtime policy. Remaining warnings were expected:
+  - rollback route targets are not captured yet,
+  - ASG discovery is skipped because coordination registry is configured.
+- Revalidated on 2026-06-23 after the daemon/handover design update:
+  - ASG desired capacity is 2 and both gateway instances are `InService` and `Healthy`,
+  - coordination table contains two `agent#...` records plus `lease`,
+  - lease owner, route target, and shared EIP owner all match `i-0eea9f6ca48b64e7a`,
+  - `sudo betternat status --output json` succeeds from both gateway instances and reports the same active/standby view,
+  - `sudo betternat doctor --live --config /etc/betternat/agent.json` succeeds on the active instance with the same expected warnings.
+
+### 4. Agent Daemon API For Fast CLI
+
+Current:
+
+- `betternat status` is registry-first and no longer needs ASG/EC2 discovery permissions.
+- Phase 1 local daemon API is implemented in code:
+  - `betternat-agent` starts a Unix socket control API at `/run/betternat/agent.sock` when possible,
+  - `GET /v1/status` serves a cached status response,
+  - the daemon refreshes registry and peer-metrics state in the background,
+  - `betternat status` calls the daemon by default,
+  - `betternat status --direct --config /etc/betternat/agent.json` keeps the old debug path.
+
+Remaining:
+
+- add richer daemon endpoints for datapath, failover, doctor, config, refresh, peers, drain, and handover,
+- decide whether alpha read-only socket access remains root-only or uses a `betternat` group.
+
+Reference:
+
+- `docs/research/039-agent-daemon-api-and-handover-plan.md`
+
+Acceptance:
+
+- [x] `betternat status` returns from local cached daemon state without creating DynamoDB clients or scraping peers in the CLI process.
+- [x] status output marks stale cached data clearly.
+- [x] daemon API remains separate from Prometheus metrics.
+- [x] local socket access is restricted to root or a BetterNAT operator group.
+- [x] AWS runtime artifact published and verified with daemon-backed status.
+- [x] status table output is pipe-friendly and reports the active shared public IP.
+
+AWS validation on 2026-06-23:
+
+- Published `v0.1.0-alpha.daemon-20260623073549` runtime artifacts to the existing alpha artifact bucket.
+- Created launch template version `7` and updated ASG `betternat-bnat-lifecycle-20260623023753-us-west-2a` to use it.
+- First refresh against the old ASG-pinned launch template version was harmless but still produced LT `6` instances; after updating the ASG launch template version explicitly, refresh `4ac19c25-64b3-4a4c-ac5b-a431c19770ba` completed successfully.
+- New gateway instances:
+  - active `i-0cf9c5b33ceca117d`,
+  - standby `i-0e2091a2b696bdee5`,
+  - both `InService`, `Healthy`, and LT `7`.
+- `sudo test -S /run/betternat/agent.sock` passed on both instances.
+- Default `sudo betternat status --output json` returned daemon API `schema_version:"v1"` and fresh cache metadata on both instances.
+- `sudo betternat status --direct --config /etc/betternat/agent.json --output json --sample 0s` still worked as the direct fallback.
+- Route `0.0.0.0/0` and shared EIP `52.24.117.43` both pointed at active `i-0cf9c5b33ceca117d`.
+- `doctor --live` on active passed IAM, lease, route, EIP, source/destination check, Prometheus, and source-IP probe with the same expected warnings.
+
+Status UX follow-up validation on 2026-06-23:
+
+- Published `v0.1.0-alpha.statusux-20260623081543`.
+- Created launch template version `9`.
+- Instance refresh `e2d822ce-979d-4603-b5cc-2e6a24aeec1c` completed successfully.
+- New gateway instances:
+  - active `i-0095956b45e4462f5`,
+  - standby `i-07884bbdd4a162a9a`,
+  - both `InService`, `Healthy`, and LT `9`.
+- Default `sudo betternat status` on both instances used borderless aligned columns instead of box-drawing table borders.
+- Default `sudo betternat status --output json` reported shared public IP `52.24.117.43` in the summary and active instance row.
+- Live SSM recheck command `6f56c079-7b8e-45d5-a6f0-ff90cb2edff0` confirmed the same output from both gateway instances.
+- Route `0.0.0.0/0` and shared EIP `52.24.117.43` both pointed at active `i-0095956b45e4462f5`.
+- `doctor --live` on active passed key live checks with the same expected warnings.
+
+### 5. Proactive Handover
+
+Current:
+
+- Hard-failure takeover is lease-expiry based.
+- Manual active-local proactive handover is implemented in code:
+  - `lease.Transfer` moves ownership only when owner, generation, and expiry conditions still match,
+  - active daemon `POST /v1/handover` validates that the local daemon is active and the target is a healthy fresh standby from daemon cache,
+  - durable `handover#<request_id>` records are written to the coordination table for requested, preparing, committing, completed, failed, and rejected outcomes,
+  - duplicate `request_id` submissions return the existing durable handover state instead of creating a competing operation,
+  - standby-local handover requests can forward to the active daemon when the peer control API is configured,
+  - authenticated peer prepare requests require a Bearer token and the standby verifies that the requester is the current active lease owner before accepting prepare,
+  - systemd stop, ASG lifecycle termination, and Spot interruption events trigger automatic handover before local supervisor shutdown when the coordination registry is configured,
+  - controller moves EIP/route to target, verifies cloud ownership, then transfers the lease,
+  - if lease transfer fails after cloud mutation, controller attempts to revert EIP/route to the source,
+  - `betternat handover start --to auto|<instance-id>` calls the daemon; there is no direct mutation fallback.
+
+Remaining:
+
+- publish and verify the automatic handover build on AWS,
+- add richer `/v1/handover` state reporting and operation listing,
+- add structured phase-duration metrics and logs for handover operations,
+- add AWS validation for:
+  - systemd stop on active,
+  - ASG lifecycle termination on active,
+  - Spot interruption simulation where possible,
+  - standby-local CLI request forwarding.
+
+Reference:
+
+- `docs/research/039-agent-daemon-api-and-handover-plan.md`
+
+Acceptance:
+
+- [x] graceful handover is faster than waiting for lease expiry.
+- [x] route/EIP mutation remains fenced by the current lease owner and generation.
+- [x] if lease transfer fails after cloud mutation, active attempts to revert route/EIP before returning failure.
+- [x] hard-crash passive failover continues to work.
+- [x] AWS handover validation completed.
+- [x] duplicate handover request IDs are idempotent.
+- [x] standby peer prepare rejects non-active requesters.
+- [ ] AWS automatic systemd/ASG/Spot handover validation completed.
+
+AWS validation on 2026-06-23:
+
+- Published `v0.1.0-alpha.handover-20260623080252`.
+- Created launch template version `8` and refreshed ASG with refresh `7117f616-2132-4d74-a513-c2f50bbd71d6`; refresh completed successfully.
+- Pre-handover state:
+  - active `i-056fcf70d3dc3061c`,
+  - standby `i-09360439fc37ef0d0`,
+  - both `InService`, `Healthy`, and LT `8`.
+- Ran `sudo betternat handover start --to auto --reason manual-aws-validation --output json` on active.
+- CLI command output reported:
+  - status `completed`,
+  - source `i-056fcf70d3dc3061c`,
+  - target `i-09360439fc37ef0d0`,
+  - lease generation `2`.
+- Command-internal elapsed time was about `2.8s`; SSM outer wall time was about `10.6s`.
+- Post-handover verification:
+  - coordination lease owner is `i-09360439fc37ef0d0`, generation `2`,
+  - private route `0.0.0.0/0` points at `i-09360439fc37ef0d0`,
+  - shared EIP `52.24.117.43` is associated with `i-09360439fc37ef0d0`,
+  - both daemon status views agree on new active/standby roles,
+  - `doctor --live` on the new active passed IAM, lease, route, EIP, source/destination check, Prometheus, and source-IP probe with the same expected warnings.
+
+Local implementation follow-up on 2026-06-23:
+
+- Added coordination-table durable handover records keyed by `handover#<request_id>`.
+- Added request-id idempotency for daemon handover requests.
+- Added standby request forwarding to the active peer control URL when peer auth is configured.
+- Added authenticated peer control API support using Bearer token checks.
+- Added peer prepare validation so the standby reads the current lease and rejects prepare from non-active requesters or stale generations.
+- Added automatic handover trigger paths for:
+  - systemd stop / SIGTERM context cancellation,
+  - ASG lifecycle termination events from IMDS,
+  - Spot interruption events from IMDS.
+- Terraform provider now generates a random sensitive `peer_api_auth_token`, stores it in state, renders peer API config into provider-managed agent config, and bumps the provider infrastructure revision to trigger safe in-place reconciliation.
+- Local validation passed:
+  - `GOCACHE=$PWD/tmp/go-build go test ./...`,
+  - `GOCACHE=$PWD/tmp/go-build go build ./cmd/betternat ./cmd/betternat-agent ./cmd/terraform-provider-betternat`.
+- AWS publish and automatic-trigger validation are still pending for this follow-up build.
+
+### 6. Prometheus Alert Rules
 
 Add:
 
@@ -411,7 +616,7 @@ examples/prometheus/betternat-alerts.yaml
 
 Rules:
 
-- no active appliance,
+- no active node,
 - HA status stale,
 - route target mismatch,
 - EIP mismatch,
@@ -424,7 +629,7 @@ Acceptance:
 - syntax checked with `promtool` if available,
 - documented in operations guide.
 
-### 4. Grafana Starter Dashboard
+### 7. Grafana Starter Dashboard
 
 Add a starter dashboard or documented queries.
 
@@ -438,7 +643,7 @@ Minimum panels:
 - route/EIP match,
 - failover attempts/success.
 
-### 5. AMI Build Pipeline
+### 8. AMI Build Pipeline
 
 For alpha, a documented bootstrap path is the intended release path.
 
@@ -450,7 +655,16 @@ For production, add:
 - AMI file listing validation,
 - license files installed into AMI.
 
-### 6. Advanced Kernel/NIC Tuning Profile
+The production AMI path should also remove the alpha dependency on per-node
+auto-assigned public IPv4 addresses. Alpha bootstrap can use those addresses so
+fresh nodes can download packages and BetterNAT artifacts, but production nodes
+should boot from a prebuilt AMI and use private AWS API reachability instead.
+The provider should only make `AssociatePublicIpAddress=false` the default after
+the install path provisions or validates the required AWS control-plane access
+for standby nodes, including DynamoDB, EC2, Auto Scaling, STS, IAM, SSM, and
+CloudWatch where enabled.
+
+### 9. Advanced Kernel/NIC Tuning Profile
 
 Current alpha bootstrap applies only the conservative baseline gateway sysctls documented in `ALPHA_BOOTSTRAP_RELEASE_PATH.md`.
 
@@ -485,14 +699,18 @@ Defer until benchmark-backed:
 - ASG pool model has been validated in low-cost AWS tests.
 - Stable EIP and non-stable failover have both been tested.
 - Observed owner-termination outage in low-cost AWS test was about 12 seconds under test conditions.
-- `doctor --live` is now implemented for appliance-local cloud checks; static rollback-config warning needs P1 UX polish.
+- `doctor --live` is now implemented for node-local cloud checks; static rollback-config warning needs P1 UX polish.
+- `betternat-agent` handles SIGTERM/SIGINT and releases its currently owned HA lease on graceful shutdown using the fenced lease generation.
+- Provider-created ASG termination lifecycle hooks and agent-side IMDS Spot/ASG termination handling are implemented locally; AWS verification remains required.
+- Current CLI fleet status can use AWS discovery, but the target architecture is DynamoDB-backed agent self-registration through a provider-neutral coordination backend.
 - Release packaging now has a bootstrap artifact path; AMI packaging remains the biggest production-release workflow gap.
 - The first release should avoid making unproven performance claims.
 
 ## Suggested Implementation Order
 
 1. Re-run final local Go/Terraform/release/hygiene verification after the P0 edits.
-2. Add Prometheus alert rules.
-3. Add support bundle or HA status command if we want a stronger alpha troubleshooting story.
-4. Finish user-facing quick-start documentation.
-5. Cut `v0.1.0-alpha.1` when the alpha checklist is satisfied.
+2. Add the agent registry coordination backend if reducing runtime AWS discovery permissions is required before alpha.
+3. Add Prometheus alert rules.
+4. Add support bundle or HA status command if we want a stronger alpha troubleshooting story.
+5. Finish user-facing quick-start documentation.
+6. Rebuild and republish runtime artifacts if post-RC source changes should be included in the alpha tag.

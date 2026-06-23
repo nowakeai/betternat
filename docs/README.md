@@ -73,6 +73,7 @@ These documents guide contributors and agents working in the repo.
 
 - [dev-logs/README.md](dev-logs/README.md) — How to record durable implementation notes, session summaries, and architecture pivots.
 - [dev-logs/2026-06-20-harness-and-dependency-refresh.md](dev-logs/2026-06-20-harness-and-dependency-refresh.md) — Repo harness setup and dependency refresh notes.
+- [dev-logs/2026-06-23-agent-daemon-status-api.md](dev-logs/2026-06-23-agent-daemon-status-api.md) — First daemon-backed CLI status API implementation notes.
 
 ## Key Research Results
 
@@ -89,6 +90,8 @@ Read these first when revisiting product or architecture direction:
 - [research/033-upgrade-and-graceful-shutdown-design.md](research/033-upgrade-and-graceful-shutdown-design.md) — Gateway upgrade model, graceful shutdown, and alpha/production policy.
 - [research/036-loxilb-sysctl-and-conntrack-tuning.md](research/036-loxilb-sysctl-and-conntrack-tuning.md) — LoxiLB/eBPF, sysctl, and `nf_conntrack` tuning decision.
 - [research/037-v0.1.0-alpha-aws-release-candidate-results.md](research/037-v0.1.0-alpha-aws-release-candidate-results.md) — v0.1.0-alpha AWS release-candidate result.
+- [research/038-agent-registry-control-plane-plan.md](research/038-agent-registry-control-plane-plan.md) — Coordination backend, agent registry, service discovery, and permission-reduction plan.
+- [research/039-agent-daemon-api-and-handover-plan.md](research/039-agent-daemon-api-and-handover-plan.md) — Agent daemon API, fast CLI path, cached peer state, and proactive handover plan.
 
 ## Supporting Research
 

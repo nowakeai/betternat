@@ -38,6 +38,7 @@ type Snapshot struct {
 	HATakeoverAttempts      uint64
 	HATakeoverSuccesses     uint64
 	HALeaseRenewErrors      uint64
+	Interface               InterfaceStats
 	Datapath                datapath.Status
 	Counters                datapath.Counters
 	Conntrack               datapath.ConntrackSummary
@@ -58,6 +59,18 @@ type TrafficCounter struct {
 	Direction string
 	Packets   uint64
 	Bytes     uint64
+}
+
+type InterfaceStats struct {
+	Name      string
+	RXBytes   uint64
+	RXPackets uint64
+	RXErrors  uint64
+	RXDropped uint64
+	TXBytes   uint64
+	TXPackets uint64
+	TXErrors  uint64
+	TXDropped uint64
 }
 
 type FailoverEventCounter struct {
@@ -165,6 +178,34 @@ func RenderPrometheus(w io.Writer, snapshot Snapshot) error {
 	}
 	if err := writeMetric(w, "betternat_lease_renew_errors_total", agentLabels, snapshot.HALeaseRenewErrors); err != nil {
 		return err
+	}
+	if snapshot.Interface.Name != "" {
+		interfaceLabels := cloneLabels(agentLabels)
+		interfaceLabels["interface"] = snapshot.Interface.Name
+		if err := writeMetric(w, "betternat_interface_rx_bytes_total", interfaceLabels, snapshot.Interface.RXBytes); err != nil {
+			return err
+		}
+		if err := writeMetric(w, "betternat_interface_rx_packets_total", interfaceLabels, snapshot.Interface.RXPackets); err != nil {
+			return err
+		}
+		if err := writeMetric(w, "betternat_interface_rx_errors_total", interfaceLabels, snapshot.Interface.RXErrors); err != nil {
+			return err
+		}
+		if err := writeMetric(w, "betternat_interface_rx_dropped_total", interfaceLabels, snapshot.Interface.RXDropped); err != nil {
+			return err
+		}
+		if err := writeMetric(w, "betternat_interface_tx_bytes_total", interfaceLabels, snapshot.Interface.TXBytes); err != nil {
+			return err
+		}
+		if err := writeMetric(w, "betternat_interface_tx_packets_total", interfaceLabels, snapshot.Interface.TXPackets); err != nil {
+			return err
+		}
+		if err := writeMetric(w, "betternat_interface_tx_errors_total", interfaceLabels, snapshot.Interface.TXErrors); err != nil {
+			return err
+		}
+		if err := writeMetric(w, "betternat_interface_tx_dropped_total", interfaceLabels, snapshot.Interface.TXDropped); err != nil {
+			return err
+		}
 	}
 
 	if err := writeMetric(w, "betternat_datapath_engine_info", baseLabels, 1); err != nil {

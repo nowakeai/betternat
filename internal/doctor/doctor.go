@@ -130,8 +130,12 @@ type InstanceInspector interface {
 	DescribeInstance(ctx context.Context, instanceID string) (cloud.InstanceInfo, error)
 }
 
+type SourceDestCheckInspector interface {
+	SourceDestCheckEnabled(ctx context.Context, instanceID string) (bool, error)
+}
+
 type SourceDestCheckChecker struct {
-	Inspector  InstanceInspector
+	Inspector  SourceDestCheckInspector
 	InstanceID string
 }
 
@@ -139,11 +143,11 @@ func (c SourceDestCheckChecker) Check(ctx context.Context) CheckResult {
 	if c.Inspector == nil {
 		return CheckResult{Name: "source_dest_check", Status: StatusCritical, Message: "instance inspector is not configured"}
 	}
-	info, err := c.Inspector.DescribeInstance(ctx, c.InstanceID)
+	enabled, err := c.Inspector.SourceDestCheckEnabled(ctx, c.InstanceID)
 	if err != nil {
-		return CheckResult{Name: "source_dest_check", Status: StatusCritical, Message: fmt.Sprintf("describe instance failed: %v", err)}
+		return CheckResult{Name: "source_dest_check", Status: StatusCritical, Message: fmt.Sprintf("describe source/destination check failed: %v", err)}
 	}
-	if info.SourceDestCheckEnabled {
+	if enabled {
 		return CheckResult{Name: "source_dest_check", Status: StatusCritical, Message: "source/destination check is enabled"}
 	}
 	return CheckResult{Name: "source_dest_check", Status: StatusOK, Message: "source/destination check is disabled"}

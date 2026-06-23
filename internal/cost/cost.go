@@ -7,8 +7,8 @@ type EstimateInput struct {
 	Hours                     float64 `json:"hours"`
 	NATGatewayHourlyUSD       float64 `json:"nat_gateway_hourly_usd"`
 	NATGatewayProcessingUSDGB float64 `json:"nat_gateway_processing_usd_per_gb"`
-	ApplianceHourlyUSD        float64 `json:"appliance_hourly_usd"`
-	ApplianceCount            int     `json:"appliance_count"`
+	NodeHourlyUSD             float64 `json:"node_hourly_usd"`
+	NodeCount                 int     `json:"node_count"`
 }
 
 type Estimate struct {
@@ -24,8 +24,8 @@ func DefaultInput() EstimateInput {
 		Hours:                     730,
 		NATGatewayHourlyUSD:       0.045,
 		NATGatewayProcessingUSDGB: 0.045,
-		ApplianceHourlyUSD:        0.05,
-		ApplianceCount:            2,
+		NodeHourlyUSD:             0.05,
+		NodeCount:                 2,
 	}
 }
 
@@ -36,14 +36,14 @@ func EstimateMonthly(input EstimateInput) (Estimate, error) {
 	if input.Hours <= 0 {
 		return Estimate{}, fmt.Errorf("hours must be positive")
 	}
-	if input.NATGatewayHourlyUSD < 0 || input.NATGatewayProcessingUSDGB < 0 || input.ApplianceHourlyUSD < 0 {
+	if input.NATGatewayHourlyUSD < 0 || input.NATGatewayProcessingUSDGB < 0 || input.NodeHourlyUSD < 0 {
 		return Estimate{}, fmt.Errorf("prices must be non-negative")
 	}
-	if input.ApplianceCount <= 0 {
-		return Estimate{}, fmt.Errorf("appliance count must be positive")
+	if input.NodeCount <= 0 {
+		return Estimate{}, fmt.Errorf("node count must be positive")
 	}
 	natGateway := input.Hours*input.NATGatewayHourlyUSD + input.ProcessedGB*input.NATGatewayProcessingUSDGB
-	betterNAT := input.Hours * input.ApplianceHourlyUSD * float64(input.ApplianceCount)
+	betterNAT := input.Hours * input.NodeHourlyUSD * float64(input.NodeCount)
 	savings := natGateway - betterNAT
 	percent := 0.0
 	if natGateway > 0 {

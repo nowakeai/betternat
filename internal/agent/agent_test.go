@@ -3,6 +3,8 @@ package agent
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,7 +13,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nowakeai/betternat/internal/agentapi"
+	"github.com/nowakeai/betternat/internal/cloud"
 	"github.com/nowakeai/betternat/internal/config"
+	dynamodbcoord "github.com/nowakeai/betternat/internal/coordination/dynamodb"
 	"github.com/nowakeai/betternat/internal/datapath"
 	"github.com/nowakeai/betternat/internal/ha"
 	"github.com/nowakeai/betternat/internal/lease"
@@ -66,6 +71,15 @@ func (e *fakeEngine) ConntrackSummary(context.Context) (datapath.ConntrackSummar
 
 func (e *fakeEngine) Cleanup(context.Context) error { return nil }
 
+type blockingStatusEngine struct {
+	fakeEngine
+}
+
+func (e blockingStatusEngine) Status(ctx context.Context) (datapath.Status, error) {
+	<-ctx.Done()
+	return datapath.Status{}, ctx.Err()
+}
+
 type fakeInstancePreparer struct {
 	instanceID string
 }
@@ -110,12 +124,88 @@ func (s *fakeHASupervisor) Run(ctx context.Context, _ config.Config, localInstan
 	return nil
 }
 
+type fakeTerminationWatcher struct {
+	action cloud.LifecycleAction
+	err    error
+}
+
+func (w fakeTerminationWatcher) Run(context.Context) (cloud.LifecycleAction, error) {
+	return w.action, w.err
+}
+
+type fakeLifecycleCompleter struct {
+	action cloud.LifecycleAction
+	cancel context.CancelFunc
+	err    error
+}
+
+func (c *fakeLifecycleCompleter) CompleteLifecycleAction(_ context.Context, action cloud.LifecycleAction) error {
+	c.action = action
+	if c.cancel != nil {
+		c.cancel()
+	}
+	return c.err
+}
+
 type fakeStatusReporter struct {
 	snapshot ha.StatusSnapshot
 }
 
 func (r fakeStatusReporter) Snapshot() ha.StatusSnapshot {
 	return r.snapshot
+}
+
+type fakeHandoverStore struct {
+	current      lease.Record
+	records      map[string]dynamodbcoord.HandoverRecord
+	createErr    error
+	missFirstGet bool
+	getCalls     int
+	created      []dynamodbcoord.HandoverRecord
+	updated      []dynamodbcoord.HandoverRecord
+}
+
+func (s *fakeHandoverStore) CreateHandover(_ context.Context, record dynamodbcoord.HandoverRecord, _ time.Duration) (dynamodbcoord.HandoverRecord, error) {
+	if s.createErr != nil {
+		return dynamodbcoord.HandoverRecord{}, s.createErr
+	}
+	if s.records == nil {
+		s.records = map[string]dynamodbcoord.HandoverRecord{}
+	}
+	s.records[record.RequestID] = record
+	s.created = append(s.created, record)
+	return record, nil
+}
+
+func (s *fakeHandoverStore) UpdateHandover(_ context.Context, record dynamodbcoord.HandoverRecord, _ time.Duration) (dynamodbcoord.HandoverRecord, error) {
+	if s.records == nil {
+		s.records = map[string]dynamodbcoord.HandoverRecord{}
+	}
+	s.records[record.RequestID] = record
+	s.updated = append(s.updated, record)
+	return record, nil
+}
+
+func (s *fakeHandoverStore) GetHandover(_ context.Context, requestID string) (dynamodbcoord.HandoverRecord, error) {
+	s.getCalls++
+	if s.missFirstGet && s.getCalls == 1 {
+		return dynamodbcoord.HandoverRecord{}, os.ErrNotExist
+	}
+	if s.records == nil {
+		return dynamodbcoord.HandoverRecord{}, os.ErrNotExist
+	}
+	record, ok := s.records[requestID]
+	if !ok {
+		return dynamodbcoord.HandoverRecord{}, os.ErrNotExist
+	}
+	return record, nil
+}
+
+func (s *fakeHandoverStore) Current(context.Context) (lease.Record, error) {
+	if s.current.OwnerInstanceID == "" {
+		return lease.Record{}, os.ErrNotExist
+	}
+	return s.current, nil
 }
 
 func TestRuntimeVersionDoesNotRequireConfig(t *testing.T) {
@@ -175,6 +265,7 @@ func TestRuntimeContinuousStartsHASupervisorWhenEnabled(t *testing.T) {
 		Stdout:               ioDiscard{},
 		MetricsListenAddress: "127.0.0.1:0",
 		DisableMetricsServer: true,
+		DisableTermination:   true,
 	}
 
 	if err := runtime.Run(ctx, Options{ConfigPath: configPath}); err != nil {
@@ -191,6 +282,268 @@ func TestRuntimeContinuousStartsHASupervisorWhenEnabled(t *testing.T) {
 	}
 	if engine.reconcileCount != 0 {
 		t.Fatalf("plain reconcile loop should not run before HA supervisor, got %d", engine.reconcileCount)
+	}
+}
+
+func TestDatapathStatusForRegistryTimesOut(t *testing.T) {
+	start := time.Now()
+	status := datapathStatusForRegistry(context.Background(), &blockingStatusEngine{}, 10*time.Millisecond)
+	if time.Since(start) > time.Second {
+		t.Fatal("registry datapath status should not block on a stuck engine")
+	}
+	if status.Ready {
+		t.Fatalf("stuck engine should not report ready: %#v", status)
+	}
+	if status.Engine != "fake" {
+		t.Fatalf("unexpected engine name: %#v", status)
+	}
+	if !strings.Contains(status.Message, "deadline exceeded") {
+		t.Fatalf("unexpected timeout message: %#v", status)
+	}
+}
+
+func TestPublicIPForRegistryUsesOwnedSharedEIP(t *testing.T) {
+	cfg, err := config.Load(strings.NewReader(validHAConfigJSON()))
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	cfg.Local.NodeID = "i-active"
+	snapshot := ha.StatusSnapshot{
+		PublicIdentity: cloud.PublicIdentity{
+			InstanceID: "i-active",
+			PublicIP:   "52.24.117.43",
+		},
+	}
+	if got := publicIPForRegistry(cfg, snapshot); got != "52.24.117.43" {
+		t.Fatalf("unexpected public ip: %q", got)
+	}
+	snapshot.PublicIdentity.InstanceID = "i-other"
+	if got := publicIPForRegistry(cfg, snapshot); got != "" {
+		t.Fatalf("non-owned public identity should not publish: %q", got)
+	}
+}
+
+func TestHandoverPrepareVerifiesRequesterIsActiveLeaseOwner(t *testing.T) {
+	cfg, err := config.Load(strings.NewReader(validHAConfigJSON()))
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	cfg.Local.NodeID = "i-standby"
+	store := &fakeHandoverStore{current: lease.Record{
+		HAGroupID:       cfg.HAGroupID,
+		OwnerInstanceID: "i-active",
+		Generation:      2,
+		ExpiresAt:       time.Now().Add(time.Minute),
+	}}
+	handler := newHandoverPrepareHandler(cfg, store)
+
+	rejected := handler(context.Background(), agentapi.HandoverPrepareRequest{
+		RequestID:       "req-1",
+		SourceNodeID:    "i-other",
+		TargetNodeID:    "i-standby",
+		LeaseGeneration: 2,
+	})
+	if rejected.Error == "" {
+		t.Fatalf("expected non-active requester rejection: %#v", rejected)
+	}
+
+	prepared := handler(context.Background(), agentapi.HandoverPrepareRequest{
+		RequestID:       "req-1",
+		SourceNodeID:    "i-active",
+		TargetNodeID:    "i-standby",
+		LeaseGeneration: 2,
+	})
+	if prepared.Status != "prepared" || prepared.Error != "" {
+		t.Fatalf("expected prepared response: %#v", prepared)
+	}
+}
+
+func TestPeerControlAuthenticationRequiresBearerToken(t *testing.T) {
+	handler := authenticatePeer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}), "secret")
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/status", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected unauthorized without bearer token, got %d", rec.Code)
+	}
+
+	rec = httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/status", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected authorized request, got %d", rec.Code)
+	}
+}
+
+func TestStandbyHandoverForwardsToActivePeer(t *testing.T) {
+	var sawAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != agentapi.HandoverPath {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		sawAuth = r.Header.Get("Authorization")
+		var req agentapi.HandoverRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode forwarded request: %v", err)
+		}
+		_ = json.NewEncoder(w).Encode(agentapi.HandoverResponse{
+			SchemaVersion:   "v1",
+			RequestID:       req.RequestID,
+			Status:          "completed",
+			SourceNodeID:    "i-active",
+			TargetNodeID:    req.TargetNodeID,
+			LeaseGeneration: 3,
+		})
+	}))
+	defer server.Close()
+
+	cfg, err := config.Load(strings.NewReader(validHAConfigJSON()))
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	cfg.Local.NodeID = "i-standby"
+	cfg.Control.PeerAPI.AuthToken = "secret"
+	cache := newControlStatusCache(cfg)
+	cache.status.RouteTarget = "i-active"
+	cache.status.Cache.Mode = "cached"
+	cache.status.Instances = []agentapi.StatusInstance{
+		{NodeID: "i-active", Role: "active", Fresh: true, ControlURL: server.URL},
+		{NodeID: "i-standby", Role: "standby", Fresh: true},
+	}
+	handler := newHandoverHandler(cfg, cache, fakeStatusReporter{}, nil)
+
+	resp := handler(context.Background(), agentapi.HandoverRequest{
+		RequestID:    "req-1",
+		TargetNodeID: "auto",
+		Reason:       "test",
+	})
+	if resp.Status != "completed" || resp.SourceNodeID != "i-active" {
+		t.Fatalf("unexpected forwarded response: %#v", resp)
+	}
+	if sawAuth != "Bearer secret" {
+		t.Fatalf("missing peer auth header: %q", sawAuth)
+	}
+}
+
+func TestActiveHandoverUsesFreshLeaseOverStaleStatusCache(t *testing.T) {
+	forwarded := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		forwarded = true
+		_ = json.NewEncoder(w).Encode(agentapi.HandoverResponse{Status: "completed"})
+	}))
+	defer server.Close()
+
+	cfg, err := config.Load(strings.NewReader(validHAConfigJSON()))
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	cfg.Local.NodeID = "i-active"
+	cfg.Control.PeerAPI.AuthToken = "secret"
+	store := &fakeHandoverStore{
+		current: lease.Record{
+			HAGroupID:       cfg.HAGroupID,
+			OwnerInstanceID: "i-active",
+			Generation:      9,
+			ExpiresAt:       time.Now().Add(time.Minute),
+		},
+	}
+	cache := newControlStatusCache(cfg)
+	cache.status.RouteTarget = "i-old-active"
+	cache.status.Cache.Mode = "cached"
+	cache.status.Instances = []agentapi.StatusInstance{
+		{NodeID: "i-old-active", Role: "active", Fresh: true, ControlURL: server.URL},
+		{NodeID: "i-active", Role: "active", Health: "Healthy", Fresh: true},
+	}
+	reporter := fakeStatusReporter{snapshot: ha.StatusSnapshot{Lease: store.current}}
+	handler := newHandoverHandler(cfg, cache, reporter, store)
+
+	resp := handler(context.Background(), agentapi.HandoverRequest{
+		RequestID:    "req-lease-wins",
+		TargetNodeID: "auto",
+		Reason:       "test",
+	})
+	if forwarded {
+		t.Fatal("active daemon forwarded based on stale status cache")
+	}
+	if strings.Contains(resp.Error, "local daemon is not the active route target") {
+		t.Fatalf("fresh lease should prevent stale-cache forwarding: %#v", resp)
+	}
+	if len(store.created) != 1 || store.created[0].LeaseGeneration != 9 {
+		t.Fatalf("handover should use fresh lease record: created=%#v", store.created)
+	}
+}
+
+func TestHandoverRequestIDReturnsExistingDurableRecord(t *testing.T) {
+	cfg, err := config.Load(strings.NewReader(validHAConfigJSON()))
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	store := &fakeHandoverStore{records: map[string]dynamodbcoord.HandoverRecord{
+		"req-1": {
+			RequestID:       "req-1",
+			Status:          "completed",
+			SourceNodeID:    "i-active",
+			TargetNodeID:    "i-standby",
+			LeaseGeneration: 4,
+			Message:         "already done",
+		},
+	}}
+	cache := newControlStatusCache(cfg)
+	handler := newHandoverHandler(cfg, cache, fakeStatusReporter{}, store)
+
+	resp := handler(context.Background(), agentapi.HandoverRequest{RequestID: "req-1", TargetNodeID: "auto"})
+	if resp.Status != "completed" || resp.LeaseGeneration != 4 || resp.Message != "already done" {
+		t.Fatalf("expected existing durable handover response: %#v", resp)
+	}
+	if len(store.created) != 0 || len(store.updated) != 0 {
+		t.Fatalf("duplicate request should not create or update records: created=%#v updated=%#v", store.created, store.updated)
+	}
+}
+
+func TestHandoverCreateConflictReturnsExistingDurableRecord(t *testing.T) {
+	cfg, err := config.Load(strings.NewReader(validHAConfigJSON()))
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	cfg.Local.NodeID = "i-active"
+	store := &fakeHandoverStore{
+		createErr:    errors.New("conditional check failed"),
+		missFirstGet: true,
+		current: lease.Record{
+			HAGroupID:       cfg.HAGroupID,
+			OwnerInstanceID: "i-active",
+			Generation:      3,
+			ExpiresAt:       time.Now().Add(time.Minute),
+		},
+		records: map[string]dynamodbcoord.HandoverRecord{
+			"req-1": {
+				RequestID:       "req-1",
+				Status:          "committing",
+				SourceNodeID:    "i-active",
+				TargetNodeID:    "i-standby",
+				LeaseGeneration: 3,
+			},
+		},
+	}
+	cache := newControlStatusCache(cfg)
+	cache.status.RouteTarget = "i-active"
+	cache.status.Cache.Mode = "cached"
+	cache.status.Instances = []agentapi.StatusInstance{
+		{NodeID: "i-active", Role: "active", Health: "Healthy", Fresh: true},
+		{NodeID: "i-standby", Role: "standby", Health: "Healthy", Fresh: true},
+	}
+	reporter := fakeStatusReporter{snapshot: ha.StatusSnapshot{Lease: store.current}}
+	handler := newHandoverHandler(cfg, cache, reporter, store)
+
+	resp := handler(context.Background(), agentapi.HandoverRequest{RequestID: "req-1", TargetNodeID: "auto"})
+	if resp.Status != "committing" || resp.TargetNodeID != "i-standby" {
+		t.Fatalf("expected existing durable record after create conflict: %#v", resp)
+	}
+	if len(store.updated) != 0 {
+		t.Fatalf("create conflict should not continue operation: %#v", store.updated)
 	}
 }
 
@@ -280,6 +633,7 @@ func TestRuntimeResolvesAutoSharedEIP(t *testing.T) {
 		Stdout:               ioDiscard{},
 		MetricsListenAddress: "127.0.0.1:0",
 		DisableMetricsServer: true,
+		DisableTermination:   true,
 	}
 
 	if err := runtime.Run(ctx, Options{ConfigPath: configPath}); err != nil {
@@ -287,6 +641,97 @@ func TestRuntimeResolvesAutoSharedEIP(t *testing.T) {
 	}
 	if factory.cfg.HA.PublicIdentity.AllocationID != "eipalloc-resolved" {
 		t.Fatalf("shared EIP was not resolved: %#v", factory.cfg.HA.PublicIdentity)
+	}
+}
+
+func TestRuntimeCompletesLifecycleActionAfterTerminationEvent(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "agent.json")
+	if err := os.WriteFile(configPath, []byte(validHAConfigJSON()), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	supervisor := &fakeHASupervisor{}
+	factory := &fakeHASupervisorFactory{supervisor: supervisor}
+	ctx, cancel := context.WithCancel(context.Background())
+	completer := &fakeLifecycleCompleter{cancel: cancel}
+	runtime := Runtime{
+		Factory:             fakeFactory{engine: &fakeEngine{}},
+		HASupervisorFactory: factory,
+		TerminationWatcher: fakeTerminationWatcher{action: cloud.LifecycleAction{
+			AutoScalingGroupName: "betternat-prod-egress-us-west-2a",
+			LifecycleHookName:    "betternat-prod-egress-us-west-2a-terminating",
+			InstanceID:           "i-local",
+			Reason:               "test",
+		}},
+		LifecycleCompleter:   completer,
+		Stdout:               ioDiscard{},
+		MetricsListenAddress: "127.0.0.1:0",
+		DisableMetricsServer: true,
+	}
+
+	if err := runtime.Run(ctx, Options{ConfigPath: configPath}); err != nil {
+		t.Fatalf("runtime continuous HA: %v", err)
+	}
+	if completer.action.InstanceID != "i-local" {
+		t.Fatalf("lifecycle action was not completed: %#v", completer.action)
+	}
+}
+
+func TestWatchGracefulStopRunsHandoverBeforeCancel(t *testing.T) {
+	parent, stop := context.WithCancel(context.Background())
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	defer cancelRun()
+	called := make(chan agentapi.HandoverRequest, 1)
+	watchGracefulStop(parent, cancelRun, func(_ context.Context, req agentapi.HandoverRequest) agentapi.HandoverResponse {
+		called <- req
+		return agentapi.HandoverResponse{SchemaVersion: "v1", Status: "completed"}
+	})
+
+	stop()
+	select {
+	case req := <-called:
+		if req.TargetNodeID != "auto" || req.Reason != "systemd-stop" {
+			t.Fatalf("unexpected graceful stop handover request: %#v", req)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("handover was not called")
+	}
+	select {
+	case <-runCtx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("run context was not cancelled")
+	}
+}
+
+func TestWatchTerminationRunsHandler(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	action := cloud.LifecycleAction{
+		AutoScalingGroupName: "asg",
+		LifecycleHookName:    "hook",
+		InstanceID:           "i-local",
+		Reason:               "spot-instance-action",
+	}
+	called := make(chan cloud.LifecycleAction, 1)
+	actions := watchTermination(ctx, fakeTerminationWatcher{action: action}, func(action cloud.LifecycleAction) {
+		called <- action
+		cancel()
+	})
+	select {
+	case got := <-actions:
+		if got.Reason != "spot-instance-action" {
+			t.Fatalf("unexpected lifecycle action: %#v", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("termination action was not published")
+	}
+	select {
+	case got := <-called:
+		if got.InstanceID != "i-local" {
+			t.Fatalf("unexpected handler action: %#v", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("termination handler was not called")
 	}
 }
 
@@ -348,7 +793,7 @@ func TestMetricsHandler(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	cfg.Local.InstanceID = "i-local"
+	cfg.Local.NodeID = "i-local"
 	engine := &fakeEngine{reconciled: true}
 	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 	rec := httptest.NewRecorder()
@@ -378,6 +823,38 @@ func TestMetricsHandler(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `betternat_lease_owner_match{gateway="prod-egress",ha_group="prod-egress-a",node="i-local"} 1`) {
 		t.Fatalf("missing lease owner match metric: %s", rec.Body.String())
+	}
+}
+
+func TestReadInterfaceStatsFromRoot(t *testing.T) {
+	root := t.TempDir()
+	statsDir := filepath.Join(root, "ens5", "statistics")
+	if err := os.MkdirAll(statsDir, 0o755); err != nil {
+		t.Fatalf("mkdir stats: %v", err)
+	}
+	files := map[string]string{
+		"rx_bytes":   "100\n",
+		"rx_packets": "10\n",
+		"rx_errors":  "1\n",
+		"rx_dropped": "2\n",
+		"tx_bytes":   "200\n",
+		"tx_packets": "20\n",
+		"tx_errors":  "3\n",
+		"tx_dropped": "4\n",
+	}
+	for name, value := range files {
+		if err := os.WriteFile(filepath.Join(statsDir, name), []byte(value), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	stats, err := readInterfaceStatsFromRoot(root, "ens5")
+	if err != nil {
+		t.Fatalf("read interface stats: %v", err)
+	}
+	if stats.Name != "ens5" || stats.RXBytes != 100 || stats.RXPackets != 10 || stats.RXErrors != 1 || stats.RXDropped != 2 ||
+		stats.TXBytes != 200 || stats.TXPackets != 20 || stats.TXErrors != 3 || stats.TXDropped != 4 {
+		t.Fatalf("unexpected interface stats: %#v", stats)
 	}
 }
 

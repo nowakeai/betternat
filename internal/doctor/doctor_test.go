@@ -152,7 +152,7 @@ func TestPublicIdentityChecker(t *testing.T) {
 
 func TestSourceDestCheckChecker(t *testing.T) {
 	result := SourceDestCheckChecker{
-		Inspector:  fakeInstanceInspector{info: cloud.InstanceInfo{InstanceID: "i-active", SourceDestCheckEnabled: false}},
+		Inspector:  fakeSourceDestCheckInspector{enabled: false},
 		InstanceID: "i-active",
 	}.Check(context.Background())
 	if result.Status != StatusOK {
@@ -162,7 +162,7 @@ func TestSourceDestCheckChecker(t *testing.T) {
 
 func TestSourceDestCheckCheckerDetectsEnabled(t *testing.T) {
 	result := SourceDestCheckChecker{
-		Inspector:  fakeInstanceInspector{info: cloud.InstanceInfo{InstanceID: "i-active", SourceDestCheckEnabled: true}},
+		Inspector:  fakeSourceDestCheckInspector{enabled: true},
 		InstanceID: "i-active",
 	}.Check(context.Background())
 	if result.Status != StatusCritical {
@@ -302,6 +302,14 @@ type fakeInstanceInspector struct {
 
 func (f fakeInstanceInspector) DescribeInstance(context.Context, string) (cloud.InstanceInfo, error) {
 	return f.info, nil
+}
+
+type fakeSourceDestCheckInspector struct {
+	enabled bool
+}
+
+func (f fakeSourceDestCheckInspector) SourceDestCheckEnabled(context.Context, string) (bool, error) {
+	return f.enabled, nil
 }
 
 type roundTripperClient struct {

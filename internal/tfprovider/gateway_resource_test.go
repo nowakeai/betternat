@@ -62,13 +62,13 @@ func TestDeriveGatewayState(t *testing.T) {
 	if derived.RouteTargetType.ValueString() != "instance" {
 		t.Fatalf("unexpected route target type: %s", derived.RouteTargetType.ValueString())
 	}
-	if derived.HAProfile.ValueString() != "stable" {
+	if derived.HAProfile.ValueString() != "default" {
 		t.Fatalf("unexpected HA profile: %s", derived.HAProfile.ValueString())
 	}
-	if derived.HALeaseTTLSeconds.ValueInt64() != 30 {
+	if derived.HALeaseTTLSeconds.ValueInt64() != 10 {
 		t.Fatalf("unexpected HA lease TTL: %d", derived.HALeaseTTLSeconds.ValueInt64())
 	}
-	if derived.HARenewIntervalSeconds.ValueInt64() != 5 {
+	if derived.HARenewIntervalSeconds.ValueInt64() != 1 {
 		t.Fatalf("unexpected HA renew interval: %d", derived.HARenewIntervalSeconds.ValueInt64())
 	}
 	if !derived.RollbackOnDestroy.ValueBool() {
@@ -80,6 +80,15 @@ func TestDeriveGatewayState(t *testing.T) {
 	if derived.LeaseTableName.ValueString() != "betternat-prod-egress-leases" {
 		t.Fatalf("unexpected lease table: %s", derived.LeaseTableName.ValueString())
 	}
+	if derived.CoordinationTableName.ValueString() != "betternat-prod-egress-coordination" {
+		t.Fatalf("unexpected coordination table: %s", derived.CoordinationTableName.ValueString())
+	}
+	if len(derived.PeerAPIAuthToken.ValueString()) != 64 {
+		t.Fatalf("unexpected peer api auth token length: %s", derived.PeerAPIAuthToken.ValueString())
+	}
+	if derived.ProviderInfraRevision.ValueString() != providerInfrastructureRevision {
+		t.Fatalf("unexpected provider infrastructure revision: %s", derived.ProviderInfraRevision.ValueString())
+	}
 	if len(derived.AgentConfigHash.ValueString()) != 64 {
 		t.Fatalf("unexpected config hash: %s", derived.AgentConfigHash.ValueString())
 	}
@@ -89,8 +98,17 @@ func TestDeriveGatewayState(t *testing.T) {
 	if !strings.Contains(derived.UserData.ValueString(), `"gateway_id":"prod-egress"`) {
 		t.Fatalf("missing agent config in user data: %s", derived.UserData.ValueString())
 	}
+	if !strings.Contains(derived.UserData.ValueString(), `"peer_api":{"enabled":true`) {
+		t.Fatalf("missing peer api config in user data: %s", derived.UserData.ValueString())
+	}
+	if !strings.Contains(derived.UserData.ValueString(), `"auth_token":"`) {
+		t.Fatalf("missing peer api auth token in user data: %s", derived.UserData.ValueString())
+	}
 	if !strings.Contains(derived.InstallPlanJSON.ValueString(), `"iam_role_name":"betternat-prod-egress-agent"`) {
 		t.Fatalf("missing iam role in install plan: %s", derived.InstallPlanJSON.ValueString())
+	}
+	if !strings.Contains(derived.InstallPlanJSON.ValueString(), `"coordination_table_name":"betternat-prod-egress-coordination"`) {
+		t.Fatalf("missing coordination table in install plan: %s", derived.InstallPlanJSON.ValueString())
 	}
 	if !strings.Contains(derived.InstallPlanJSON.ValueString(), `"security_group_name":"betternat-prod-egress-appliance"`) {
 		t.Fatalf("missing security group in install plan: %s", derived.InstallPlanJSON.ValueString())
@@ -130,35 +148,54 @@ func TestDeriveGatewayState(t *testing.T) {
 	if !strings.Contains(derived.AgentConfigJSON.ValueString(), `"route_table_ids":["rtb-private-a"]`) {
 		t.Fatalf("agent config should use first AZ route table: %s", derived.AgentConfigJSON.ValueString())
 	}
-	if !strings.Contains(derived.AgentConfigJSON.ValueString(), `"ttl_seconds":30`) {
-		t.Fatalf("agent config should use stable HA TTL: %s", derived.AgentConfigJSON.ValueString())
+	if !strings.Contains(derived.AgentConfigJSON.ValueString(), `"ttl_seconds":10`) {
+		t.Fatalf("agent config should use default HA TTL: %s", derived.AgentConfigJSON.ValueString())
 	}
-	if !strings.Contains(derived.AgentConfigJSON.ValueString(), `"renew_interval_seconds":5`) {
-		t.Fatalf("agent config should use stable HA renew interval: %s", derived.AgentConfigJSON.ValueString())
+	if !strings.Contains(derived.AgentConfigJSON.ValueString(), `"renew_interval_seconds":1`) {
+		t.Fatalf("agent config should use default HA renew interval: %s", derived.AgentConfigJSON.ValueString())
 	}
 }
 
-func TestDeriveGatewayStateHAProfileFast(t *testing.T) {
+func TestDeriveGatewayStateHAProfileDefault(t *testing.T) {
 	plan := validGatewayPlan()
-	plan.HAProfile = types.StringValue("fast")
+	plan.HAProfile = types.StringValue("default")
 	derived, err := DeriveGatewayState(context.Background(), &plan)
 	if err != nil {
 		t.Fatalf("derive gateway state: %v", err)
 	}
-	if derived.HALeaseTTLSeconds.ValueInt64() != 10 || derived.HARenewIntervalSeconds.ValueInt64() != 3 {
+	if derived.HALeaseTTLSeconds.ValueInt64() != 10 || derived.HARenewIntervalSeconds.ValueInt64() != 1 {
 		t.Fatalf("unexpected fast HA timing: ttl=%d renew=%d", derived.HALeaseTTLSeconds.ValueInt64(), derived.HARenewIntervalSeconds.ValueInt64())
 	}
 	if !strings.Contains(derived.AgentConfigJSON.ValueString(), `"ttl_seconds":10`) {
-		t.Fatalf("agent config should use fast HA TTL: %s", derived.AgentConfigJSON.ValueString())
+		t.Fatalf("agent config should use default HA TTL: %s", derived.AgentConfigJSON.ValueString())
 	}
-	if !strings.Contains(derived.AgentConfigJSON.ValueString(), `"renew_interval_seconds":3`) {
-		t.Fatalf("agent config should use fast HA renew interval: %s", derived.AgentConfigJSON.ValueString())
+	if !strings.Contains(derived.AgentConfigJSON.ValueString(), `"renew_interval_seconds":1`) {
+		t.Fatalf("agent config should use default HA renew interval: %s", derived.AgentConfigJSON.ValueString())
+	}
+}
+
+func TestDeriveGatewayStateHAProfileAliasesUseDefaultTiming(t *testing.T) {
+	for _, profile := range []string{"stable", "balanced", "fast"} {
+		t.Run(profile, func(t *testing.T) {
+			plan := validGatewayPlan()
+			plan.HAProfile = types.StringValue(profile)
+			derived, err := DeriveGatewayState(context.Background(), &plan)
+			if err != nil {
+				t.Fatalf("derive gateway state: %v", err)
+			}
+			if derived.HAProfile.ValueString() != "default" {
+				t.Fatalf("legacy profile should normalize to default, got %q", derived.HAProfile.ValueString())
+			}
+			if derived.HALeaseTTLSeconds.ValueInt64() != 10 || derived.HARenewIntervalSeconds.ValueInt64() != 1 {
+				t.Fatalf("unexpected alias HA timing: ttl=%d renew=%d", derived.HALeaseTTLSeconds.ValueInt64(), derived.HARenewIntervalSeconds.ValueInt64())
+			}
+		})
 	}
 }
 
 func TestDeriveGatewayStateHATimingOverrides(t *testing.T) {
 	plan := validGatewayPlan()
-	plan.HAProfile = types.StringValue("stable")
+	plan.HAProfile = types.StringValue("default")
 	plan.HALeaseTTLSeconds = types.Int64Value(45)
 	plan.HARenewIntervalSeconds = types.Int64Value(6)
 	derived, err := DeriveGatewayState(context.Background(), &plan)
@@ -345,6 +382,7 @@ func TestCapacityOnlyUpdateIgnoresPoolCapacity(t *testing.T) {
 		t.Fatalf("derive state: %v", err)
 	}
 	nextPlan := validGatewayPlan()
+	nextPlan.PeerAPIAuthToken = state.PeerAPIAuthToken
 	nextPlan.DesiredCapacity = types.Int64Value(3)
 	nextPlan.MaxSize = types.Int64Value(5)
 	next, err := DeriveGatewayState(context.Background(), &nextPlan)
@@ -385,6 +423,7 @@ func TestGatewayReplacementRequiredForAgentBinaryURLChange(t *testing.T) {
 	}
 
 	capacityPlan := statePlan
+	capacityPlan.PeerAPIAuthToken = state.PeerAPIAuthToken
 	capacityPlan.DesiredCapacity = types.Int64Value(3)
 	capacity, err := DeriveGatewayState(context.Background(), &capacityPlan)
 	if err != nil {
@@ -395,6 +434,46 @@ func TestGatewayReplacementRequiredForAgentBinaryURLChange(t *testing.T) {
 	}
 }
 
+func TestGatewayReplacementNotRequiredForProviderInfrastructureRevisionChange(t *testing.T) {
+	statePlan := validGatewayPlan()
+	state, err := DeriveGatewayState(context.Background(), &statePlan)
+	if err != nil {
+		t.Fatalf("derive state: %v", err)
+	}
+	state.ProviderInfraRevision = types.StringValue("2026-06-01-legacy")
+
+	nextPlan := validGatewayPlan()
+	nextPlan.PeerAPIAuthToken = state.PeerAPIAuthToken
+	next, err := DeriveGatewayState(context.Background(), &nextPlan)
+	if err != nil {
+		t.Fatalf("derive next: %v", err)
+	}
+
+	if gatewayReplacementRequired(state, next) {
+		t.Fatal("provider-owned infrastructure revision change should reconcile in-place")
+	}
+}
+
+func TestDeriveGatewayStatePreservesPeerAPIAuthToken(t *testing.T) {
+	statePlan := validGatewayPlan()
+	state, err := DeriveGatewayState(context.Background(), &statePlan)
+	if err != nil {
+		t.Fatalf("derive state: %v", err)
+	}
+	nextPlan := validGatewayPlan()
+	nextPlan.PeerAPIAuthToken = state.PeerAPIAuthToken
+	next, err := DeriveGatewayState(context.Background(), &nextPlan)
+	if err != nil {
+		t.Fatalf("derive next: %v", err)
+	}
+	if next.PeerAPIAuthToken.ValueString() != state.PeerAPIAuthToken.ValueString() {
+		t.Fatalf("peer api auth token should be preserved across derives")
+	}
+	if !strings.Contains(next.UserData.ValueString(), `"auth_token":"`+state.PeerAPIAuthToken.ValueString()+`"`) {
+		t.Fatalf("user data should render preserved peer token")
+	}
+}
+
 func TestGatewayReplacementRequiredForHATimingChange(t *testing.T) {
 	statePlan := validGatewayPlan()
 	state, err := DeriveGatewayState(context.Background(), &statePlan)
@@ -402,7 +481,7 @@ func TestGatewayReplacementRequiredForHATimingChange(t *testing.T) {
 		t.Fatalf("derive state: %v", err)
 	}
 	nextPlan := validGatewayPlan()
-	nextPlan.HAProfile = types.StringValue("balanced")
+	nextPlan.HALeaseTTLSeconds = types.Int64Value(20)
 	next, err := DeriveGatewayState(context.Background(), &nextPlan)
 	if err != nil {
 		t.Fatalf("derive next: %v", err)
@@ -550,6 +629,10 @@ func (f fakeInstaller) Install(context.Context, installplan.Plan, awsinstall.Inp
 }
 
 func (f fakeInstaller) UpdateCapacity(context.Context, installplan.Plan) error {
+	return nil
+}
+
+func (f fakeInstaller) ReconcileInfrastructure(context.Context, installplan.Plan) error {
 	return nil
 }
 

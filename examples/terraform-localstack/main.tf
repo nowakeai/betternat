@@ -98,7 +98,7 @@ resource "betternat_gateway" "egress" {
   private_cidrs = [aws_vpc.main.cidr_block]
 
   stable_egress_ip    = true
-  ha_profile          = "stable"
+  ha_profile          = "default"
   rollback_on_destroy = true
 
   depends_on = [

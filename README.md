@@ -16,7 +16,7 @@ For private-subnet download-heavy workloads, this matters:
 
 ![Download-heavy private subnet traffic cost flow](docs/assets/betternat-download-heavy-flow.svg)
 
-The large response returns through NAT Gateway and contributes to processed GB. BetterNAT replaces that managed per-GB NAT processing fee with a self-managed EC2 appliance pool.
+The large response returns through NAT Gateway and contributes to processed GB. BetterNAT replaces that managed per-GB NAT processing fee with a self-managed EC2 node pool.
 
 Direction matters. NAT Gateway processing is metered on both request bytes and response bytes through the gateway. BetterNAT has no equivalent per-GB NAT processing fee; after replacement, the remaining AWS data-transfer bill depends on traffic direction. That is why BetterNAT is especially strong for workloads that send small requests and pull large responses into AWS.
 
@@ -24,19 +24,19 @@ Example: `50 TB/month` through the NAT layer, `80%` ingress/download into the pr
 
 | Monthly estimate | NAT Gateway design | BetterNAT design |
 | --- | ---: | ---: |
-| NAT processing + gateway/appliance | about `$2,337` | about `$73` |
+| NAT processing + gateway/node | about `$2,337` | about `$73` |
 | Standard internet egress transfer on 10 TB | about `$922` | about `$922` |
 | Example total | about `$3,258/month` | about `$995/month` |
 | Example savings |  | about `$2,264/month` (`69%`) |
 
-Assumptions: `$0.045/GB` NAT Gateway processing, `$0.045/hour` for one NAT Gateway, two `$0.05/hour` BetterNAT appliances, `730` hours/month, and illustrative `$0.09/GB` standard internet egress transfer. The example excludes EBS, EIP/public IPv4, DynamoDB, monitoring, and operational cost. See [Cost Model](docs/user/COST_MODEL.md) for direction examples, formulas, caveats, and CLI usage.
+Assumptions: `$0.045/GB` NAT Gateway processing, `$0.045/hour` for one NAT Gateway, two `$0.05/hour` BetterNAT nodes, `730` hours/month, and illustrative `$0.09/GB` standard internet egress transfer. The example excludes EBS, EIP/public IPv4, DynamoDB, monitoring, and operational cost. See [Cost Model](docs/user/COST_MODEL.md) for direction examples, formulas, caveats, and CLI usage.
 
 ## What You Get
 
 - Lower NAT Gateway processing cost for suitable high-volume workloads.
 - Stable egress IP failover mode with a shared EIP.
-- ASG-backed appliance pool with active/standby ownership.
-- LoxiLB/eBPF datapath for appliance-local SNAT.
+- ASG-backed node pool with active/standby ownership.
+- LoxiLB/eBPF datapath for node-local SNAT.
 - DynamoDB lease/fencing for route and EIP ownership.
 - Prometheus metrics for HA, datapath, traffic counters, and failover state.
 - Terraform provider install UX through `nowakeai/betternat`.
@@ -56,6 +56,10 @@ terraform {
   }
 }
 ```
+
+Provider versions and BetterNAT runtime artifact versions are separate. The
+current alpha provider is `0.1.0-alpha.2`; the current runtime release assets
+referenced by the quick start are `v0.1.0-alpha.1`.
 
 If your Terraform currently uses AWS NAT Gateway:
 
@@ -117,7 +121,7 @@ Before:
 
 After:
 
-![After BetterNAT: appliance route, shared EIP, and AWS failover control plane](docs/assets/betternat-after.svg)
+![After BetterNAT: node route, shared EIP, and AWS failover control plane](docs/assets/betternat-after.svg)
 
 For a disposable VPC run:
 
@@ -134,11 +138,11 @@ Then follow:
 - [Existing VPC Install](docs/user/EXISTING_VPC_INSTALL.md) when you are ready to test against real route tables.
 - [Configuration](docs/user/CONFIGURATION.md) for all `betternat_gateway` fields.
 
-BetterNAT uses LoxiLB as the local datapath inside each appliance; see the [LoxiLB overview](https://github.com/loxilb-io/loxilb/assets/75648333/87da0183-1a65-493f-b6fe-5bc738ba5468) and [standalone mode docs](https://github.com/loxilb-io/loxilbdocs/blob/main/docs/standalone.md).
+BetterNAT uses LoxiLB as the local datapath inside each node; see the [LoxiLB overview](https://github.com/loxilb-io/loxilb/assets/75648333/87da0183-1a65-493f-b6fe-5bc738ba5468) and [standalone mode docs](https://github.com/loxilb-io/loxilbdocs/blob/main/docs/standalone.md).
 
 ## Verify
 
-Run on a gateway appliance through SSM:
+Run on a gateway node through SSM:
 
 ```sh
 betternat doctor --live --config /etc/betternat/agent.json
@@ -159,7 +163,7 @@ http://<gateway-private-ip>:9108/metrics
 Estimate the cost shape:
 
 ```sh
-betternat cost estimate --gb 51200 --appliance-hourly 0.05 --appliances 2
+betternat cost estimate --gb 51200 --node-hourly 0.05 --nodes 2
 ```
 
 ## When To Use It
@@ -168,9 +172,9 @@ BetterNAT is worth evaluating when:
 
 - NAT Gateway data processing fees dominate the bill.
 - Private workloads pull or receive large amounts of public internet data.
-- You can operate a small EC2 appliance pool.
+- You can operate a small EC2 node pool.
 - New-flow recovery after failover is acceptable.
-- You want Prometheus metrics and appliance-local diagnostics.
+- You want Prometheus metrics and node-local diagnostics.
 - You can test in a disposable or non-critical VPC first.
 
 Use AWS NAT Gateway instead when:
@@ -182,22 +186,22 @@ Use AWS NAT Gateway instead when:
 
 ## Architecture
 
-BetterNAT deploys an Auto Scaling Group of gateway appliances in one AZ.
+BetterNAT deploys an Auto Scaling Group of gateway nodes in one AZ.
 
-Each appliance runs:
+Each node runs:
 
 - `betternat-agent`,
 - LoxiLB in standalone mode,
 - the `betternat` CLI,
 - Prometheus metrics.
 
-The active appliance owns:
+The active node owns:
 
 - the DynamoDB lease,
 - the private route table default route,
 - the shared EIP when `stable_egress_ip=true`.
 
-On failure, a standby appliance takes over by reconciling datapath state, claiming the EIP when configured, and replacing the private route target.
+On failure, a standby node takes over by reconciling datapath state, claiming the EIP when configured, and replacing the private route target.
 
 Architecture docs:
 

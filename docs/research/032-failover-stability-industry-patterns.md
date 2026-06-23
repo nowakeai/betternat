@@ -22,14 +22,14 @@ The more stable pattern is:
 For BetterNAT, that means the default production profile should be conservative:
 
 ```text
-ha_profile = "stable"
-lease_ttl = 30s
-renew_interval = 5s
+ha_profile = "default"
+lease_ttl = 10s
+renew_interval = 1s
 takeover_after = lease expiry, plus jitter/backoff
 preempt = false
 ```
 
-Keep the current `ttl=10s, renew=3s` profile as `fast`, not as the safest default.
+BetterNAT originally considered separate `stable`, `balanced`, and `fast` timing profiles. For the alpha surface, the product now keeps one `default` profile with `ttl=10s, renew=1s`; legacy profile names are aliases.
 
 ## Industry Patterns
 
@@ -223,53 +223,15 @@ lease_ttl = 30s
 
 This lets the active retry renewals multiple times before another node takes over, while still preventing a single blocked call from freezing the HA loop.
 
-## Recommended BetterNAT Profiles
+## Recommended BetterNAT Profile
 
-### `stable` Default
+### `default`
 
-Use this for production default.
-
-```text
-lease_ttl = 30s
-renew_interval = 5s
-operation_timeout = 3s
-takeover_jitter = 0s to 3s
-preempt = false
-candidate_readiness_successes = 2
-returning_node_readiness_successes = 3
-```
-
-Expected behavior:
-
-- fewer false failovers,
-- real ambiguous-failure recovery more likely around 30-45 seconds,
-- explicit termination can still be faster if EC2/ASG state is used as a fast path.
-
-### `balanced`
-
-Use this for users who want faster recovery but still care about avoiding flaps.
-
-```text
-lease_ttl = 20s
-renew_interval = 4s
-operation_timeout = 3s
-takeover_jitter = 0s to 2s
-preempt = false
-candidate_readiness_successes = 2
-```
-
-Expected behavior:
-
-- recovery around 20-35 seconds for ambiguous failure,
-- lower false-failover risk than the current test profile.
-
-### `fast`
-
-Use this for test environments and users who explicitly choose faster failover.
+Use this as the only public alpha profile.
 
 ```text
 lease_ttl = 10s
-renew_interval = 3s
+renew_interval = 1s
 operation_timeout = 2s
 takeover_jitter = 0s to 1s
 preempt = false
@@ -279,16 +241,17 @@ candidate_readiness_successes = 1
 Expected behavior:
 
 - current tested behavior, about 12 seconds client-visible outage in owner-termination runs,
-- higher risk of false failover during transient AWS/DynamoDB stalls.
+- graceful release can be detected by standby in about one polling interval,
+- higher risk of false failover during transient AWS/DynamoDB stalls than a slower profile would have.
 
 ## Product Recommendation
 
-Make `stable` the default production profile.
+Keep one public profile for alpha and call it `default`.
 
 Expose the UX as:
 
 ```hcl
-ha_profile = "stable" # stable | balanced | fast
+ha_profile = "default"
 ```
 
 Avoid exposing raw TTL first. Advanced users can override low-level timing later:
@@ -303,8 +266,8 @@ ha_timing = {
 
 ## Next Engineering Work
 
-1. Keep `fast` in AWS supplemental tests to control cost and runtime.
-2. Add a stable-profile AWS spot check that does not run a full matrix:
+1. Keep `default` in AWS supplemental tests to control cost and runtime.
+2. Add a longer timing soak later if false-failover evidence appears:
    - apply,
    - verify baseline,
    - terminate owner,
@@ -319,5 +282,5 @@ Implemented after this research:
 
 - Terraform provider exposes `ha_profile`,
 - Terraform provider exposes advanced overrides `ha_lease_ttl_seconds` and `ha_renew_interval_seconds`,
-- production examples use `ha_profile = "stable"`,
-- the AWS supplemental fixture defaults to `ha_profile = "fast"` to keep disposable test runtime low.
+- production examples use `ha_profile = "default"`,
+- the AWS supplemental fixture defaults to `ha_profile = "default"` to keep disposable test runtime low.

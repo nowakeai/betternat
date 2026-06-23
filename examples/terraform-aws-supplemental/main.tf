@@ -52,7 +52,7 @@ variable "stable_egress_ip" {
 
 variable "ha_profile" {
   type    = string
-  default = "fast"
+  default = "default"
 }
 
 variable "agent_binary_url" {
@@ -304,11 +304,20 @@ resource "betternat_gateway" "egress" {
 
 resource "aws_instance" "private_client" {
   ami                         = data.aws_ami.al2023_arm64.id
-  instance_type               = "t4g.nano"
+  instance_type               = "t4g.small"
   subnet_id                   = aws_subnet.private.id
   vpc_security_group_ids      = [aws_security_group.private_client.id]
   iam_instance_profile        = aws_iam_instance_profile.private_client.name
   associate_public_ip_address = false
+
+  instance_market_options {
+    market_type = "spot"
+
+    spot_options {
+      spot_instance_type             = "one-time"
+      instance_interruption_behavior = "terminate"
+    }
+  }
 
   tags = merge(local.tags, {
     Name = "${var.run_id}-private-client"

@@ -10,12 +10,15 @@ type Config struct {
 	Local         LocalConfig         `json:"local" yaml:"local"`
 	Datapath      DatapathConfig      `json:"datapath" yaml:"datapath"`
 	HA            HAConfig            `json:"ha" yaml:"ha"`
+	Coordination  CoordinationConfig  `json:"coordination" yaml:"coordination"`
+	Control       ControlConfig       `json:"control" yaml:"control"`
 	Observability ObservabilityConfig `json:"observability" yaml:"observability"`
 	Rollback      RollbackConfig      `json:"rollback" yaml:"rollback"`
 }
 
 type LocalConfig struct {
-	InstanceID       string `json:"instance_id" yaml:"instance_id"`
+	NodeID           string `json:"node_id" yaml:"node_id"`
+	InstanceID       string `json:"instance_id,omitempty" yaml:"instance_id,omitempty"`
 	AvailabilityZone string `json:"availability_zone" yaml:"availability_zone"`
 	PrimaryInterface string `json:"primary_interface" yaml:"primary_interface"`
 }
@@ -55,6 +58,25 @@ type LeaseConfig struct {
 	Key                  string `json:"key" yaml:"key"`
 	TTLSeconds           int    `json:"ttl_seconds" yaml:"ttl_seconds"`
 	RenewIntervalSeconds int    `json:"renew_interval_seconds" yaml:"renew_interval_seconds"`
+}
+
+type CoordinationConfig struct {
+	Backend                        string `json:"backend" yaml:"backend"`
+	Table                          string `json:"table" yaml:"table"`
+	RegistryRefreshIntervalSeconds int    `json:"registry_refresh_interval_seconds" yaml:"registry_refresh_interval_seconds"`
+	RegistryTTLSeconds             int    `json:"registry_ttl_seconds" yaml:"registry_ttl_seconds"`
+	HandoverTTLSeconds             int    `json:"handover_ttl_seconds" yaml:"handover_ttl_seconds"`
+}
+
+type ControlConfig struct {
+	PeerAPI PeerAPIConfig `json:"peer_api" yaml:"peer_api"`
+}
+
+type PeerAPIConfig struct {
+	Enabled       bool   `json:"enabled" yaml:"enabled"`
+	ListenAddress string `json:"listen_address" yaml:"listen_address"`
+	ListenPort    int    `json:"listen_port" yaml:"listen_port"`
+	AuthToken     string `json:"auth_token" yaml:"auth_token"`
 }
 
 type RouteFailoverConfig struct {

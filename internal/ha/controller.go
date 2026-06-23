@@ -3,6 +3,7 @@ package ha
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/nowakeai/betternat/internal/cloud"
@@ -13,11 +14,12 @@ import (
 )
 
 type Controller struct {
-	Cloud    cloud.Provider
-	Lease    lease.Manager
-	Datapath datapath.Engine
-	Probe    ProbeRunner
-	Now      lease.Clock
+	Cloud       cloud.Provider
+	Lease       lease.Manager
+	Datapath    datapath.Engine
+	Probe       ProbeRunner
+	Now         lease.Clock
+	OwnershipMu *sync.Mutex
 }
 
 type ActivationResult struct {
@@ -25,6 +27,14 @@ type ActivationResult struct {
 	PublicIdentity cloud.PublicIdentity `json:"public_identity"`
 	Routes         []cloud.RouteTarget  `json:"routes"`
 	Probe          probe.Result         `json:"probe"`
+}
+
+type HandoverResult struct {
+	PreviousLease  lease.Record         `json:"previous_lease"`
+	NewLease       lease.Record         `json:"new_lease"`
+	PublicIdentity cloud.PublicIdentity `json:"public_identity"`
+	Routes         []cloud.RouteTarget  `json:"routes"`
+	Reverted       bool                 `json:"reverted"`
 }
 
 type ProbeRunner interface {
@@ -64,6 +74,12 @@ func (c Controller) Activate(ctx context.Context, cfg config.Config, localInstan
 	}
 	if err := c.VerifyLease(ctx, record, localInstanceID); err != nil {
 		return fail("verify HA lease before cloud activation: %w", err)
+	}
+
+	unlock := c.lockOwnership()
+	defer unlock()
+	if err := c.VerifyLease(ctx, record, localInstanceID); err != nil {
+		return fail("verify HA lease after acquiring ownership lock: %w", err)
 	}
 
 	result := ActivationResult{Lease: record}
@@ -166,6 +182,8 @@ func (c Controller) EnsureOwnership(ctx context.Context, cfg config.Config, loca
 	if c.Cloud == nil {
 		return ActivationResult{}, fmt.Errorf("cloud provider is required for HA ownership")
 	}
+	unlock := c.lockOwnership()
+	defer unlock()
 
 	result := ActivationResult{}
 	if cfg.HA.PublicIdentity.Mode == "shared_eip" {
@@ -214,6 +232,142 @@ func (c Controller) EnsureOwnership(ctx context.Context, cfg config.Config, loca
 		result.Routes = append(result.Routes, actual)
 	}
 	return result, nil
+}
+
+func (c Controller) Handover(ctx context.Context, cfg config.Config, localInstanceID string, targetInstanceID string, record lease.Record) (HandoverResult, error) {
+	if !cfg.HA.Enabled {
+		return HandoverResult{}, fmt.Errorf("HA is disabled")
+	}
+	if localInstanceID == "" || localInstanceID == "auto" {
+		return HandoverResult{}, fmt.Errorf("local instance id is required for HA handover")
+	}
+	if targetInstanceID == "" || targetInstanceID == "auto" {
+		return HandoverResult{}, fmt.Errorf("target instance id is required for HA handover")
+	}
+	if targetInstanceID == localInstanceID {
+		return HandoverResult{}, fmt.Errorf("handover target must be different from local instance")
+	}
+	if c.Cloud == nil {
+		return HandoverResult{}, fmt.Errorf("cloud provider is required for HA handover")
+	}
+	if c.Lease == nil {
+		return HandoverResult{}, fmt.Errorf("lease manager is required for HA handover")
+	}
+	transferer, ok := c.Lease.(lease.Transferer)
+	if !ok {
+		return HandoverResult{}, fmt.Errorf("lease manager does not support transfer")
+	}
+	if record.OwnerInstanceID == "" {
+		current, err := c.Lease.Current(ctx)
+		if err != nil {
+			return HandoverResult{}, fmt.Errorf("read HA lease before handover: %w", err)
+		}
+		record = current
+	}
+	if record.OwnerInstanceID != localInstanceID {
+		return HandoverResult{}, fmt.Errorf("local instance is not active lease owner")
+	}
+	if err := c.VerifyLease(ctx, record, localInstanceID); err != nil {
+		return HandoverResult{}, fmt.Errorf("verify HA lease before handover: %w", err)
+	}
+
+	unlock := c.lockOwnership()
+	defer unlock()
+	if err := c.VerifyLease(ctx, record, localInstanceID); err != nil {
+		return HandoverResult{}, fmt.Errorf("verify HA lease after acquiring ownership lock: %w", err)
+	}
+
+	result := HandoverResult{PreviousLease: record}
+	if cfg.HA.PublicIdentity.Mode == "shared_eip" {
+		if cfg.HA.PublicIdentity.AllocationID == "" {
+			return HandoverResult{}, fmt.Errorf("ha.public_identity.allocation_id is required for shared_eip")
+		}
+		identity, err := c.Cloud.AssociateEIP(ctx, cfg.HA.PublicIdentity.AllocationID, targetInstanceID)
+		if err != nil {
+			return HandoverResult{}, fmt.Errorf("associate EIP %q to handover target %q: %w", cfg.HA.PublicIdentity.AllocationID, targetInstanceID, err)
+		}
+		result.PublicIdentity = identity
+	} else if cfg.HA.PublicIdentity.Mode != "" {
+		return HandoverResult{}, fmt.Errorf("unsupported public identity mode %q", cfg.HA.PublicIdentity.Mode)
+	}
+
+	routes, err := routeTargets(cfg, targetInstanceID)
+	if err != nil {
+		return HandoverResult{}, err
+	}
+	for _, target := range routes {
+		if err := c.Cloud.ReplaceRoute(ctx, target); err != nil {
+			return HandoverResult{}, fmt.Errorf("replace route %s %s to handover target %q: %w", target.RouteTableID, target.DestinationCIDR, targetInstanceID, err)
+		}
+		result.Routes = append(result.Routes, target)
+	}
+	if err := c.verifyTargetOwnership(ctx, cfg, targetInstanceID, result.Routes); err != nil {
+		revertErr := c.revertHandover(ctx, cfg, localInstanceID)
+		result.Reverted = revertErr == nil
+		if revertErr != nil {
+			return result, fmt.Errorf("%w; revert handover ownership to %q: %v", err, localInstanceID, revertErr)
+		}
+		return result, err
+	}
+	newLease, err := transferer.Transfer(ctx, record, targetInstanceID)
+	if err != nil {
+		revertErr := c.revertHandover(ctx, cfg, localInstanceID)
+		result.Reverted = revertErr == nil
+		if revertErr != nil {
+			return result, fmt.Errorf("transfer HA lease to %q: %w; revert handover ownership to %q: %v", targetInstanceID, err, localInstanceID, revertErr)
+		}
+		return result, fmt.Errorf("transfer HA lease to %q: %w", targetInstanceID, err)
+	}
+	result.NewLease = newLease
+	return result, nil
+}
+
+func (c Controller) verifyTargetOwnership(ctx context.Context, cfg config.Config, targetInstanceID string, routes []cloud.RouteTarget) error {
+	for _, target := range routes {
+		actual, err := c.Cloud.DescribeRoute(ctx, target.RouteTableID, target.DestinationCIDR)
+		if err != nil {
+			return fmt.Errorf("verify handover route %s %s: %w", target.RouteTableID, target.DestinationCIDR, err)
+		}
+		if actual.Target != targetInstanceID {
+			return fmt.Errorf("route %s %s target is %q, expected handover target %q", target.RouteTableID, target.DestinationCIDR, actual.Target, targetInstanceID)
+		}
+	}
+	if cfg.HA.PublicIdentity.Mode == "shared_eip" {
+		actual, err := c.Cloud.DescribePublicIdentity(ctx, cfg.HA.PublicIdentity.AllocationID)
+		if err != nil {
+			return fmt.Errorf("verify handover public identity %q: %w", cfg.HA.PublicIdentity.AllocationID, err)
+		}
+		if actual.InstanceID != targetInstanceID {
+			return fmt.Errorf("public identity %q is on %q, expected handover target %q", cfg.HA.PublicIdentity.AllocationID, actual.InstanceID, targetInstanceID)
+		}
+	}
+	return nil
+}
+
+func (c Controller) revertHandover(ctx context.Context, cfg config.Config, localInstanceID string) error {
+	if cfg.HA.PublicIdentity.Mode == "shared_eip" {
+		if _, err := c.Cloud.AssociateEIP(ctx, cfg.HA.PublicIdentity.AllocationID, localInstanceID); err != nil {
+			return err
+		}
+	}
+	routes, err := routeTargets(cfg, localInstanceID)
+	if err != nil {
+		return err
+	}
+	for _, target := range routes {
+		if err := c.Cloud.ReplaceRoute(ctx, target); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c Controller) lockOwnership() func() {
+	if c.OwnershipMu == nil {
+		return func() {}
+	}
+	c.OwnershipMu.Lock()
+	return c.OwnershipMu.Unlock
 }
 
 func routeTargets(cfg config.Config, localInstanceID string) ([]cloud.RouteTarget, error) {

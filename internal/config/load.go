@@ -41,10 +41,18 @@ func Load(r io.Reader) (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("decode config: %w", err)
 	}
+	cfg.Normalize()
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil
+}
+
+func (cfg *Config) Normalize() {
+	if cfg.Local.NodeID == "" && cfg.Local.InstanceID != "" {
+		cfg.Local.NodeID = cfg.Local.InstanceID
+	}
+	cfg.Local.InstanceID = ""
 }
 
 func (cfg Config) Validate() error {
@@ -76,6 +84,9 @@ func (cfg Config) Validate() error {
 	}
 	if cfg.Observability.OutboundProbe.Enabled && cfg.Observability.OutboundProbe.URL == "" {
 		return fmt.Errorf("observability.outbound_probe.url is required when outbound probe is enabled")
+	}
+	if cfg.Control.PeerAPI.Enabled && cfg.Control.PeerAPI.AuthToken == "" {
+		return fmt.Errorf("control.peer_api.auth_token is required when peer API is enabled")
 	}
 	return nil
 }

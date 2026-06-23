@@ -32,6 +32,21 @@ User data should only provide runtime configuration:
 - start or restart `betternat-agent`,
 - avoid long package installs.
 
+Production AMI launches should not rely on per-node public IPv4 addresses.
+The alpha bootstrap path may temporarily use public subnet auto-assigned
+public IPs so new nodes can download packages and release artifacts before a
+BetterNAT AMI exists. That is a development/install bootstrap compromise, not a
+production networking contract.
+
+Before disabling per-node public IPs by default, the production install path
+must provide private AWS API reachability for standby nodes. A standby node
+without the shared EIP still needs to renew/register with DynamoDB, observe ASG
+termination state, complete lifecycle actions, call EC2 route/EIP APIs during
+takeover, and use STS/IAM checks where configured. Production installs should
+therefore use VPC endpoints or an equivalent private control-plane path for at
+least DynamoDB, EC2, Auto Scaling, STS, IAM, SSM, and CloudWatch when those
+features are enabled.
+
 ## Naming
 
 Use predictable AMI names:
@@ -130,6 +145,8 @@ Before marking an AMI stable:
 8. Verify route-only failover to a second appliance.
 9. Verify stable-EIP failover to a second appliance.
 10. Verify cleanup leaves no tagged resources.
+11. Verify standby operation with no auto-assigned public IPv4 address and
+    private AWS API reachability.
 
 ## Impact On AWS Supplemental Tests
 

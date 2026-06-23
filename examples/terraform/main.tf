@@ -45,11 +45,9 @@ resource "betternat_gateway" "egress" {
   datapath_engine          = "loxilb"
   fallback_datapath_engine = "nftables"
   stable_egress_ip         = true
-  # stable is the production default. Use balanced or fast only when faster
-  # recovery is worth a higher false-failover risk.
-  ha_profile          = "stable"
-  prometheus_enabled  = true
-  rollback_on_destroy = true
+  ha_profile               = "default"
+  prometheus_enabled       = true
+  rollback_on_destroy      = true
 }
 
 output "agent_config_hash" {

@@ -41,7 +41,7 @@ resource "aws_route" "private_default" {
 }
 ```
 
-With BetterNAT, the user-facing replacement is one resource. BetterNAT creates the appliance pool, EIP, lease table, IAM role, security group, launch template, ASG, and owns the private route target:
+With BetterNAT, the user-facing replacement is one resource. BetterNAT creates the node pool, EIP, lease table, IAM role, security group, launch template, ASG, and owns the private route target:
 
 ```hcl
 resource "betternat_gateway" "egress" {
@@ -119,9 +119,9 @@ Before:
 
 After:
 
-![After BetterNAT: appliance route, shared EIP, and AWS failover control plane](../assets/betternat-after.svg)
+![After BetterNAT: node route, shared EIP, and AWS failover control plane](../assets/betternat-after.svg)
 
-For the datapath component BetterNAT uses inside each appliance, see the upstream [LoxiLB overview image](https://github.com/loxilb-io/loxilb/assets/75648333/87da0183-1a65-493f-b6fe-5bc738ba5468) and [LoxiLB standalone documentation](https://github.com/loxilb-io/loxilbdocs/blob/main/docs/standalone.md). BetterNAT uses LoxiLB as a local egress SNAT datapath; AWS route/EIP failover is handled by `betternat-agent`.
+For the datapath component BetterNAT uses inside each node, see the upstream [LoxiLB overview image](https://github.com/loxilb-io/loxilb/assets/75648333/87da0183-1a65-493f-b6fe-5bc738ba5468) and [LoxiLB standalone documentation](https://github.com/loxilb-io/loxilbdocs/blob/main/docs/standalone.md). BetterNAT uses LoxiLB as a local egress SNAT datapath; AWS route/EIP failover is handled by `betternat-agent`.
 
 ## Prerequisites
 
@@ -232,11 +232,11 @@ Expected:
 
 - isolated VPC,
 - public and private subnet,
-- two BetterNAT gateway appliances in an ASG,
+- two BetterNAT gateway nodes in an ASG,
 - one private test client,
 - DynamoDB lease table,
-- route table ownership moved to the active appliance,
-- EIP associated to the active appliance when `stable_egress_ip=true`.
+- route table ownership moved to the active node,
+- EIP associated to the active node when `stable_egress_ip=true`.
 
 ## Verify
 
@@ -246,7 +246,7 @@ Get outputs:
 terraform -chdir=examples/terraform-aws-supplemental output
 ```
 
-Use SSM to run on the active gateway appliance:
+Use SSM to run on the active gateway node:
 
 ```sh
 betternat version

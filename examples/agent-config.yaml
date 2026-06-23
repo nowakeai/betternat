@@ -5,7 +5,7 @@ cloud: aws
 region: us-west-2
 
 local:
-  instance_id: auto
+  node_id: auto
   availability_zone: auto
   primary_interface: ens5
 
@@ -32,7 +32,7 @@ ha:
     table: betternat-prod-egress-leases
     key: prod-egress-us-west-2a
     ttl_seconds: 10
-    renew_interval_seconds: 3
+    renew_interval_seconds: 1
   route_failover:
     mode: replace_route
     route_table_ids:

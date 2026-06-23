@@ -6,14 +6,14 @@ Date: 2026-06-22
 
 This guide describes what BetterNAT exposes for monitoring and debugging in the first alpha.
 
-BetterNAT v0 is decentralized. Each gateway appliance runs `betternat-agent`, owns its local datapath reconciliation, and exposes local health data. There is no central BetterNAT control server in the first alpha.
+BetterNAT v0 is decentralized. Each gateway node runs `betternat-agent`, owns its local datapath reconciliation, and exposes local health data. There is no central BetterNAT control server in the first alpha.
 
 ## What You Can Observe
 
 The first alpha is designed to answer these questions:
 
 - Is the agent process running?
-- Which appliance is active for an HA group?
+- Which node is active for an HA group?
 - Is the HA status fresh?
 - Does the DynamoDB lease match the local owner view?
 - Do private route tables point to the expected active target?
@@ -37,7 +37,7 @@ The `betternat_gateway` resource records deployment state that is useful for run
 - `standby_instance_ids`
 - `rollback_route_targets_json`
 
-Use these outputs to locate the ASG, route tables, active appliances, and expected public egress identity.
+Use these outputs to locate the ASG, route tables, active nodes, and expected public egress identity.
 
 Example:
 
@@ -50,7 +50,7 @@ terraform output egress_public_ips
 
 ### Local CLI
 
-Run CLI diagnostics on a gateway appliance, usually through SSM Session Manager:
+Run CLI diagnostics on a gateway node, usually through SSM Session Manager:
 
 ```sh
 sudo betternat status --config /etc/betternat/agent.json
@@ -61,17 +61,17 @@ sudo betternat datapath status --config /etc/betternat/agent.json
 sudo betternat datapath ready --config /etc/betternat/agent.json
 ```
 
-Use `doctor` for static configuration checks. Use `doctor --live` when you want local datapath, IAM, ASG, lease, route, EIP, Prometheus, and egress-probe checks from the appliance's point of view.
+Use `doctor` for static configuration checks. Use `doctor --live` when you want local datapath, IAM, lease, route, EIP, Prometheus, and egress-probe checks from the node's point of view. Use `status` for registry-backed fleet visibility across active and standby nodes.
 
 ### Prometheus Metrics
 
-When `prometheus_enabled = true`, each appliance exposes:
+When `prometheus_enabled = true`, each node exposes:
 
 ```text
 http://<gateway-private-ip>:9108/metrics
 ```
 
-Prometheus should scrape every gateway appliance, not only the current active appliance. Standby metrics are important because they show whether failover capacity is actually ready.
+Prometheus should scrape every gateway node, not only the current active node. Standby metrics are important because they show whether failover capacity is actually ready.
 
 Restrict access to the metrics port with security groups. It should be reachable from your monitoring network, not from the public internet.
 
@@ -109,7 +109,7 @@ aws dynamodb get-item \
 
 ### Appliance Logs And Datapath State
 
-On the appliance:
+On the node:
 
 ```sh
 sudo systemctl status betternat-agent.service
@@ -168,7 +168,7 @@ betternat_failover_duration_seconds
 
 ## Starter Alerts
 
-Exactly one active appliance per HA group:
+Exactly one active node per HA group:
 
 ```promql
 sum by (gateway, ha_group) (betternat_active) != 1
@@ -324,4 +324,4 @@ The first alpha intentionally keeps observability local and simple:
 - no built-in pod-level attribution,
 - no long-term metric retention.
 
-Use Prometheus, AWS APIs, and appliance-local CLI checks as the supported first-release workflow.
+Use Prometheus, AWS APIs, and node-local CLI checks as the supported first-release workflow.

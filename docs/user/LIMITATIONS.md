@@ -68,7 +68,7 @@ Throughput depends on:
 - public internet egress limits,
 - CPU and memory headroom.
 
-Do not assume NAT Gateway-level scale from a small EC2 appliance.
+Do not assume NAT Gateway-level scale from a small EC2 gateway node.
 
 ## Bootstrap Semantics
 

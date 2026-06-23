@@ -70,7 +70,7 @@ Launch templates created by the provider require IMDSv2 and set the metadata hop
 
 | Name | Default | Description |
 | --- | --- | --- |
-| `instance_type` | `t3.small` | Gateway appliance instance type. The AWS supplemental fixture uses arm64 `t4g.small`. |
+| `instance_type` | `t3.small` | Gateway node instance type. The AWS supplemental fixture uses arm64 `t4g.small`. |
 | `use_spot` | `false` | Use Spot instances. Good for disposable tests; be cautious for real egress. |
 | `min_size` | provider default | ASG minimum size. |
 | `desired_capacity` | provider default | ASG desired capacity. Use `2` for active/standby HA. |
@@ -82,7 +82,7 @@ Capacity-only updates are intended to be in-place. Other topology or bootstrap c
 
 | Name | Default | Description |
 | --- | --- | --- |
-| `datapath_engine` | `loxilb` | BetterNAT appliance datapath. |
+| `datapath_engine` | `loxilb` | BetterNAT node datapath. |
 
 LoxiLB has its own eBPF conntrack state. Linux `nf_conntrack_max` is not the primary LoxiLB capacity knob.
 
@@ -96,21 +96,17 @@ LoxiLB has its own eBPF conntrack state. Linux `nf_conntrack_max` is not the pri
 
 | Name | Default | Description |
 | --- | --- | --- |
-| `ha_profile` | `stable` | Timing profile. Use `stable`, `balanced`, or `fast`. |
+| `ha_profile` | `default` | Timing profile. Use `default`. Legacy values `stable`, `balanced`, and `fast` are accepted as aliases for `default`. |
 | `ha_lease_ttl_seconds` | profile default | Advanced override for lease TTL. |
 | `ha_renew_interval_seconds` | profile default | Advanced override for renew interval. |
 
-Guidance:
-
-- `stable`: conservative default for real workloads.
-- `balanced`: moderate failover speed for testing or less sensitive workloads.
-- `fast`: lower latency but more sensitive to AWS/API jitter; useful for tests.
+The default profile uses a 10 second lease TTL and a 1 second renew/check interval. Override the two advanced fields only when you need a deliberately different timing envelope.
 
 ### Observability
 
 | Name | Default | Description |
 | --- | --- | --- |
-| `prometheus_enabled` | `true` | Expose Prometheus metrics from each appliance. |
+| `prometheus_enabled` | `true` | Expose Prometheus metrics from each node. |
 
 Default metrics endpoint:
 
@@ -130,7 +126,7 @@ http://<gateway-private-ip>:9108/metrics
 
 ## Runtime Config
 
-Terraform renders `/etc/betternat/agent.json` onto each appliance.
+Terraform renders `/etc/betternat/agent.json` onto each node.
 
 Users normally should not edit this file by hand. If you do, restart:
 

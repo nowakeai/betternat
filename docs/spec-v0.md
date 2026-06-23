@@ -34,7 +34,7 @@ v0 implementation language is Go for:
 
 v0 MUST provide:
 
-- AWS private subnet egress through self-owned EC2 appliances.
+- AWS private subnet egress through self-owned EC2 nodes.
 - LoxiLB-based egress SNAT as the primary datapath.
 - nftables/nf_conntrack fallback mode.
 - Terraform-managed install and lifecycle.
@@ -147,7 +147,7 @@ status
 
 The provider MUST create or manage:
 
-- EC2 appliance instances or launch templates.
+- EC2 gateway nodes or launch templates.
 - IAM instance profile for `betternat-agent`.
 - Security groups.
 - EIP allocation or association, if `public_identity.mode = "shared_eip"`.
@@ -159,15 +159,15 @@ The provider MUST create or manage:
 
 The provider MUST NOT perform runtime failover. Runtime failover belongs to `betternat-agent`.
 
-The current Go implementation represents provider work as a deterministic install plan. The AWS applier consumes that plan with the AWS SDK. By default the applier MUST create one Launch Template and one ASG appliance pool per AZ. Direct EC2 appliance IDs are allowed only as a lower-level compatibility/test path. `instance_type` defaults to `t3.small`.
+The current Go implementation represents provider work as a deterministic install plan. The AWS applier consumes that plan with the AWS SDK. By default the applier MUST create one Launch Template and one ASG node pool per AZ. Direct EC2 node IDs are allowed only as a lower-level compatibility/test path. `instance_type` defaults to `t3.small`.
 
-`use_spot` MAY be enabled for low-cost tests and interruption-tolerant deployments. It MUST default to `false` because production NAT appliances should not silently use interruptible capacity.
+`use_spot` MAY be enabled for low-cost tests and interruption-tolerant deployments. It MUST default to `false` because production NAT nodes should not silently use interruptible capacity.
 
 Before a BetterNAT AMI exists, v0 development tests MAY use a standard cloud Linux AMI plus cloud-init. In that mode the provider MAY accept a sensitive `agent_binary_url` and optional `loxicmd_binary_url`; bootstrap downloads the agent and either downloads `loxicmd` or creates a host wrapper for the LoxiLB container.
 
 ## AWS Resource Model
 
-v0 AWS deployment is one appliance pool per AZ.
+v0 AWS deployment is one node pool per AZ.
 
 Minimum single-AZ HA shape:
 
@@ -175,20 +175,20 @@ Minimum single-AZ HA shape:
 public subnet:
   ASG betternat-prod-us-west-2a
     desired_capacity = 2
-    current owner appliance
-    warm candidate appliance
+    current owner node
+    warm candidate node
 
 private route table:
-  0.0.0.0/0 -> current owner appliance instance or ENI
+  0.0.0.0/0 -> current owner node instance or ENI
 
 public identity:
-  shared EIP associated to current owner appliance
+  shared EIP associated to current owner node
 
 lease:
   DynamoDB row per HA group
 ```
 
-The current owner appliance MUST have source/destination check disabled before it owns the route. In the ASG model, every agent SHOULD also disable source/destination check for its own instance at boot so warm candidates are ready before takeover.
+The current owner node MUST have source/destination check disabled before it owns the route. In the ASG model, every agent SHOULD also disable source/destination check for its own instance at boot so warm candidates are ready before takeover.
 
 LoxiLB itself SHOULD NOT receive AWS IAM permissions. AWS mutations are performed by `betternat-agent`.
 
@@ -206,7 +206,7 @@ cloud: aws
 region: us-west-2
 
 local:
-  instance_id: auto
+  node_id: auto
   availability_zone: auto
   primary_interface: ens5
 
@@ -233,7 +233,7 @@ ha:
     table: betternat-prod-egress-leases
     key: prod-egress-us-west-2a
     ttl_seconds: 10
-    renew_interval_seconds: 3
+    renew_interval_seconds: 1
   route_failover:
     mode: replace_route
     route_table_ids:
@@ -398,7 +398,7 @@ Lease row SHOULD include:
 ```json
 {
   "ha_group_id": "prod-egress-us-west-2a",
-  "owner_instance_id": "i-abc",
+  "owner_node_id": "i-abc",
   "generation": 42,
   "expires_at": 1780000000,
   "updated_at": 1779999990
@@ -418,7 +418,7 @@ EC2 tags MUST NOT be the primary lock.
 v0 failover promise:
 
 ```text
-BetterNAT restores egress for new connections after active appliance failure.
+BetterNAT restores egress for new connections after active node failure.
 ```
 
 v0 does not promise active connection survival.
@@ -584,7 +584,7 @@ The spike used container mode, but rule persistence failed across container rest
 
 v0 single-node acceptance:
 
-- Terraform creates one BetterNAT appliance.
+- Terraform creates one BetterNAT node.
 - Private test instance reaches internet through BetterNAT.
 - `checkip` returns the expected EIP.
 - DNS/UDP works.
@@ -595,7 +595,7 @@ v0 single-node acceptance:
 
 v0 HA acceptance:
 
-- Terraform creates one ASG appliance pool per AZ.
+- Terraform creates one ASG node pool per AZ.
 - Default pool desired capacity is 2.
 - A non-owner candidate has datapath ready before takeover.
 - DynamoDB lease fences failover.

@@ -115,6 +115,35 @@ func (m *Manager) Release(ctx context.Context, record lease.Record) error {
 	return nil
 }
 
+func (m *Manager) Transfer(ctx context.Context, record lease.Record, newOwner string) (lease.Record, error) {
+	if err := m.validate(record.OwnerInstanceID); err != nil {
+		return lease.Record{}, err
+	}
+	if newOwner == "" {
+		return lease.Record{}, fmt.Errorf("new lease owner is required")
+	}
+	now := m.now()
+	output, err := m.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:           &m.table,
+		Key:                 m.key(),
+		UpdateExpression:    ptr("SET owner_instance_id = :new_owner, expires_at = :expires, updated_at = :now ADD generation :one"),
+		ConditionExpression: ptr("owner_instance_id = :owner AND generation = :generation AND expires_at > :now"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":owner":      s(record.OwnerInstanceID),
+			":new_owner":  s(newOwner),
+			":generation": n(int64(record.Generation)),
+			":now":        n(now.Unix()),
+			":expires":    n(now.Add(m.ttl).Unix()),
+			":one":        n(1),
+		},
+		ReturnValues: types.ReturnValueAllNew,
+	})
+	if err != nil {
+		return lease.Record{}, fmt.Errorf("dynamodb transfer lease: %w", err)
+	}
+	return recordFromItem(output.Attributes)
+}
+
 func (m *Manager) Current(ctx context.Context) (lease.Record, error) {
 	if m.db == nil {
 		return lease.Record{}, fmt.Errorf("dynamodb client is required")
