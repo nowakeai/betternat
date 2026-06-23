@@ -12,9 +12,49 @@ variable "aws_region" {
   default = "us-west-2"
 }
 
-variable "ami_name_prefix" {
+variable "ami_regions" {
+  type    = list(string)
+  default = []
+}
+
+variable "ami_users" {
+  type    = list(string)
+  default = []
+}
+
+variable "ami_groups" {
+  type    = list(string)
+  default = []
+}
+
+variable "snapshot_users" {
+  type    = list(string)
+  default = []
+}
+
+variable "snapshot_groups" {
+  type    = list(string)
+  default = []
+}
+
+variable "prefix" {
   type    = string
-  default = "betternat-al2023-hvm"
+  default = "betternat"
+}
+
+variable "flavor" {
+  type    = string
+  default = "al2023"
+}
+
+variable "virtualization_type" {
+  type    = string
+  default = "hvm"
+}
+
+variable "suffix" {
+  type    = string
+  default = "ebs"
 }
 
 variable "architecture" {
@@ -23,8 +63,21 @@ variable "architecture" {
 }
 
 variable "instance_type" {
+  type = map(string)
+  default = {
+    arm64  = "t4g.small"
+    x86_64 = "t3.small"
+  }
+}
+
+variable "base_image_name" {
   type    = string
-  default = "t4g.small"
+  default = "*al2023-ami-minimal-*-kernel-6.12-*"
+}
+
+variable "base_image_owner" {
+  type    = string
+  default = "amazon"
 }
 
 variable "ssh_username" {
@@ -49,26 +102,40 @@ variable "loxilb_image" {
   default = "ghcr.io/loxilb-io/loxilb@sha256:dacc9b21688d4042b768f2cbc5968360b8753cf92f926ee288346153a23f3052"
 }
 
+variable "manifest_output" {
+  type    = string
+  default = "tmp/packer/betternat-manifest.json"
+}
+
 locals {
-  timestamp = regex_replace(timestamp(), "[- TZ:]", "")
+  build_date    = formatdate("YYYYMMDD", timestamp())
+  instance_type = lookup(var.instance_type, var.architecture, "error")
 }
 
 source "amazon-ebs" "betternat" {
-  region        = var.aws_region
-  instance_type = var.instance_type
-  ssh_username  = var.ssh_username
+  region                    = var.aws_region
+  ami_regions               = var.ami_regions
+  ami_users                 = var.ami_users
+  ami_groups                = var.ami_groups
+  snapshot_users            = var.snapshot_users
+  snapshot_groups           = var.snapshot_groups
+  instance_type             = local.instance_type
+  ssh_username              = var.ssh_username
+  ssh_clear_authorized_keys = true
+  temporary_key_pair_type   = "ed25519"
 
-  ami_name        = "${var.ami_name_prefix}-${var.version}-${local.timestamp}-${var.architecture}-ebs"
-  ami_description = "BetterNAT ${var.version} ${var.architecture} AMI"
+  ami_name                = "${var.prefix}-${var.flavor}-${var.virtualization_type}-${var.version}-${local.build_date}-${var.architecture}-${var.suffix}"
+  ami_virtualization_type = var.virtualization_type
+  ami_description         = "BetterNAT ${var.version} ${var.architecture} AMI"
 
   source_ami_filter {
     filters = {
-      name                = "al2023-ami-*-kernel-*-hvm-*-gp3"
+      name                = var.base_image_name
       architecture        = var.architecture
       root-device-type    = "ebs"
-      virtualization-type = "hvm"
+      virtualization-type = var.virtualization_type
     }
-    owners      = ["amazon"]
+    owners      = [var.base_image_owner]
     most_recent = true
   }
 
@@ -87,6 +154,20 @@ source "amazon-ebs" "betternat" {
 
   tags = {
     Name             = "BetterNAT ${var.version}"
+    BetterNATVersion = var.version
+    BetterNATFlavor  = var.flavor
+    Architecture     = var.architecture
+    ManagedBy        = "betternat"
+  }
+
+  run_tags = {
+    Name      = "betternat-ami-build-${var.version}-${var.architecture}"
+    ManagedBy = "betternat"
+    Purpose   = "ami-build"
+  }
+
+  snapshot_tags = {
+    Name             = "BetterNAT ${var.version} ${var.architecture}"
     BetterNATVersion = var.version
     ManagedBy        = "betternat"
   }
@@ -110,6 +191,16 @@ build {
     destination = "/tmp/provision-betternat-ami.sh"
   }
 
+  provisioner "file" {
+    source      = "LICENSE"
+    destination = "/tmp/betternat-LICENSE"
+  }
+
+  provisioner "file" {
+    source      = "THIRD_PARTY_NOTICES.md"
+    destination = "/tmp/betternat-THIRD_PARTY_NOTICES.md"
+  }
+
   provisioner "shell" {
     environment_vars = [
       "BETTERNAT_VERSION=${var.version}",
@@ -119,5 +210,10 @@ build {
       "chmod +x /tmp/provision-betternat-ami.sh",
       "sudo -E /tmp/provision-betternat-ami.sh",
     ]
+  }
+
+  post-processor "manifest" {
+    output     = var.manifest_output
+    strip_path = true
   }
 }

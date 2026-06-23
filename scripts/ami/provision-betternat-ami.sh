@@ -7,15 +7,41 @@ BETTERNAT_LOXILB_IMAGE="${BETTERNAT_LOXILB_IMAGE:-ghcr.io/loxilb-io/loxilb@sha25
 install -m 0755 /tmp/betternat-agent /usr/local/bin/betternat-agent
 install -m 0755 /tmp/betternat /usr/local/bin/betternat
 
-dnf install -y docker nftables conntrack-tools iproute procps-ng tar gzip
+dnf update -y
+dnf install -y \
+  amazon-cloudwatch-agent \
+  amazon-ssm-agent \
+  ca-certificates \
+  conntrack-tools \
+  docker \
+  gzip \
+  iproute \
+  iptables \
+  jq \
+  nftables \
+  procps-ng \
+  tar
+
 systemctl enable docker
 systemctl start docker
+systemctl enable amazon-ssm-agent
 
 docker pull "$BETTERNAT_LOXILB_IMAGE"
 
 install -d -m 0755 /etc/betternat
 install -d -m 0755 /usr/local/lib/betternat
+install -d -m 0755 /usr/share/doc/betternat/licenses
 install -d -m 0755 /usr/share/doc/betternat/licenses/loxilb
+
+if [ -f /tmp/betternat-LICENSE ]; then
+  install -m 0644 /tmp/betternat-LICENSE /usr/share/doc/betternat/LICENSE
+  install -m 0644 /tmp/betternat-LICENSE /usr/share/doc/betternat/licenses/Apache-2.0.txt
+  install -m 0644 /tmp/betternat-LICENSE /usr/share/doc/betternat/licenses/loxilb/LICENSE
+fi
+
+if [ -f /tmp/betternat-THIRD_PARTY_NOTICES.md ]; then
+  install -m 0644 /tmp/betternat-THIRD_PARTY_NOTICES.md /usr/share/doc/betternat/THIRD_PARTY_NOTICES.md
+fi
 
 cat > /usr/local/bin/loxicmd <<'LOXICMD'
 #!/usr/bin/env bash
@@ -74,6 +100,7 @@ cat > /usr/share/doc/betternat/AMI_MANIFEST <<EOF
 BetterNATVersion=$BETTERNAT_VERSION
 LoxiLBImage=$BETTERNAT_LOXILB_IMAGE
 BuiltAt=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+BaseOS=$(source /etc/os-release && printf '%s %s' "$NAME" "$VERSION_ID")
 EOF
 
 systemctl daemon-reload
@@ -82,3 +109,5 @@ systemctl enable betternat-agent.service
 
 /usr/local/bin/betternat version
 /usr/local/bin/betternat-agent --version
+systemctl is-enabled docker
+systemctl is-enabled amazon-ssm-agent

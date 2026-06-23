@@ -127,10 +127,27 @@ Then initialize and build the AMI:
 ```sh
 packer init packer/betternat.pkr.hcl
 packer build \
+  -var-file=packer/betternat-al2023.pkrvars.hcl \
+  -var-file=packer/betternat-arm64.pkrvars.hcl \
   -var "version=v0.1.0-alpha.2" \
   -var "aws_region=us-west-2" \
-  -var "architecture=arm64" \
-  -var "instance_type=t4g.small" \
+  -var "agent_binary_path=tmp/release/v0.1.0-alpha.2/betternat-agent_v0.1.0-alpha.2_linux_arm64" \
+  -var "cli_binary_path=tmp/release/v0.1.0-alpha.2/betternat_v0.1.0-alpha.2_linux_arm64" \
+  packer/betternat.pkr.hcl
+```
+
+For x86_64, use `packer/betternat-x86_64.pkrvars.hcl` and the
+`linux_amd64` release binaries.
+
+Public, all-region publication is intentionally explicit:
+
+```sh
+packer build \
+  -var-file=packer/betternat-al2023.pkrvars.hcl \
+  -var-file=packer/betternat-arm64.pkrvars.hcl \
+  -var-file=packer/betternat-public-all-regions.pkrvars.hcl \
+  -var "version=v0.1.0-alpha.2" \
+  -var "aws_region=us-west-2" \
   -var "agent_binary_path=tmp/release/v0.1.0-alpha.2/betternat-agent_v0.1.0-alpha.2_linux_arm64" \
   -var "cli_binary_path=tmp/release/v0.1.0-alpha.2/betternat_v0.1.0-alpha.2_linux_arm64" \
   packer/betternat.pkr.hcl
@@ -138,17 +155,30 @@ packer build \
 
 The current Packer template:
 
-- starts from the latest Amazon Linux 2023 AMI for the selected architecture,
+- starts from the latest Amazon Linux 2023 minimal kernel 6.12 AMI for the selected architecture,
 - installs `betternat-agent` and `betternat`,
-- installs Docker, nftables, conntrack tools, and network diagnostics,
+- installs Docker, nftables, conntrack tools, SSM agent, CloudWatch agent, and network diagnostics,
 - pre-pulls the pinned LoxiLB image,
 - installs `loxicmd` as a host wrapper,
 - installs `loxilb.service` and `betternat-agent.service`,
 - writes the baseline sysctl profile,
+- copies BetterNAT `LICENSE` and `THIRD_PARTY_NOTICES.md`,
 - records `/usr/share/doc/betternat/AMI_MANIFEST`.
+- writes a Packer manifest under `tmp/packer/` by default.
 
 The template is not yet wired into provider `ami_channel` resolution and does
 not publish AMIs automatically.
+
+Validation recorded on 2026-06-23:
+
+```sh
+packer init packer/betternat.pkr.hcl
+packer validate -var-file=packer/betternat-al2023.pkrvars.hcl -var-file=packer/betternat-arm64.pkrvars.hcl ...
+packer validate -var-file=packer/betternat-al2023.pkrvars.hcl -var-file=packer/betternat-x86_64.pkrvars.hcl ...
+```
+
+Both arm64 and x86_64 template validation passed. No AMI was created by this
+validation pass.
 
 ## Sysctl Profile
 
