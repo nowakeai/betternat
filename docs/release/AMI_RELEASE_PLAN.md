@@ -139,6 +139,22 @@ packer build \
 For x86_64, use `packer/betternat-x86_64.pkrvars.hcl` and the
 `linux_amd64` release binaries.
 
+An experimental Ubuntu systemd/LoxiLB `.deb` flavor is available for x86_64:
+
+```sh
+packer build \
+  -var-file=packer/betternat-ubuntu-focal-systemd-x86_64.pkrvars.hcl \
+  -var "version=v0.1.0-alpha.2" \
+  -var "aws_region=us-west-2" \
+  -var "agent_binary_path=tmp/release/v0.1.0-alpha.2/betternat-agent_v0.1.0-alpha.2_linux_amd64" \
+  -var "cli_binary_path=tmp/release/v0.1.0-alpha.2/betternat_v0.1.0-alpha.2_linux_amd64" \
+  packer/betternat.pkr.hcl
+```
+
+This flavor follows the LoxiLB standalone systemd/deb packaging direction.
+It is x86_64-only for now because the upstream LoxiLB GitHub release assets
+currently publish an amd64 `.deb` package, not an arm64 `.deb` package.
+
 Public, all-region publication is intentionally explicit:
 
 ```sh
@@ -153,7 +169,7 @@ packer build \
   packer/betternat.pkr.hcl
 ```
 
-The current Packer template:
+The AL2023 Docker flavor:
 
 - starts from the latest Amazon Linux 2023 minimal kernel 6.12 AMI for the selected architecture,
 - installs `betternat-agent` and `betternat`,
@@ -166,6 +182,16 @@ The current Packer template:
 - records `/usr/share/doc/betternat/AMI_MANIFEST`.
 - writes a Packer manifest under `tmp/packer/` by default.
 
+The Ubuntu systemd flavor:
+
+- starts from Canonical Ubuntu 20.04 Focal amd64,
+- installs `betternat-agent` and `betternat`,
+- installs the upstream LoxiLB `.deb` package,
+- uses the package-provided `loxilb.service`,
+- installs `betternat-agent.service`,
+- avoids Docker on the runtime path,
+- writes the same sysctl profile, notices, and AMI manifest.
+
 The template is not yet wired into provider `ami_channel` resolution and does
 not publish AMIs automatically.
 
@@ -175,10 +201,11 @@ Validation recorded on 2026-06-23:
 packer init packer/betternat.pkr.hcl
 packer validate -var-file=packer/betternat-al2023.pkrvars.hcl -var-file=packer/betternat-arm64.pkrvars.hcl ...
 packer validate -var-file=packer/betternat-al2023.pkrvars.hcl -var-file=packer/betternat-x86_64.pkrvars.hcl ...
+packer validate -var-file=packer/betternat-ubuntu-focal-systemd-x86_64.pkrvars.hcl ...
 ```
 
-Both arm64 and x86_64 template validation passed. No AMI was created by this
-validation pass.
+AL2023 arm64, AL2023 x86_64, and Ubuntu systemd x86_64 template validation
+passed. No AMI was created by this validation pass.
 
 ## Sysctl Profile
 
