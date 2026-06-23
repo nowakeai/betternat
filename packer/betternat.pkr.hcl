@@ -99,7 +99,7 @@ variable "cli_binary_path" {
 
 variable "loxilb_image" {
   type    = string
-  default = "ghcr.io/loxilb-io/loxilb@sha256:38f08be39aaa57826cbfb818c34442e34b0e456f9f88a74265c4a298208862cb"
+  default = "ghcr.io/loxilb-io/loxilb@sha256:dacc9b21688d4042b768f2cbc5968360b8753cf92f926ee288346153a23f3052"
 }
 
 variable "provision_script" {

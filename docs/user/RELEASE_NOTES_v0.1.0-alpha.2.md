@@ -37,7 +37,7 @@ This release still does not publish a BetterNAT AMI.
 This release pins LoxiLB to `v0.9.8.6` by immutable image digest:
 
 ```text
-ghcr.io/loxilb-io/loxilb@sha256:38f08be39aaa57826cbfb818c34442e34b0e456f9f88a74265c4a298208862cb
+ghcr.io/loxilb-io/loxilb@sha256:dacc9b21688d4042b768f2cbc5968360b8753cf92f926ee288346153a23f3052
 ```
 
 The alpha install path remains:

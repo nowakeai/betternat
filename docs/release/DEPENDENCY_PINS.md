@@ -8,7 +8,7 @@ or image digest without a new BetterNAT release.
 
 | BetterNAT version | LoxiLB version | Image reference | Package reference | Status |
 | --- | --- | --- | --- | --- |
-| `v0.1.0-alpha.2` | `v0.9.8.6` | `ghcr.io/loxilb-io/loxilb@sha256:38f08be39aaa57826cbfb818c34442e34b0e456f9f88a74265c4a298208862cb` | <https://github.com/orgs/loxilb-io/packages/container/loxilb/960366893?tag=v0.9.8.6> | current alpha |
+| `v0.1.0-alpha.2` | `v0.9.8.6` | `ghcr.io/loxilb-io/loxilb@sha256:dacc9b21688d4042b768f2cbc5968360b8753cf92f926ee288346153a23f3052` | <https://github.com/orgs/loxilb-io/packages/container/loxilb/960366893?tag=v0.9.8.6> | current alpha |
 
 ## Policy
 

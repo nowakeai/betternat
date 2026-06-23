@@ -2,7 +2,7 @@
 set -euo pipefail
 
 BETTERNAT_VERSION="${BETTERNAT_VERSION:-dev}"
-BETTERNAT_LOXILB_IMAGE="${BETTERNAT_LOXILB_IMAGE:-ghcr.io/loxilb-io/loxilb@sha256:38f08be39aaa57826cbfb818c34442e34b0e456f9f88a74265c4a298208862cb}"
+BETTERNAT_LOXILB_IMAGE="${BETTERNAT_LOXILB_IMAGE:-ghcr.io/loxilb-io/loxilb@sha256:dacc9b21688d4042b768f2cbc5968360b8753cf92f926ee288346153a23f3052}"
 
 install -m 0755 /tmp/betternat-agent /usr/local/bin/betternat-agent
 install -m 0755 /tmp/betternat /usr/local/bin/betternat
@@ -61,7 +61,7 @@ Type=simple
 Restart=always
 RestartSec=2s
 ExecStartPre=-/usr/bin/docker rm -f loxilb
-ExecStart=/usr/bin/docker run --rm --name loxilb --privileged --network host $BETTERNAT_LOXILB_IMAGE --api --fallback
+ExecStart=/usr/bin/docker run --rm --name loxilb --privileged --network host $BETTERNAT_LOXILB_IMAGE
 ExecStop=/usr/bin/docker stop loxilb
 
 [Install]

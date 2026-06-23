@@ -6,7 +6,7 @@ cd "$ROOT_DIR"
 
 BETTERNAT_VERSION="v0.1.0-alpha.2"
 LOXILB_VERSION="v0.9.8.6"
-LOXILB_IMAGE="ghcr.io/loxilb-io/loxilb@sha256:38f08be39aaa57826cbfb818c34442e34b0e456f9f88a74265c4a298208862cb"
+LOXILB_IMAGE="ghcr.io/loxilb-io/loxilb@sha256:dacc9b21688d4042b768f2cbc5968360b8753cf92f926ee288346153a23f3052"
 LOXILB_PACKAGE_URL="https://github.com/orgs/loxilb-io/packages/container/loxilb/960366893?tag=v0.9.8.6"
 
 require_contains() {

@@ -20,7 +20,7 @@ func TestRenderUserData(t *testing.T) {
 	assertContains(t, script, "if [ -e /proc/sys/net/netfilter/nf_conntrack_max ]; then")
 	assertContains(t, script, "net.netfilter.nf_conntrack_max = 1048576")
 	assertContains(t, script, "docker run -d")
-	assertContains(t, script, "ghcr.io/loxilb-io/loxilb@sha256:38f08be39aaa57826cbfb818c34442e34b0e456f9f88a74265c4a298208862cb")
+	assertContains(t, script, "ghcr.io/loxilb-io/loxilb@sha256:dacc9b21688d4042b768f2cbc5968360b8753cf92f926ee288346153a23f3052")
 	assertContains(t, script, `exec docker exec loxilb loxicmd "\$@"`)
 	assertContains(t, script, "ExecStart=/usr/local/bin/betternat-agent --config /etc/betternat/agent.json")
 	assertContains(t, script, "systemctl enable --now betternat-agent.service")

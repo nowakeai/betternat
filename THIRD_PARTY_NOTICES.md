@@ -12,7 +12,7 @@ The first BetterNAT release is free and open source. This notice is for attribut
 - Copyright: NetLOX Inc. and contributors
 - Use in BetterNAT: primary local datapath runtime for egress SNAT.
 - BetterNAT `v0.1.0-alpha.2` LoxiLB version pin: `v0.9.8.6`
-- BetterNAT `v0.1.0-alpha.2` image reference: `ghcr.io/loxilb-io/loxilb@sha256:38f08be39aaa57826cbfb818c34442e34b0e456f9f88a74265c4a298208862cb`
+- BetterNAT `v0.1.0-alpha.2` image reference: `ghcr.io/loxilb-io/loxilb@sha256:dacc9b21688d4042b768f2cbc5968360b8753cf92f926ee288346153a23f3052`
 - Package reference: https://github.com/orgs/loxilb-io/packages/container/loxilb/960366893?tag=v0.9.8.6
 - Platform manifests observed on 2026-06-21:
   - `linux/amd64`: `sha256:f435d5170eaf7cb13ec738a1ea5c82a943187b2fc6cae432539a304632a9febf`
