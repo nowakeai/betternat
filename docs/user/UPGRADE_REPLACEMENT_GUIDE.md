@@ -34,18 +34,8 @@ terraform {
 }
 ```
 
-For OpenTofu, use the Terraform Registry hostname until the OpenTofu-native registry entry is approved:
-
-```hcl
-terraform {
-  required_providers {
-    betternat = {
-      source  = "registry.terraform.io/nowakeai/betternat"
-      version = "= 0.1.0-alpha.4"
-    }
-  }
-}
-```
+OpenTofu can use the same `source = "nowakeai/betternat"` address now that
+the provider is registered in the OpenTofu Registry.
 
 The gateway runtime version is controlled separately. In the first alpha, it is selected by bootstrap artifact URLs and checksums:
 

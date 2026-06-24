@@ -667,7 +667,7 @@ Release artifact smoke validation recorded on 2026-06-24:
 - [x] Test provider filesystem mirror install through Terraform release zip.
 - [x] Test provider filesystem mirror install through OpenTofu release zip with explicit `registry.terraform.io/nowakeai/betternat` source.
 - [x] Publish and test provider through Terraform Registry.
-- [x] Publish and test provider through OpenTofu-native registry path or document explicit Terraform Registry source requirement.
+- [x] Publish provider through OpenTofu-native registry path.
 
 Provider Registry validation recorded on 2026-06-22:
 
@@ -676,6 +676,16 @@ Provider Registry validation recorded on 2026-06-22:
 - OpenTofu `v1.12.3` `tofu init` and `tofu validate`: passed with `source = "registry.terraform.io/nowakeai/betternat"`.
 - Signing key ID observed by Terraform/OpenTofu: `F2D78A307FAB2914`.
 - OpenTofu-native registry tracking issues: https://github.com/opentofu/registry/issues/4494 and https://github.com/opentofu/registry/issues/4496.
+
+OpenTofu Registry update recorded on 2026-06-24:
+
+- OpenTofu Registry provider protocol lists `nowakeai/betternat`
+  `0.1.0-alpha.2`, `0.1.0-alpha.3`, and `0.1.0-alpha.4`.
+- OpenTofu Registry download metadata for `0.1.0-alpha.4` is available for
+  darwin/arm64, linux/amd64, and linux/arm64 and points to the signed GitHub
+  provider release assets.
+- Local `tofu init` validation was not rerun in this workspace because the
+  `tofu` binary is not installed here.
 
 ### Operations And Observability
 

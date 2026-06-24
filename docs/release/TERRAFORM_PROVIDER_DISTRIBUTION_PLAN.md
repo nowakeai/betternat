@@ -390,14 +390,15 @@ Important OpenTofu source-address note:
 
 - Terraform resolves `source = "nowakeai/betternat"` as `registry.terraform.io/nowakeai/betternat`.
 - OpenTofu resolves `source = "nowakeai/betternat"` as `registry.opentofu.org/nowakeai/betternat`.
-- Current provider binary is served with address `registry.terraform.io/nowakeai/betternat`.
-- Until BetterNAT is published through an OpenTofu-native registry path, OpenTofu examples should use the explicit source:
+- As of 2026-06-24, the OpenTofu Registry resolves provider `0.1.0-alpha.4`
+  for darwin/arm64, linux/amd64, and linux/arm64. OpenTofu examples can use
+  the same source address as Terraform:
 
 ```hcl
-source = "registry.terraform.io/nowakeai/betternat"
+source = "nowakeai/betternat"
 ```
 
-OpenTofu Registry tracking issues:
+OpenTofu Registry tracking issues, now resolved by Registry API availability:
 
 - Provider entry: https://github.com/opentofu/registry/issues/4494
 - Provider key: https://github.com/opentofu/registry/issues/4496

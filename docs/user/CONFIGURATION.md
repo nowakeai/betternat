@@ -28,18 +28,8 @@ install it from the provider GitHub release as a Terraform filesystem mirror:
 source scripts/setup-provider-github-mirror.sh
 ```
 
-For OpenTofu, use the explicit Terraform Registry hostname until the OpenTofu-native registry entry is approved:
-
-```hcl
-terraform {
-  required_providers {
-    betternat = {
-      source  = "registry.terraform.io/nowakeai/betternat"
-      version = "= 0.1.0-alpha.4"
-    }
-  }
-}
-```
+OpenTofu can use the same `source = "nowakeai/betternat"` address now that
+the provider is registered in the OpenTofu Registry.
 
 ### Required
 
