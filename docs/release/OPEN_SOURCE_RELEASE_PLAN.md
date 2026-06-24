@@ -220,9 +220,10 @@ BETTERNAT_VERSION=v0.1.0-alpha.2 scripts/release-build.sh
 ```
 
 Terraform examples must validate with the public alpha provider installation
-path. Until Terraform Registry `0.1.0-alpha.3` is available, this means using
-`scripts/setup-provider-github-mirror.sh` to install provider `0.1.0-alpha.3`
-from the provider GitHub release as a Terraform filesystem mirror.
+path. Until Terraform Registry propagation catches up to the current provider
+release, this means using `scripts/setup-provider-github-mirror.sh` to install
+the current provider from the provider GitHub release as a Terraform filesystem
+mirror.
 
 AWS low-cost acceptance test must pass if the provider, agent, bootstrap, or examples changed after the last recorded AWS result.
 

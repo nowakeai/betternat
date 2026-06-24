@@ -219,7 +219,7 @@ Completed locally:
   - `examples/terraform`
   - `examples/terraform-aws-supplemental`
   - `examples/terraform-localstack`
-- [x] Terraform examples validate with provider `0.1.0-alpha.3` installed from
+- [x] Terraform examples validate with provider `0.1.0-alpha.4` installed from
   the provider GitHub release as a filesystem mirror:
   - `source scripts/setup-provider-github-mirror.sh`
   - `terraform -chdir=examples/terraform init -upgrade -input=false`
@@ -306,11 +306,12 @@ terraform -chdir=examples/terraform-localstack validate
 
 Notes:
 
-- Provider `0.1.0-alpha.3` is currently installed from the provider GitHub
+- Provider `0.1.0-alpha.4` is currently installed from the provider GitHub
   release as a Terraform filesystem mirror because Terraform Registry
   propagation is not complete.
 - The mirror path is a temporary alpha workaround; once Registry
-  `0.1.0-alpha.3` is available, examples can return to plain Registry install.
+  propagation catches up to the current provider release, examples can return
+  to plain Registry install.
 
 ### 3. Linux VM Smoke Tests
 
@@ -916,7 +917,7 @@ Defer until benchmark-backed:
 
 1. Re-run final local Go/Terraform/release/hygiene verification before tagging
    the next alpha.
-2. Recheck Terraform Registry availability for provider `0.1.0-alpha.3`; remove
+2. Recheck Terraform Registry availability for the current provider release; remove
    the GitHub filesystem-mirror workaround from public docs once Registry
    propagation catches up.
 3. Decide whether to publish another runtime tag for post-RC source changes or

@@ -198,14 +198,14 @@ For unreleased local builds, use the maintainer AWS supplemental runbook instead
 
 ## Install Provider
 
-The public Quick Start uses provider version `0.1.0-alpha.3`:
+The public Quick Start uses provider version `0.1.0-alpha.4`:
 
 ```hcl
 source  = "nowakeai/betternat"
-version = "= 0.1.0-alpha.3"
+version = "= 0.1.0-alpha.4"
 ```
 
-Until `0.1.0-alpha.3` is available through the Terraform Registry, install it
+Until `0.1.0-alpha.4` is available through the Terraform Registry, install it
 from the provider GitHub release as a Terraform filesystem mirror:
 
 ```sh

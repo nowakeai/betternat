@@ -24,7 +24,7 @@ Environment:
   BETTERNAT_RELEASE_DEPLOY_AZ      AWS availability zone. Default: us-west-2a.
   BETTERNAT_RELEASE_DEPLOY_RUN_ID  Run id. Default: bnat-release-smoke-<timestamp>.
   BETTERNAT_RELEASE_DEPLOY_DIR     Work dir. Default: tmp/release-deploy-smoke/<run-id>.
-  BETTERNAT_PROVIDER_VERSION       Terraform provider version. Default: 0.1.0-alpha.3.
+  BETTERNAT_PROVIDER_VERSION       Terraform provider version. Default: 0.1.0-alpha.4.
   BETTERNAT_PROVIDER_INSTALL       github-mirror or registry. Default: github-mirror.
   BETTERNAT_PROVIDER_RELEASE_BASE  Override provider release base URL.
   BETTERNAT_INSTANCE_TYPE          Gateway instance type. Default: t4g.small.
@@ -71,7 +71,7 @@ desired_capacity="${BETTERNAT_DESIRED_CAPACITY:-2}"
 max_size="${BETTERNAT_MAX_SIZE:-3}"
 stable_egress_ip="${BETTERNAT_STABLE_EGRESS_IP:-true}"
 ha_profile="${BETTERNAT_HA_PROFILE:-default}"
-provider_version="${BETTERNAT_PROVIDER_VERSION:-0.1.0-alpha.3}"
+provider_version="${BETTERNAT_PROVIDER_VERSION:-0.1.0-alpha.4}"
 provider_install="${BETTERNAT_PROVIDER_INSTALL:-github-mirror}"
 
 require_cmd awk

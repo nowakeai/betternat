@@ -10,7 +10,7 @@ Release posture:
 
 - release level: `alpha`
 - runtime version: `v0.1.0-alpha.2`
-- Terraform provider version for public examples: `0.1.0-alpha.3`
+- Terraform provider version for public examples: `0.1.0-alpha.4`
 - verification base commit: `19a23b7`
 - AWS scope: single-AZ HA group in AWS
 - install path: Terraform plus cloud-init bootstrap on an explicit Linux AMI
@@ -26,7 +26,7 @@ Current evidence satisfies that alpha promise:
 
 - release artifacts and checksums exist for `v0.1.0-alpha.2`,
 - public examples use GitHub Release URLs, not maintainer-only S3 URLs,
-- provider `0.1.0-alpha.3` is usable through the provider GitHub release as a
+- provider `0.1.0-alpha.4` is usable through the provider GitHub release as a
   Terraform filesystem mirror,
 - disposable AWS apply/destroy smoke passed with no residual resources,
 - stable and non-stable egress modes have AWS validation evidence,
@@ -79,7 +79,8 @@ in user-facing docs:
 - no published BetterNAT AMI,
 - bootstrap depends on package repositories, Docker/image pull, and GitHub
   release artifact reachability,
-- Terraform Registry provider `0.1.0-alpha.3` has not propagated yet; public
+- Terraform Registry provider releases newer than `0.1.0-alpha.2` have not
+  propagated yet; public
   examples use `scripts/setup-provider-github-mirror.sh`,
 - Spot interruption handling follows AWS IMDS documentation, but forced Spot
   interruption was not required as a first-alpha release gate,
@@ -90,7 +91,7 @@ in user-facing docs:
 
 Post-alpha / production work:
 
-- Terraform Registry `0.1.0-alpha.3` propagation and removal of the GitHub
+- Terraform Registry propagation beyond `0.1.0-alpha.2` and removal of the GitHub
   filesystem-mirror workaround,
 - published arm64 and amd64 AMIs,
 - `ami_channel` resolver,

@@ -51,17 +51,17 @@ terraform {
   required_providers {
     betternat = {
       source  = "nowakeai/betternat"
-      version = "= 0.1.0-alpha.3"
+      version = "= 0.1.0-alpha.4"
     }
   }
 }
 ```
 
 Provider versions and BetterNAT runtime artifact versions are separate. The
-current alpha provider is `0.1.0-alpha.3`; the current runtime release assets
+current alpha provider is `0.1.0-alpha.4`; the current runtime release assets
 referenced by the quick start are `v0.1.0-alpha.2`.
 
-Until `0.1.0-alpha.3` is available through the Terraform Registry, install it
+Until `0.1.0-alpha.4` is available through the Terraform Registry, install it
 from the provider GitHub release as a Terraform filesystem mirror:
 
 ```sh

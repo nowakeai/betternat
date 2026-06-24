@@ -53,7 +53,7 @@ terraform {
   required_providers {
     betternat = {
       source  = "nowakeai/betternat"
-      version = "= 0.1.0-alpha.3"
+      version = "= 0.1.0-alpha.4"
     }
   }
 }
@@ -66,11 +66,11 @@ This controls:
 - state migration behavior,
 - Terraform/OpenTofu plugin protocol implementation.
 
-For the current alpha, provider `0.1.0-alpha.3` is published as a GitHub
+For the current alpha, provider `0.1.0-alpha.4` is published as a GitHub
 provider release and used by public examples through a Terraform filesystem
 mirror. Terraform Registry `0.1.0-alpha.2` is available, but
-`0.1.0-alpha.3` had not propagated to the Registry at the last 2026-06-24
-check.
+newer provider releases had not propagated to the Registry at the last
+2026-06-24 check.
 
 ### BetterNAT Runtime Version
 
@@ -373,7 +373,14 @@ a Terraform filesystem mirror:
   scan found no matching VPC, non-terminated instance, ASG, DynamoDB table, EIP,
   IAM role, IAM instance profile, or launch template.
 
-The public examples and Quick Start now use provider `0.1.0-alpha.3` plus
+Provider `0.1.0-alpha.4` was published to GitHub on 2026-06-24 to refresh the
+provider Registry documentation payload. GitHub release artifact checksum
+verification passed for the Linux amd64 zip. Immediately after publication, the
+Terraform Registry public API still reported latest `0.1.0-alpha.2` with an
+empty `docs` list, so Registry documentation remained unavailable until
+Registry ingestion or manual resync catches up.
+
+The public examples and Quick Start now use provider `0.1.0-alpha.4` plus
 `scripts/setup-provider-github-mirror.sh` until Registry propagation catches up.
 That path was validated with `terraform init -upgrade` and `terraform validate`
 for `examples/terraform`, `examples/terraform-aws-supplemental`, and
