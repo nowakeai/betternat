@@ -286,3 +286,16 @@ Record cloud-init boot timings now if using a development AMI or bootstrap path.
 - Manual handover to the no-public-IP standby completed successfully.
 - Client egress probe during handover observed `0` non-shared public IP
   samples; it recorded `3` one-second curl timeouts out of `240` samples.
+
+2026-06-24 non-stable public-IP validation:
+
+- Launch template version `17` used `AssociatePublicIpAddress=true` and an
+  agent config without `ha.public_identity`.
+- ASG instance refresh `824ec267-c1a2-47a8-b363-a04d57974c66` completed
+  successfully.
+- Manual route-only handover completed from `i-0a89f292e07b04460` to
+  `i-0d08059b2f4708db6`.
+- Client egress probe observed `0` failures out of `240` samples and the
+  expected public source IP change from `52.24.117.43` to `52.24.240.255`.
+- The retained environment was restored to stable/no-public-IP launch template
+  version `16` afterward.

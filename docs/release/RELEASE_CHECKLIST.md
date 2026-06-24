@@ -649,6 +649,13 @@ Reliability validation update on 2026-06-23:
   `16` with `AssociatePublicIpAddress=false`, and completed a manual handover
   between no-public-IP gateway nodes. The client probe observed `0` non-shared
   public IP samples and `3` one-second curl timeouts out of `240` samples.
+- Non-stable public-IP validation on 2026-06-24 refreshed the ASG to launch
+  template version `17` with `AssociatePublicIpAddress=true` and no
+  `ha.public_identity`. Manual route-only handover completed, and the client
+  probe observed `0` failures out of `240` samples while the public source IP
+  changed from `52.24.117.43` to `52.24.240.255`.
+- The retained environment was restored to stable/no-public-IP launch template
+  version `16` after the non-stable validation.
 - Stale paired `systemd-stop-*` handover records remained in intermediate
   states after the ASG lifecycle handover completed. Treat this as operation
   record hygiene to fix before production readiness.

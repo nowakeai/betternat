@@ -754,6 +754,29 @@ AWS no-public-IP validation on 2026-06-23:
 - Temporary VPC endpoints were retained with the manual test environment so
   no-public-IP standby nodes keep private AWS API reachability.
 
+AWS non-stable public-IP validation on 2026-06-24:
+
+- Created launch template version `17` from version `16` with
+  `AssociatePublicIpAddress=true` and an agent config without
+  `ha.public_identity`.
+- ASG instance refresh `824ec267-c1a2-47a8-b363-a04d57974c66` completed
+  successfully from `2026-06-23T19:11:01Z` to `2026-06-23T19:13:41Z`.
+- Agent config on active reported `ha.public_identity=null`; runtime was
+  route-only / non-stable mode.
+- Manual proactive handover
+  `i-0a89f292e07b04460 -> i-0d08059b2f4708db6` completed at generation `15`.
+- Client egress probe during handover recorded `240` samples, `0` failures,
+  and the expected public source IP change from `52.24.117.43` to
+  `52.24.240.255`.
+- The environment was restored to stable/no-public-IP launch template version
+  `16` with instance refresh `1574c0a3-a7cd-4c8b-a5b7-5077f7ab5a89`, which
+  completed successfully from `2026-06-24T02:09:29Z` to
+  `2026-06-24T02:12:42Z`.
+- Final retained gateway state:
+  - active `i-048fd34e26867122f`, private `10.88.1.135`, shared EIP
+    `52.24.117.43`,
+  - standby `i-073ab0073edde40ba`, private `10.88.1.85`, no public IP.
+
 ### 9. Advanced Kernel/NIC Tuning Profile
 
 Current alpha bootstrap applies only the conservative baseline gateway sysctls documented in `ALPHA_BOOTSTRAP_RELEASE_PATH.md`.
