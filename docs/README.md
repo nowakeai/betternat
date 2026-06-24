@@ -45,6 +45,7 @@ Read them in this order for the first full pass:
 These are maintainer-facing release documents.
 
 - [release/RELEASE_CHECKLIST.md](release/RELEASE_CHECKLIST.md) — Release gates, evidence requirements, validation commands, and decision template.
+- [release/ALPHA_RELEASE_DECISION_2026-06-24.md](release/ALPHA_RELEASE_DECISION_2026-06-24.md) — Current alpha ship decision, evidence, limitations, and deferred work.
 - [release/OPEN_SOURCE_RELEASE_PLAN.md](release/OPEN_SOURCE_RELEASE_PLAN.md) — First public release plan for the free/open-source edition.
 - [release/ENGINEERING_RELEASE_GAP_LIST.md](release/ENGINEERING_RELEASE_GAP_LIST.md) — Code, feature, and test gaps by priority.
 - [release/ALPHA_BOOTSTRAP_RELEASE_PATH.md](release/ALPHA_BOOTSTRAP_RELEASE_PATH.md) — Temporary cloud-init based release path before published AMIs exist.
