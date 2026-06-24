@@ -101,7 +101,8 @@ Current protections:
 - BetterNAT agent and CLI downloads support SHA256 checks,
 - user data writes `/etc/betternat/agent.json` with mode `0600`,
 - launch templates require IMDSv2,
-- release assets are published through GitHub Releases.
+- release assets are published through GitHub Releases,
+- release workflow runs dependency/license scanning for Go modules.
 
 Current gaps:
 
@@ -109,7 +110,7 @@ Current gaps:
 - no signed BetterNAT application artifact bundle,
 - no generated SBOM attached to release assets,
 - no pinned OS package repository snapshot,
-- LoxiLB image is pulled at boot in the alpha path.
+- LoxiLB image is pulled at boot in the alpha path,
 - alpha bootstrap may rely on auto-assigned per-node public IPv4 addresses for
   package and artifact downloads.
 
@@ -120,6 +121,10 @@ Recommended alpha usage:
 - avoid untrusted artifact mirrors,
 - pin LoxiLB image digests where possible,
 - test bootstrap in a disposable VPC before using existing route tables.
+
+The alpha artifact signing decision is documented in
+`docs/release/ARTIFACT_SIGNING_DECISION.md`: BetterNAT application artifacts are
+checksum-verified but not signed in the current alpha.
 
 Production targets:
 

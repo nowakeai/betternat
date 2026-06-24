@@ -665,9 +665,9 @@ Reliability validation update on 2026-06-23:
 - [x] Review runtime IAM least-privilege policy against real AWS actions.
 - [x] Review systemd hardening options.
 - [x] Add dependency/license scan to release workflow.
-- [ ] Add artifact signing decision:
+- [x] Add artifact signing decision:
   - [x] no signing for alpha with checksums only,
-  - [ ] or cosign/minisign/GPG for later releases.
+  - [ ] implement cosign/minisign/GPG for later releases.
 - [x] Add vulnerability disclosure and patch policy to user docs.
 
 ### Documentation
