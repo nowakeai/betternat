@@ -41,6 +41,15 @@ type ProbeRunner interface {
 	Run(ctx context.Context) (probe.Result, error)
 }
 
+var handoverRouteReplaceBackoffs = []time.Duration{
+	0,
+	250 * time.Millisecond,
+	750 * time.Millisecond,
+	1500 * time.Millisecond,
+}
+
+var handoverRouteReplaceAttemptTimeout = 8 * time.Second
+
 // Activate claims ownership and points the cloud control plane at this appliance.
 func (c Controller) Activate(ctx context.Context, cfg config.Config, localInstanceID string) (ActivationResult, error) {
 	if !cfg.HA.Enabled {
@@ -296,7 +305,7 @@ func (c Controller) Handover(ctx context.Context, cfg config.Config, localInstan
 		return HandoverResult{}, err
 	}
 	for _, target := range routes {
-		if err := c.Cloud.ReplaceRoute(ctx, target); err != nil {
+		if err := c.replaceRouteForHandover(ctx, target, targetInstanceID); err != nil {
 			return HandoverResult{}, fmt.Errorf("replace route %s %s to handover target %q: %w", target.RouteTableID, target.DestinationCIDR, targetInstanceID, err)
 		}
 		result.Routes = append(result.Routes, target)
@@ -322,6 +331,39 @@ func (c Controller) Handover(ctx context.Context, cfg config.Config, localInstan
 	return result, nil
 }
 
+func (c Controller) replaceRouteForHandover(ctx context.Context, target cloud.RouteTarget, targetInstanceID string) error {
+	var lastErr error
+	for attempt, backoff := range handoverRouteReplaceBackoffs {
+		if backoff > 0 {
+			if err := sleepContext(ctx, backoff); err != nil {
+				if lastErr != nil {
+					return lastErr
+				}
+				return err
+			}
+		}
+		attemptCtx, cancel := context.WithTimeout(ctx, handoverRouteReplaceAttemptTimeout)
+		err := c.Cloud.ReplaceRoute(attemptCtx, target)
+		cancel()
+		if err != nil {
+			lastErr = err
+		}
+		actual, verifyErr := c.Cloud.DescribeRoute(ctx, target.RouteTableID, target.DestinationCIDR)
+		if verifyErr == nil && actual.Target == targetInstanceID {
+			return nil
+		}
+		if err == nil && verifyErr != nil {
+			lastErr = fmt.Errorf("verify route after replace attempt %d: %w", attempt+1, verifyErr)
+		} else if err == nil {
+			lastErr = fmt.Errorf("route target is %q after replace attempt %d, expected %q", actual.Target, attempt+1, targetInstanceID)
+		}
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("route did not converge to %q", targetInstanceID)
+	}
+	return lastErr
+}
+
 func (c Controller) verifyTargetOwnership(ctx context.Context, cfg config.Config, targetInstanceID string, routes []cloud.RouteTarget) error {
 	for _, target := range routes {
 		actual, err := c.Cloud.DescribeRoute(ctx, target.RouteTableID, target.DestinationCIDR)
@@ -342,6 +384,20 @@ func (c Controller) verifyTargetOwnership(ctx context.Context, cfg config.Config
 		}
 	}
 	return nil
+}
+
+func sleepContext(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func (c Controller) revertHandover(ctx context.Context, cfg config.Config, localInstanceID string) error {

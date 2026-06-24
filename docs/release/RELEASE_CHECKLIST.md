@@ -643,6 +643,10 @@ Production-preview follow-up evidence and hardening, not release blockers:
 - [x] longer soak test is refreshed after production-preview docs and provider
   UX updates.
 - [ ] retry/backoff policy for AWS/DynamoDB transient failures is further hardened.
+  - [x] proactive handover route replacement now uses per-attempt timeouts,
+        post-error route verification, and short retries.
+  - [ ] DynamoDB timeout/denial negative tests and broader cloud mutation
+        retry policy still need follow-up.
 - [x] IAM least-privilege policy is reviewed again after provider/bootstrap UX
   changes.
 - [ ] benchmark results are reproducible.
@@ -1054,5 +1058,6 @@ As of 2026-06-24:
   AWS apply, health, handover, destroy, and residual-scan validation with
   provider `0.1.0-alpha.8` and runtime `v0.1.0-alpha.6`.
 - Remaining GA hardening is concentrated on ASG lifecycle-triggered proactive
-  handover retry/backoff, strict stable public identity semantics, IAM negative
-  tests, external documentation walkthrough, and benchmark-backed sizing.
+  handover revalidation after route-replacement retry hardening, strict stable
+  public identity semantics, IAM/DynamoDB negative tests, external
+  documentation walkthrough, and benchmark-backed sizing.

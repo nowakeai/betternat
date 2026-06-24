@@ -201,6 +201,10 @@ Needed before GA:
   sequencing. Provider alpha8 GA soak converged through fenced lease takeover
   after ASG active termination, but the durable lifecycle-triggered handover
   operation failed while `ec2:ReplaceRoute` hit a context deadline.
+- Follow-up code added per-attempt `ReplaceRoute` timeouts, route verification
+  after ambiguous route mutation errors, and short route-replacement retries in
+  the proactive handover path. DynamoDB denial/timeout negative tests and
+  broader cloud-mutation retry policy remain open.
 
 Acceptance:
 
@@ -1035,9 +1039,9 @@ Defer until benchmark-backed:
 1. Keep `v0.1.0-alpha.6` as the current runtime artifact set until another
    runtime tag is intentionally validated and added to the provider support
    matrix.
-2. Harden ASG lifecycle-triggered proactive handover retry/backoff and shutdown
-   sequencing so termination-triggered handover records complete instead of
-   relying on lease-expiry takeover.
+2. Re-run ASG lifecycle-triggered proactive handover after the route-replacement
+   retry change and confirm termination-triggered handover records complete
+   instead of relying on lease-expiry takeover.
 3. Decide whether GA accepts the documented transient ordinary public-IP caveat
    in stable mode or requires secondary private IP/ENI egress identity before
    GA.

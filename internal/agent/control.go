@@ -31,7 +31,7 @@ const (
 	controlRefreshInterval = 2 * time.Second
 	controlFreshFor        = 10 * time.Second
 	controlHTTPTimeout     = 1500 * time.Millisecond
-	handoverTimeout        = 30 * time.Second
+	handoverTimeout        = 45 * time.Second
 )
 
 type handoverStore interface {

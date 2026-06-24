@@ -256,9 +256,79 @@ func TestHandoverMovesCloudOwnershipThenTransfersLease(t *testing.T) {
 	wantCalls := []string{
 		"associate:eipalloc-123:i-standby",
 		"replace:rtb-a:0.0.0.0/0:i-standby",
+		"describe-route:rtb-a:0.0.0.0/0",
 		"replace:rtb-b:0.0.0.0/0:i-standby",
+		"describe-route:rtb-b:0.0.0.0/0",
 		"describe-route:rtb-a:0.0.0.0/0",
 		"describe-route:rtb-b:0.0.0.0/0",
+		"describe-eip:eipalloc-123",
+	}
+	if !equalStrings(cloudProvider.calls, wantCalls) {
+		t.Fatalf("unexpected calls: got %#v want %#v", cloudProvider.calls, wantCalls)
+	}
+}
+
+func TestHandoverAcceptsAmbiguousRouteReplaceErrorWhenRouteConverged(t *testing.T) {
+	leaseManager := &fakeLease{}
+	current, err := leaseManager.Acquire(context.Background(), "i-active")
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	cloudProvider := &fakeCloud{
+		routes: map[string]cloud.RouteTarget{
+			"rtb-a:0.0.0.0/0": {RouteTableID: "rtb-a", DestinationCIDR: "0.0.0.0/0", Target: "i-active"},
+			"rtb-b:0.0.0.0/0": {RouteTableID: "rtb-b", DestinationCIDR: "0.0.0.0/0", Target: "i-active"},
+		},
+		identity:              cloud.PublicIdentity{AllocationID: "eipalloc-123", InstanceID: "i-active", PublicIP: "198.51.100.10"},
+		replaceErrs:           []error{context.DeadlineExceeded},
+		replaceMutatesOnError: true,
+	}
+	controller := Controller{Cloud: cloudProvider, Lease: leaseManager}
+
+	result, err := controller.Handover(context.Background(), validHAConfig(), "i-active", "i-standby", current)
+	if err != nil {
+		t.Fatalf("handover: %v", err)
+	}
+	if result.NewLease.OwnerInstanceID != "i-standby" {
+		t.Fatalf("unexpected new lease: %#v", result.NewLease)
+	}
+}
+
+func TestHandoverRetriesRouteReplaceUntilRouteConverges(t *testing.T) {
+	oldBackoffs := handoverRouteReplaceBackoffs
+	handoverRouteReplaceBackoffs = []time.Duration{0, 0}
+	defer func() { handoverRouteReplaceBackoffs = oldBackoffs }()
+
+	leaseManager := &fakeLease{}
+	current, err := leaseManager.Acquire(context.Background(), "i-active")
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	cloudProvider := &fakeCloud{
+		routes: map[string]cloud.RouteTarget{
+			"rtb-a:0.0.0.0/0": {RouteTableID: "rtb-a", DestinationCIDR: "0.0.0.0/0", Target: "i-active"},
+		},
+		identity:    cloud.PublicIdentity{AllocationID: "eipalloc-123", InstanceID: "i-active", PublicIP: "198.51.100.10"},
+		replaceErrs: []error{errors.New("transient route timeout")},
+	}
+	cfg := validHAConfig()
+	cfg.HA.RouteFailover.RouteTableIDs = []string{"rtb-a"}
+	controller := Controller{Cloud: cloudProvider, Lease: leaseManager}
+
+	result, err := controller.Handover(context.Background(), cfg, "i-active", "i-standby", current)
+	if err != nil {
+		t.Fatalf("handover: %v", err)
+	}
+	if result.NewLease.OwnerInstanceID != "i-standby" {
+		t.Fatalf("unexpected new lease: %#v", result.NewLease)
+	}
+	wantCalls := []string{
+		"associate:eipalloc-123:i-standby",
+		"replace:rtb-a:0.0.0.0/0:i-standby",
+		"describe-route:rtb-a:0.0.0.0/0",
+		"replace:rtb-a:0.0.0.0/0:i-standby",
+		"describe-route:rtb-a:0.0.0.0/0",
+		"describe-route:rtb-a:0.0.0.0/0",
 		"describe-eip:eipalloc-123",
 	}
 	if !equalStrings(cloudProvider.calls, wantCalls) {
@@ -317,10 +387,12 @@ func TestHandoverRevertsCloudOwnershipWhenLeaseTransferFails(t *testing.T) {
 }
 
 type fakeCloud struct {
-	calls      []string
-	routes     map[string]cloud.RouteTarget
-	identity   cloud.PublicIdentity
-	replaceErr error
+	calls                 []string
+	routes                map[string]cloud.RouteTarget
+	identity              cloud.PublicIdentity
+	replaceErr            error
+	replaceErrs           []error
+	replaceMutatesOnError bool
 }
 
 func (f *fakeCloud) ReplaceRoute(_ context.Context, target cloud.RouteTarget) error {
@@ -328,10 +400,17 @@ func (f *fakeCloud) ReplaceRoute(_ context.Context, target cloud.RouteTarget) er
 		f.routes = map[string]cloud.RouteTarget{}
 	}
 	f.calls = append(f.calls, "replace:"+target.RouteTableID+":"+target.DestinationCIDR+":"+target.Target)
-	if f.replaceErr != nil {
-		return f.replaceErr
+	err := f.replaceErr
+	if len(f.replaceErrs) > 0 {
+		err = f.replaceErrs[0]
+		f.replaceErrs = f.replaceErrs[1:]
 	}
-	f.routes[target.RouteTableID+":"+target.DestinationCIDR] = target
+	if err == nil || f.replaceMutatesOnError {
+		f.routes[target.RouteTableID+":"+target.DestinationCIDR] = target
+	}
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
