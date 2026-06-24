@@ -44,22 +44,29 @@ Assumptions: `$0.045/GB` NAT Gateway processing, `$0.045/hour` for one NAT Gatew
 
 ## Quick Start
 
-Use the Terraform Registry provider:
+Use the BetterNAT Terraform provider:
 
 ```hcl
 terraform {
   required_providers {
     betternat = {
       source  = "nowakeai/betternat"
-      version = "= 0.1.0-alpha.2"
+      version = "= 0.1.0-alpha.3"
     }
   }
 }
 ```
 
 Provider versions and BetterNAT runtime artifact versions are separate. The
-current Terraform Registry provider is `0.1.0-alpha.2`; the current runtime release assets
+current alpha provider is `0.1.0-alpha.3`; the current runtime release assets
 referenced by the quick start are `v0.1.0-alpha.2`.
+
+Until `0.1.0-alpha.3` is available through the Terraform Registry, install it
+from the provider GitHub release as a Terraform filesystem mirror:
+
+```sh
+source scripts/setup-provider-github-mirror.sh
+```
 
 If your Terraform currently uses AWS NAT Gateway:
 

@@ -196,16 +196,25 @@ test -n "$BETTERNAT_CLI_BINARY_SHA256"
 
 For unreleased local builds, use the maintainer AWS supplemental runbook instead of this user quick start. That runbook may use temporary private artifact hosting for test-only binaries.
 
-## Use Registry Provider
+## Install Provider
 
-The public Quick Start uses the Terraform Registry provider:
+The public Quick Start uses provider version `0.1.0-alpha.3`:
 
 ```hcl
 source  = "nowakeai/betternat"
-version = "= 0.1.0-alpha.2"
+version = "= 0.1.0-alpha.3"
 ```
 
-Do not set `TF_CLI_CONFIG_FILE` for this guide. Local provider override files are for provider development only.
+Until `0.1.0-alpha.3` is available through the Terraform Registry, install it
+from the provider GitHub release as a Terraform filesystem mirror:
+
+```sh
+source scripts/setup-provider-github-mirror.sh
+```
+
+Keep the `TF_CLI_CONFIG_FILE` environment variable exported in the same shell
+for `terraform init`, `terraform plan`, `terraform apply`, and
+`terraform destroy`.
 
 ## Deploy Disposable VPC
 

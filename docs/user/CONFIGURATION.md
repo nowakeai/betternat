@@ -13,13 +13,20 @@ terraform {
   required_providers {
     betternat = {
       source  = "nowakeai/betternat"
-      version = "= 0.1.0-alpha.2"
+      version = "= 0.1.0-alpha.3"
     }
   }
 }
 ```
 
 The gateway runtime version is separate from the provider version. In the first alpha, runtime version is controlled by the `agent_binary_url`, `agent_binary_sha256`, `cli_binary_url`, and `cli_binary_sha256` bootstrap fields. A future `betternat_version` field should let the provider derive those release artifacts automatically.
+
+Until provider `0.1.0-alpha.3` is available through the Terraform Registry,
+install it from the provider GitHub release as a Terraform filesystem mirror:
+
+```sh
+source scripts/setup-provider-github-mirror.sh
+```
 
 For OpenTofu, use the explicit Terraform Registry hostname until the OpenTofu-native registry entry is approved:
 
@@ -28,7 +35,7 @@ terraform {
   required_providers {
     betternat = {
       source  = "registry.terraform.io/nowakeai/betternat"
-      version = "= 0.1.0-alpha.2"
+      version = "= 0.1.0-alpha.3"
     }
   }
 }

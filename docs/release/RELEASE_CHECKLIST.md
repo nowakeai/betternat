@@ -615,6 +615,10 @@ Release artifact smoke validation recorded on 2026-06-24:
   scripts/release-deploy-smoke.sh`: disposable AWS apply/destroy passed.
   Terraform Registry `0.1.0-alpha.3` was still unavailable, so this deploy
   smoke used the GitHub provider release as a Terraform filesystem mirror.
+- `source scripts/setup-provider-github-mirror.sh` followed by `terraform init
+  -upgrade` and `terraform validate`: passed for `examples/terraform`,
+  `examples/terraform-aws-supplemental`, and `examples/terraform-localstack`
+  with provider `0.1.0-alpha.3`.
 - [x] Create `github.com/nowakeai/terraform-provider-betternat` for Registry-compatible provider publishing.
 - [x] Expose a thin main-repo public provider factory for the provider repo.
 - [x] Add provider-specific alpha release workflow for Linux provider zip artifacts.
@@ -742,6 +746,9 @@ Reliability validation update on 2026-06-23:
     Rechecked again later on 2026-06-24 with Terraform `v1.14.7`:
     `0.1.0-alpha.3` was still unavailable; `0.1.0-alpha.2` still installed and
     validated from Terraform Registry.
+  - [x] Public examples use provider `0.1.0-alpha.3` plus
+    `scripts/setup-provider-github-mirror.sh` until Terraform Registry
+    propagation catches up.
   - [x] Clean clone `examples/terraform-aws-supplemental init` and `validate` passed with `HTTP_PROXY`/`HTTPS_PROXY` set to `http://127.0.0.1:10808`.
 - [x] Add provider installation guide.
 - [x] Add observability guide.
@@ -842,6 +849,9 @@ As of 2026-06-21:
 - Terraform provider exposes `ha_profile = "default"` plus advanced lease timing overrides.
 - ASG repair and replacement standby behavior have passed.
 - GitHub Release assets and checksums have been published and verified for the first alpha path.
+- Public examples use provider `0.1.0-alpha.3` from the provider GitHub release
+  via a Terraform filesystem mirror until Terraform Registry propagation catches
+  up.
 - User-facing install docs use GitHub Release asset URLs; internal AWS test runbooks may still use temporary S3 URLs for unreleased binaries.
 - The agent handles SIGTERM/SIGINT and releases the locally owned HA lease on graceful shutdown using the fenced lease generation.
 - The provider creates ASG termination lifecycle hooks, and the agent watches IMDS Spot/ASG termination notices to release lease and complete the lifecycle action.

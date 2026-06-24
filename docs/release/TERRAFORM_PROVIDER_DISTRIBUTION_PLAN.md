@@ -357,6 +357,12 @@ a Terraform filesystem mirror:
   scan found no matching VPC, non-terminated instance, ASG, DynamoDB table, EIP,
   IAM role, IAM instance profile, or launch template.
 
+The public examples and Quick Start now use provider `0.1.0-alpha.3` plus
+`scripts/setup-provider-github-mirror.sh` until Registry propagation catches up.
+That path was validated with `terraform init -upgrade` and `terraform validate`
+for `examples/terraform`, `examples/terraform-aws-supplemental`, and
+`examples/terraform-localstack`.
+
 Important OpenTofu source-address note:
 
 - Terraform resolves `source = "nowakeai/betternat"` as `registry.terraform.io/nowakeai/betternat`.
