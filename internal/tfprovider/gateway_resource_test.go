@@ -543,6 +543,57 @@ func TestDeriveGatewayStateBetterNATVersionDerivesAlpha6Artifacts(t *testing.T) 
 	}
 }
 
+func TestDeriveGatewayStateBetterNATVersionDerivesGAArtifacts(t *testing.T) {
+	tests := []struct {
+		name         string
+		instanceType string
+		arch         string
+		agentSHA     string
+		cliSHA       string
+	}{
+		{
+			name:         "arm64",
+			instanceType: "t4g.small",
+			arch:         "arm64",
+			agentSHA:     "68ef98b9b55fb7e1eb6874331c91d5755e77d5a27ad8a6af6c0eb742bc0c0305",
+			cliSHA:       "e2608e894adf30097c49ba14e0babf8a365491d5f56f3c6ea1b82b857b39ce1d",
+		},
+		{
+			name:         "amd64",
+			instanceType: "t3.small",
+			arch:         "amd64",
+			agentSHA:     "1443bb7c069d5674238d95ebae6656e0931df296d2067f38caa2b6fbca8970c5",
+			cliSHA:       "9118b3e620a5eed0cb5e551faf5293e2b6ad2f9856cdf9d834bcdb675b959946",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plan := validGatewayPlan()
+			plan.BetterNATVersion = types.StringValue("v0.1.0")
+			plan.InstanceType = types.StringValue(tt.instanceType)
+			derived, err := DeriveGatewayState(context.Background(), &plan)
+			if err != nil {
+				t.Fatalf("derive gateway state: %v", err)
+			}
+			wantAgentURL := "https://github.com/nowakeai/betternat/releases/download/v0.1.0/betternat-agent_v0.1.0_linux_" + tt.arch
+			if got := derived.AgentBinaryURL.ValueString(); got != wantAgentURL {
+				t.Fatalf("unexpected agent url: %s", got)
+			}
+			if got := derived.AgentBinarySHA256.ValueString(); got != tt.agentSHA {
+				t.Fatalf("unexpected agent checksum: %s", got)
+			}
+			wantCLIURL := "https://github.com/nowakeai/betternat/releases/download/v0.1.0/betternat_v0.1.0_linux_" + tt.arch
+			if got := derived.CLIBinaryURL.ValueString(); got != wantCLIURL {
+				t.Fatalf("unexpected cli url: %s", got)
+			}
+			if got := derived.CLIBinarySHA256.ValueString(); got != tt.cliSHA {
+				t.Fatalf("unexpected cli checksum: %s", got)
+			}
+		})
+	}
+}
+
 func TestDeriveGatewayStateBetterNATVersionAllowsExplicitArtifactOverrides(t *testing.T) {
 	plan := validGatewayPlan()
 	plan.BetterNATVersion = types.StringValue("v0.1.0-alpha.2")

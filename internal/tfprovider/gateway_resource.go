@@ -820,6 +820,16 @@ var supportedRuntimeArtifacts = map[string]map[string]runtimeArtifactSet{
 			CLISHA256:   "5d5c5cf6a216cab0f12eef3c3c8163c3673f794a427b30fcfb024acd2a87fe66",
 		},
 	},
+	"v0.1.0": {
+		"arm64": {
+			AgentSHA256: "68ef98b9b55fb7e1eb6874331c91d5755e77d5a27ad8a6af6c0eb742bc0c0305",
+			CLISHA256:   "e2608e894adf30097c49ba14e0babf8a365491d5f56f3c6ea1b82b857b39ce1d",
+		},
+		"amd64": {
+			AgentSHA256: "1443bb7c069d5674238d95ebae6656e0931df296d2067f38caa2b6fbca8970c5",
+			CLISHA256:   "9118b3e620a5eed0cb5e551faf5293e2b6ad2f9856cdf9d834bcdb675b959946",
+		},
+	},
 }
 
 func resolveBootstrapArtifacts(plan *GatewayResourceModel, version string, instanceType string) (bootstrapArtifacts, error) {
