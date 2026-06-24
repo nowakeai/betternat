@@ -53,10 +53,10 @@ the provider is registered in the OpenTofu Registry.
 | `ami_id` | Explicit Linux AMI ID. Required for the first alpha bootstrap path. |
 | `ami_channel` | Future AMI channel selector. Do not rely on it for `v0.1.0-alpha.2`. |
 | `betternat_version` | BetterNAT runtime release tag. The provider uses it with `instance_type` to derive agent/CLI bootstrap URLs and checksums. |
-| `agent_binary_url` | Sensitive URL override for `betternat-agent`. Usually leave empty when `betternat_version` is set. |
-| `agent_binary_sha256` | SHA256 checksum override for the agent artifact. Usually leave empty when `betternat_version` is set. |
-| `cli_binary_url` | Sensitive URL override for the `betternat` CLI. Usually leave empty when `betternat_version` is set. |
-| `cli_binary_sha256` | SHA256 checksum override for the CLI artifact. Usually leave empty when `betternat_version` is set. |
+| `agent_binary_url` | Sensitive URL override for `betternat-agent`. Usually leave unset when `betternat_version` is set. |
+| `agent_binary_sha256` | SHA256 checksum override for the agent artifact. Usually leave unset when `betternat_version` is set. |
+| `cli_binary_url` | Sensitive URL override for the `betternat` CLI. Usually leave unset when `betternat_version` is set. |
+| `cli_binary_sha256` | SHA256 checksum override for the CLI artifact. Usually leave unset when `betternat_version` is set. |
 | `loxicmd_binary_url` | Optional URL for a host `loxicmd` binary. If empty, bootstrap installs a Docker wrapper. |
 | `loxicmd_binary_sha256` | Optional checksum for `loxicmd_binary_url`. |
 

@@ -79,6 +79,9 @@ in user-facing docs:
 - no published BetterNAT AMI,
 - bootstrap depends on package repositories, Docker/image pull, and GitHub
   release artifact reachability,
+- non-AMI stable-EIP HA is not production-preview ready yet: final alpha6 AWS
+  validation showed that standby and post-handover old-active gateway nodes can
+  lose bootstrap/control-plane egress when they do not own a public IP,
 - Terraform Registry now resolves provider `0.1.0-alpha.6`; public examples use
   Registry install by default,
 - Spot interruption handling follows AWS IMDS documentation, but forced Spot
@@ -92,7 +95,9 @@ Post-alpha / production work:
 
 - disposable AWS validation of the alpha6 bootstrap path using Terraform
   Registry install and `betternat_version` artifact derivation,
-- bootstrap-first production-preview UX polish discovered during that validation,
+- fix and revalidate non-AMI stable-EIP HA gateway self-egress before calling the
+  bootstrap path production-preview ready,
+- bootstrap-first production-preview UX polish discovered during validation,
 - optional arm64 and amd64 AMIs only if ongoing snapshot-retention cost is
   accepted,
 - optional `ami_channel` resolver only if public AMIs become supported,

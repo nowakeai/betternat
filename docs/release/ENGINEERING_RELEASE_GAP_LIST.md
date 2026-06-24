@@ -162,11 +162,26 @@ Current:
 - `docs/release/ALPHA_BOOTSTRAP_RELEASE_PATH.md` defines the alpha bootstrap release path.
 - Terraform supplemental fixture accepts agent and CLI artifact URLs with SHA256 checksums, plus optional `loxicmd_binary_sha256`.
 - The first public alpha intentionally does not build or publish a BetterNAT AMI.
+- Final alpha6 AWS validation found a production-preview blocker for non-AMI
+  stable-EIP HA: a gateway node without public IP cannot complete cloud-init
+  dependency download or keep SSM/control-plane egress while its subnet default
+  route points to an Internet Gateway. After handover, the old active can hit
+  the same issue when it loses the shared EIP.
 
 Completed for alpha:
 
 - Release notes and user-facing docs explicitly describe the bootstrap path and
   state that no BetterNAT AMI is published in the current alpha.
+
+Needed before production-preview:
+
+- Fix gateway-node self-egress for non-AMI stable-EIP HA without requiring a
+  paid NAT Gateway.
+- Re-run disposable AWS validation without manually attaching a temporary public
+  IP to standby nodes.
+- Confirm that both active and standby nodes can bootstrap, stay registered,
+  use SSM/control-plane APIs, and survive handover while only the intended
+  stable EIP is user-visible.
 
 Acceptance:
 
@@ -276,6 +291,20 @@ Completed in disposable AWS:
   - `doctor --live` returned nonzero and `critical`
   - IAM and ASG checks reported the missing/denied permission
   - deleting the temporary deny restored `doctor --live` to exit `0`
+- [x] Final alpha6 Registry/provider validation in disposable AWS:
+  - run id `bnat-alpha6-final-20260624105333`
+  - provider `0.1.0-alpha.6` installed from Terraform Registry
+  - runtime `v0.1.0-alpha.2` derived by `betternat_version`
+  - Terraform apply created `16` resources and private client egress worked
+  - active-to-standby handover completed after a manual temporary standby EIP
+    workaround, with `0` failed client curl samples over `90` seconds
+  - Terraform destroy completed with `16` resources destroyed
+  - residual scan found only terminated EC2 records
+- [ ] Release-blocking follow-up from final alpha6 AWS validation:
+  - non-AMI stable-EIP HA bootstrap currently needs a corrected gateway
+    self-egress/control-plane connectivity design. The validation only completed
+    after manually attaching a temporary public IP to the standby node, and one
+    client sample observed that temporary IP during handover.
 
 ### 1. Full Go Test Suite
 
@@ -373,6 +402,9 @@ Acceptance:
 Current status:
 
 - P0 bootstrap acceptance passed in `bnat-p0-20260621044411`.
+- Final alpha6 validation found a new P0 production-preview blocker in the
+  non-AMI stable-EIP HA topology: standby and post-handover old-active gateway
+  nodes without public IP can lose bootstrap/control-plane egress.
 - Full HA timing matrix remains covered by earlier supplemental runs and should be repeated after AMI packaging or major HA changes.
 - The 2026-06-24 route-only/non-stable handover comparison is recorded in
   `docs/research/040-alpha-low-cost-soak-results.md`: `240` client samples, `0`

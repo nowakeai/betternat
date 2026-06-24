@@ -99,6 +99,7 @@ Read these first when revisiting product or architecture direction:
 - [research/038-agent-registry-control-plane-plan.md](research/038-agent-registry-control-plane-plan.md) — Coordination backend, agent registry, service discovery, and permission-reduction plan.
 - [research/039-agent-daemon-api-and-handover-plan.md](research/039-agent-daemon-api-and-handover-plan.md) — Agent daemon API, fast CLI path, cached peer state, and proactive handover plan.
 - [research/040-alpha-low-cost-soak-results.md](research/040-alpha-low-cost-soak-results.md) — Alpha low-cost soak smoke with client probes, active systemd-stop handover, and live LoxiLB restart recovery.
+- [research/041-alpha6-final-aws-validation.md](research/041-alpha6-final-aws-validation.md) — Final alpha6 Registry/provider AWS validation and non-AMI stable-EIP HA bootstrap blocker.
 
 ## Supporting Research
 

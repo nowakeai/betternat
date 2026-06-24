@@ -195,6 +195,13 @@ For `v0.1.0-alpha.2`, this is a conservative baseline, not a high-volume perform
 - LoxiLB image is still pulled at boot unless a future AMI preloads it. The alpha default image is pinned by digest to avoid `latest` drift.
 - This path is for alpha and test environments, not the final production recommendation.
 - Kernel/NIC tuning is intentionally minimal in the first alpha. Advanced tuning should be added only with repeatable benchmark evidence.
+- In stable-EIP HA mode, a non-active gateway node may have no public IP. If the
+  gateway subnet default route points directly to an Internet Gateway, that node
+  cannot complete non-AMI bootstrap downloads or use SSM/control-plane APIs.
+  The same issue can affect the old active node after handover when it loses the
+  shared EIP. Do not treat the non-AMI stable-EIP HA path as production-preview
+  ready until gateway-node self-egress is fixed and revalidated without manually
+  attaching temporary public IPs.
 
 ## Exit Criteria
 
@@ -220,3 +227,11 @@ Evidence is recorded in:
 - `docs/release/RELEASE_CHECKLIST.md`
 - `docs/research/035-p0-open-source-release-acceptance-results.md`
 - `docs/research/037-v0.1.0-alpha-aws-release-candidate-results.md`
+
+Final alpha6 Registry validation on 2026-06-24 created and destroyed a
+disposable AWS environment with provider `0.1.0-alpha.6` and runtime
+`v0.1.0-alpha.2`. Apply, active gateway bootstrap, private client egress,
+handover, and destroy passed, but the standby gateway required a manually
+attached temporary public IP to finish non-AMI bootstrap. That validation is
+evidence for the provider/runtime artifact derivation path, not evidence that
+non-AMI stable-EIP HA is production-preview ready.

@@ -62,35 +62,35 @@ variable "betternat_version" {
 
 variable "agent_binary_url" {
   type      = string
-  default   = ""
+  default   = null
   sensitive = true
 }
 
 variable "agent_binary_sha256" {
   type    = string
-  default = ""
+  default = null
 }
 
 variable "cli_binary_url" {
   type      = string
-  default   = ""
+  default   = null
   sensitive = true
 }
 
 variable "cli_binary_sha256" {
   type    = string
-  default = ""
+  default = null
 }
 
 variable "loxicmd_binary_url" {
   type      = string
-  default   = ""
+  default   = null
   sensitive = true
 }
 
 variable "loxicmd_binary_sha256" {
   type    = string
-  default = ""
+  default = null
 }
 
 provider "aws" {
