@@ -375,6 +375,8 @@ Users must also understand:
 - No active connection preservation.
 - No central server.
 - No automatic multi-account inventory.
-- No built-in support bundle command yet.
-- `doctor` live cloud checks are not fully wired yet.
+- Use `betternat support bundle` to collect local redacted diagnostics when
+  opening an issue or sharing evidence.
+- `doctor --live` is node-local; use `betternat status`, Prometheus, and AWS
+  state checks for fleet-wide review.
 - Large multi-TB benchmark is not part of first-release validation.

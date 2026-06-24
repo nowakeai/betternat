@@ -404,37 +404,43 @@ Current status:
 
 ### 1. Support Bundle
 
-Add:
+Current:
 
 ```sh
-betternat support bundle --config /etc/betternat/agent.json --out /tmp/betternat-support.tgz
+betternat support bundle --config /etc/betternat/agent.json --output /tmp/betternat-support.tgz
 ```
 
 Bundle:
 
 - redacted config,
 - CLI status output,
-- doctor output,
 - datapath ready output,
 - metrics snapshot,
 - recent agent logs,
-- optional AWS state snapshots if credentials are available.
+- daemon status and handover summaries,
+- LoxiLB state,
+- local network snapshots.
 
 Acceptance:
 
-- redacts obvious secrets,
-- does not include Terraform state by default,
-- documented in operations guide.
+- [x] redacts obvious secrets,
+- [x] does not include Terraform state by default,
+- [x] documented in operations guide,
+- [x] unit coverage verifies peer API token redaction.
 
 ### 2. HA Status Command
 
-Add:
+Current:
 
 ```sh
-betternat ha status --config /etc/betternat/agent.json
+betternat status
+betternat status --watch --interval 2s
 ```
 
-Should aggregate:
+The dedicated `ha status` command is no longer needed for alpha because the
+daemon-backed `status` command now covers the intended HA view.
+
+Implemented status view:
 
 - local instance id,
 - lease owner,
@@ -442,9 +448,19 @@ Should aggregate:
 - route target match,
 - EIP match,
 - datapath ready,
-- metrics freshness.
+- metrics freshness,
+- public IP,
+- version per node,
+- lightweight RX/TX bandwidth.
 
-Can overlap with `doctor --live`.
+Acceptance:
+
+- [x] default command reads `/etc/betternat/agent.json`,
+- [x] daemon-backed by default with `--direct` debug fallback,
+- [x] supports `--watch`,
+- [x] supports JSON output for scripts,
+- [x] table output is borderless and pipe-friendly,
+- [x] documented in operations guide.
 
 ### 3. Agent Registry Coordination Backend
 
@@ -595,8 +611,9 @@ Remaining:
 - Spot interruption follows the AWS IMDS `spot/instance-action` path and is
   not required as a manually forced release gate; optional validation can use
   AWS-supported Spot interruption initiation or FIS when available.
-- clean up or expire stale automatic handover operation records that remain in
-  intermediate states after the paired lifecycle-triggered operation completes.
+- stale automatic handover operation records are filtered and best-effort
+  deleted; `handover history --include-stale` remains available for raw support
+  evidence.
 
 Reference:
 
