@@ -922,7 +922,7 @@ Defer until benchmark-backed:
    propagation catches up.
 3. Decide whether to publish another runtime tag for post-RC source changes or
    keep `v0.1.0-alpha.2` as the current runtime artifact set.
-4. Treat AMI publication, AMI channel resolution, and stronger runtime artifact
-   signing as the remaining production-preview blockers. Keep benchmark harness
-   work and broader retry/backoff hardening as follow-up production evidence
+4. Treat AMI publication and AMI channel resolution as the remaining
+   production-preview blockers. Keep runtime artifact signing, benchmark harness
+   work, and broader retry/backoff hardening as follow-up production hardening
    rather than release blockers.

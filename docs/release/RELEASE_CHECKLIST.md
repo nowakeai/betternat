@@ -66,11 +66,11 @@ Production release requires:
 - repeatable AWS acceptance tests,
 - documented limitations and SLO language.
 
-For the first production-preview release, the remaining hard blockers are the
-AMI delivery path and stronger runtime artifact signing. Longer soak,
-benchmarking, and broader retry/backoff hardening remain valuable, but are not
-release blockers once the existing AWS failover evidence and limitations are
-kept visible.
+For the first production-preview release, the remaining hard blocker is the AMI
+delivery path: published AMIs plus provider channel resolution. Runtime artifact
+signing, longer soak, benchmarking, and broader retry/backoff hardening remain
+valuable hardening items, but are not release blockers once checksums, existing
+AWS failover evidence, and limitations are kept visible.
 
 ## v0.1.0-alpha Checklist
 
@@ -562,7 +562,6 @@ Do not mark BetterNAT production-ready until alpha checklist is complete plus:
 - [ ] AMI pipeline is repeatable and documented.
 - [ ] AMI channel resolver is implemented.
 - [x] CloudFormation decision is made and documented.
-- [ ] runtime release artifacts are signed beyond checksums.
 - [x] explicit-failure fast path is evaluated or implemented:
   - [x] graceful lease release on systemd stop,
   - [x] ASG lifecycle hook or interruption notice handling implemented locally,
@@ -575,6 +574,7 @@ Do not mark BetterNAT production-ready until alpha checklist is complete plus:
 
 Production-preview follow-up evidence and hardening, not release blockers:
 
+- [ ] runtime release artifacts are signed beyond checksums.
 - [ ] complete user documentation has passed a clean-account walkthrough.
 - [ ] stable-profile AWS test pass is refreshed after AMI publication.
 - [ ] longer soak test is refreshed after AMI publication.
@@ -925,5 +925,5 @@ As of 2026-06-24:
 - User-facing install docs use GitHub Release asset URLs; internal AWS test runbooks may still use temporary S3 URLs for unreleased binaries.
 - The agent handles SIGTERM/SIGINT and releases the locally owned HA lease on graceful shutdown using the fenced lease generation.
 - The provider creates ASG termination lifecycle hooks, and the agent watches IMDS Spot/ASG termination notices to release lease and complete the lifecycle action.
-- The main blockers for the first production-preview release are AMI publication
-  with channel resolution and runtime artifact signing beyond checksums.
+- The main blocker for the first production-preview release is AMI publication
+  with provider channel resolution.
