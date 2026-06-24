@@ -219,7 +219,7 @@ Completed locally:
   - `examples/terraform`
   - `examples/terraform-aws-supplemental`
   - `examples/terraform-localstack`
-- [x] Terraform examples validate with provider `0.1.0-alpha.4` installed from
+- [x] Terraform examples validate with provider `0.1.0-alpha.5` installed from
   the provider GitHub release as a filesystem mirror:
   - `source scripts/setup-provider-github-mirror.sh`
   - `terraform -chdir=examples/terraform init -upgrade -input=false`
@@ -306,7 +306,7 @@ terraform -chdir=examples/terraform-localstack validate
 
 Notes:
 
-- Provider `0.1.0-alpha.4` is currently installed from the provider GitHub
+- Provider `0.1.0-alpha.5` is currently installed from the provider GitHub
   release as a Terraform filesystem mirror because Terraform Registry
   propagation is not complete.
 - The mirror path is a temporary alpha workaround; once Registry

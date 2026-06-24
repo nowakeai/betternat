@@ -53,7 +53,7 @@ terraform {
   required_providers {
     betternat = {
       source  = "nowakeai/betternat"
-      version = "= 0.1.0-alpha.4"
+      version = "= 0.1.0-alpha.5"
     }
   }
 }
@@ -66,11 +66,9 @@ This controls:
 - state migration behavior,
 - Terraform/OpenTofu plugin protocol implementation.
 
-For the current alpha, provider `0.1.0-alpha.4` is published as a GitHub
+For the current alpha, provider `0.1.0-alpha.5` is published as a GitHub
 provider release and used by public examples through a Terraform filesystem
-mirror. Terraform Registry `0.1.0-alpha.2` is available, but
-newer provider releases had not propagated to the Registry at the last
-2026-06-24 check.
+mirror until Registry propagation is confirmed for that exact version.
 
 ### BetterNAT Runtime Version
 
@@ -378,9 +376,16 @@ provider Registry documentation payload. GitHub release artifact checksum
 verification passed for the Linux amd64 zip. Immediately after publication, the
 Terraform Registry public API still reported latest `0.1.0-alpha.2` with an
 empty `docs` list, so Registry documentation remained unavailable until
-Registry ingestion or manual resync catches up.
+Registry ingestion or manual resync caught up. Later on 2026-06-24, Terraform
+Registry reported latest `0.1.0-alpha.4` with `overview` and `gateway` docs.
 
-The public examples and Quick Start now use provider `0.1.0-alpha.4` plus
+Provider `0.1.0-alpha.5` was published to GitHub on 2026-06-24 to expand the
+Registry `betternat_gateway` resource documentation with lifecycle, HA,
+bootstrap, route ownership, EIP mode, rollback, and per-field guidance. GitHub
+release artifact checksum verification passed for the Linux amd64 zip. At
+publication time, Terraform Registry had not yet ingested `0.1.0-alpha.5`.
+
+The public examples and Quick Start now use provider `0.1.0-alpha.5` plus
 `scripts/setup-provider-github-mirror.sh` until Registry propagation catches up.
 That path was validated with `terraform init -upgrade` and `terraform validate`
 for `examples/terraform`, `examples/terraform-aws-supplemental`, and

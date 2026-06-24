@@ -24,7 +24,7 @@ This creates a temporary Terraform CLI provider mirror for the BetterNAT
 Terraform provider GitHub release and exports TF_CLI_CONFIG_FILE.
 
 Environment:
-  BETTERNAT_PROVIDER_VERSION       Provider version. Default: 0.1.0-alpha.4.
+  BETTERNAT_PROVIDER_VERSION       Provider version. Default: 0.1.0-alpha.5.
   BETTERNAT_PROVIDER_RELEASE_BASE  Override provider release base URL.
   BETTERNAT_PROVIDER_MIRROR_DIR    Mirror work dir. Default: tmp/provider-mirror/<version>-<os>-<arch>-<pid>.
 EOF
@@ -54,7 +54,7 @@ require_cmd curl
 require_cmd sha256sum
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-provider_version="${BETTERNAT_PROVIDER_VERSION:-0.1.0-alpha.4}"
+provider_version="${BETTERNAT_PROVIDER_VERSION:-0.1.0-alpha.5}"
 host_os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 host_arch="$(uname -m)"
 

@@ -311,7 +311,7 @@ GOCACHE=$PWD/tmp/go-build-cache go test ./...
 git diff --check
 ```
 
-- [x] Terraform examples validate with provider `0.1.0-alpha.4` installed from
+- [x] Terraform examples validate with provider `0.1.0-alpha.5` installed from
   the provider GitHub release as a filesystem mirror.
 - [x] LocalStack expectations are documented, including current ASG limitation.
 
@@ -788,6 +788,7 @@ Reliability validation update on 2026-06-23:
   - [x] Clean clone can install `nowakeai/betternat` `0.1.0-alpha.2` from Terraform Registry and validate `examples/terraform`.
   - [x] Provider `0.1.0-alpha.3` GitHub release artifact checksum verification passed for Linux amd64, Linux arm64, and manifest.
   - [x] Provider `0.1.0-alpha.4` GitHub release artifact checksum verification passed for Linux amd64.
+  - [x] Provider `0.1.0-alpha.5` GitHub release artifact checksum verification passed for Linux amd64.
   - [ ] Current provider release Terraform Registry install validation after Registry propagation.
     Rechecked on 2026-06-24 with Terraform `v1.14.7`: `0.1.0-alpha.3` was
     still unavailable in the Terraform Registry; `0.1.0-alpha.2` Registry
@@ -801,7 +802,12 @@ Reliability validation update on 2026-06-23:
     releases matching `0.1.0-alpha.3`.
     Rechecked after provider `0.1.0-alpha.4` publication: the Terraform
     Registry public API still reported latest `0.1.0-alpha.2` with no docs.
-  - [x] Public examples use provider `0.1.0-alpha.4` plus
+    Rechecked later on 2026-06-24: Terraform Registry reported latest
+    `0.1.0-alpha.4` with `overview` and `gateway` docs.
+    Rechecked immediately after provider `0.1.0-alpha.5` publication: Terraform
+    Registry still reported latest `0.1.0-alpha.4`; alpha5 propagation was not
+    complete yet.
+  - [x] Public examples use provider `0.1.0-alpha.5` plus
     `scripts/setup-provider-github-mirror.sh` until Terraform Registry
     propagation catches up.
   - [x] Clean clone `examples/terraform-aws-supplemental init` and `validate` passed with `HTTP_PROXY`/`HTTPS_PROXY` set to `http://127.0.0.1:10808`.
@@ -904,7 +910,7 @@ As of 2026-06-24:
 - Terraform provider exposes `ha_profile = "default"` plus advanced lease timing overrides.
 - ASG repair and replacement standby behavior have passed.
 - GitHub Release assets and checksums have been published and verified for the first alpha path.
-- Public examples use provider `0.1.0-alpha.4` from the provider GitHub release
+- Public examples use provider `0.1.0-alpha.5` from the provider GitHub release
   via a Terraform filesystem mirror until Terraform Registry propagation catches
   up.
 - User-facing install docs use GitHub Release asset URLs; internal AWS test runbooks may still use temporary S3 URLs for unreleased binaries.

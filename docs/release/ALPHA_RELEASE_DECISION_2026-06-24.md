@@ -10,7 +10,7 @@ Release posture:
 
 - release level: `alpha`
 - runtime version: `v0.1.0-alpha.2`
-- Terraform provider version for public examples: `0.1.0-alpha.4`
+- Terraform provider version for public examples: `0.1.0-alpha.5`
 - verification base commit: `19a23b7`
 - AWS scope: single-AZ HA group in AWS
 - install path: Terraform plus cloud-init bootstrap on an explicit Linux AMI
@@ -26,7 +26,7 @@ Current evidence satisfies that alpha promise:
 
 - release artifacts and checksums exist for `v0.1.0-alpha.2`,
 - public examples use GitHub Release URLs, not maintainer-only S3 URLs,
-- provider `0.1.0-alpha.4` is usable through the provider GitHub release as a
+- provider `0.1.0-alpha.5` is usable through the provider GitHub release as a
   Terraform filesystem mirror,
 - disposable AWS apply/destroy smoke passed with no residual resources,
 - stable and non-stable egress modes have AWS validation evidence,

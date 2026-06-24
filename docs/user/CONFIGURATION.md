@@ -13,7 +13,7 @@ terraform {
   required_providers {
     betternat = {
       source  = "nowakeai/betternat"
-      version = "= 0.1.0-alpha.4"
+      version = "= 0.1.0-alpha.5"
     }
   }
 }
@@ -21,7 +21,7 @@ terraform {
 
 The gateway runtime version is separate from the provider version. In the first alpha, runtime version is controlled by the `agent_binary_url`, `agent_binary_sha256`, `cli_binary_url`, and `cli_binary_sha256` bootstrap fields. A future `betternat_version` field should let the provider derive those release artifacts automatically.
 
-Until provider `0.1.0-alpha.4` is available through the Terraform Registry,
+Until provider `0.1.0-alpha.5` is available through the Terraform Registry,
 install it from the provider GitHub release as a Terraform filesystem mirror:
 
 ```sh
