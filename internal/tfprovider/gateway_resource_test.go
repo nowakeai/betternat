@@ -3,6 +3,7 @@ package tfprovider
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -46,6 +47,12 @@ func TestDeriveGatewayState(t *testing.T) {
 	}
 	if derived.AMIChannel.ValueString() != "stable" {
 		t.Fatalf("unexpected ami channel: %s", derived.AMIChannel.ValueString())
+	}
+	if derived.BootstrapMode.ValueString() != "cloud_init" {
+		t.Fatalf("unexpected bootstrap mode: %s", derived.BootstrapMode.ValueString())
+	}
+	if !derived.AssociatePublicIPAddress.ValueBool() {
+		t.Fatal("associate_public_ip_address should default true for cloud_init")
 	}
 	if derived.InstanceType.ValueString() != "t3.small" {
 		t.Fatalf("unexpected instance type: %s", derived.InstanceType.ValueString())
@@ -305,6 +312,9 @@ func TestDeriveGatewayStatePrebakedAMIStableEgressDisablesPublicIP(t *testing.T)
 	if derived.BootstrapMode.ValueString() != "prebaked_ami" {
 		t.Fatalf("unexpected bootstrap mode: %s", derived.BootstrapMode.ValueString())
 	}
+	if derived.AssociatePublicIPAddress.ValueBool() {
+		t.Fatal("prebaked AMI with stable EIP should derive associate_public_ip_address=false")
+	}
 	if !strings.Contains(derived.InstallPlanJSON.ValueString(), `"associate_public_ip_address":false`) {
 		t.Fatalf("prebaked AMI with stable EIP should disable per-node public IPs: %s", derived.InstallPlanJSON.ValueString())
 	}
@@ -329,6 +339,48 @@ func TestDeriveGatewayStatePrebakedAMINonStableEgressKeepsPublicIP(t *testing.T)
 	}
 	if !strings.Contains(derived.InstallPlanJSON.ValueString(), `"associate_public_ip_address":true`) {
 		t.Fatalf("non-stable egress needs per-node public IPs: %s", derived.InstallPlanJSON.ValueString())
+	}
+}
+
+func TestDeriveGatewayStateAssociatePublicIPOverride(t *testing.T) {
+	tests := []struct {
+		name       string
+		mutate     func(*GatewayResourceModel)
+		wantPublic bool
+	}{
+		{
+			name: "disable cloud-init public ip",
+			mutate: func(plan *GatewayResourceModel) {
+				plan.AssociatePublicIPAddress = types.BoolValue(false)
+			},
+			wantPublic: false,
+		},
+		{
+			name: "enable prebaked stable public ip",
+			mutate: func(plan *GatewayResourceModel) {
+				plan.BootstrapMode = types.StringValue("prebaked_ami")
+				plan.StableEgressIP = types.BoolValue(true)
+				plan.AssociatePublicIPAddress = types.BoolValue(true)
+			},
+			wantPublic: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plan := validGatewayPlan()
+			tt.mutate(&plan)
+			derived, err := DeriveGatewayState(context.Background(), &plan)
+			if err != nil {
+				t.Fatalf("derive gateway state: %v", err)
+			}
+			if derived.AssociatePublicIPAddress.ValueBool() != tt.wantPublic {
+				t.Fatalf("unexpected associate_public_ip_address: %v", derived.AssociatePublicIPAddress.ValueBool())
+			}
+			wantJSON := fmt.Sprintf(`"associate_public_ip_address":%t`, tt.wantPublic)
+			if !strings.Contains(derived.InstallPlanJSON.ValueString(), wantJSON) {
+				t.Fatalf("install plan should contain %s: %s", wantJSON, derived.InstallPlanJSON.ValueString())
+			}
+		})
 	}
 }
 

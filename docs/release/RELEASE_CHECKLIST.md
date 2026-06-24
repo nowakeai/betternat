@@ -260,6 +260,8 @@ Optional AMI acceleration path:
 - [x] Provider supports `bootstrap_mode="prebaked_ami"` for private/future
   BetterNAT AMIs. In stable EIP mode this disables per-node auto-assigned public
   IPv4; the default `cloud_init` path keeps per-node public IPv4 for bootstrap.
+- [x] Provider exposes `associate_public_ip_address` as an advanced manual
+  override for the derived launch-template public IPv4 behavior.
 - [ ] AMI names include version, date, arch, and base OS if public AMIs are
   ever published.
 - [ ] arm64 and x86_64 AMIs are published only if the project accepts ongoing

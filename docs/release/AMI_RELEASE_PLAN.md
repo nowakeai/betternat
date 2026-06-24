@@ -49,6 +49,9 @@ In `prebaked_ami` mode, stable EIP deployments can avoid per-node public IPv4
 addresses because the AMI already contains the runtime and the shared EIP is the
 private-workload egress identity. Non-stable deployments still need per-node
 public IPv4 because the active gateway node's public IP is the egress identity.
+Operators can still set `associate_public_ip_address` explicitly when they want
+to override the provider-derived launch-template behavior for a specific
+environment.
 
 The bootstrap-first `cloud_init` path uses public subnet auto-assigned public
 IPv4 by default so new nodes can download packages, pull the LoxiLB image, fetch

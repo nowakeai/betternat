@@ -211,7 +211,9 @@ mode, the shared EIP is the intended public source IP for private-subnet egress;
 the per-node public IPv4 addresses are not stable allowlist identities.
 Prebaked BetterNAT AMIs can use `bootstrap_mode = "prebaked_ami"` to skip
 download/install work; in that mode, stable EIP deployments disable per-node
-auto-assigned public IPv4.
+auto-assigned public IPv4. Advanced users can set
+`associate_public_ip_address` to override the provider-derived launch-template
+public IPv4 behavior.
 
 On failure, a standby node takes over by reconciling datapath state, claiming the EIP when configured, and replacing the private route target.
 

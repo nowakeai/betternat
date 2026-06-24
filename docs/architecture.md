@@ -118,6 +118,9 @@ Implementation note for the current Go provider/applier split:
   path disables per-node auto-assigned public IPv4 because no first-boot
   downloads are required. In non-stable mode, per-node public IPv4 remains
   enabled because the active gateway node's public IP is the egress identity.
+- `associate_public_ip_address` can override that derived launch-template
+  public IPv4 behavior when operators provide their own private bootstrap/API
+  reachability path or deliberately want per-node management public IPv4.
 - In stable mode, the shared EIP is the private-workload egress identity. If
   strict separation between management public IPv4 and stable egress EIP is
   required while management public IPv4 stays enabled, the egress identity

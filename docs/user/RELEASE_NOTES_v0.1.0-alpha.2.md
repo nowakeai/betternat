@@ -67,6 +67,8 @@ Public alpha users should install from GitHub Release assets and verify
   stable EIP mode this disables per-node auto-assigned public IPv4 because the
   AMI already contains the runtime. The default `cloud_init` path keeps per-node
   public IPv4 enabled so ordinary Linux AMIs can complete first-boot installs.
+- `associate_public_ip_address` is available as an advanced override for that
+  derived launch-template public IPv4 behavior.
 - Non-stable mode changes public source IP after handover and can be faster
   because it avoids EIP reassociation. A 2026-06-24 AWS probe observed the
   visible source-IP switch within about `435 ms` with `0` failed samples.

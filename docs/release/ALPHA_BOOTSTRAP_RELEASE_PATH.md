@@ -120,6 +120,12 @@ per-node auto-assigned public IPv4 because bootstrap downloads are not needed.
 With `stable_egress_ip=false`, per-node public IPv4 remains enabled because the
 active gateway node's public IP is the egress identity.
 
+Operators can explicitly set `associate_public_ip_address` to override the
+derived launch-template value. Leave it unset for the provider defaults above.
+Only disable it in `cloud_init` mode when the VPC provides another path for
+package repositories, Docker image pull, BetterNAT release artifacts, AWS APIs,
+and any management channel you expect to use.
+
 and private test-build overrides:
 
 ```hcl

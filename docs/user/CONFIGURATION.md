@@ -53,6 +53,7 @@ the provider is registered in the OpenTofu Registry.
 | `ami_id` | Explicit Linux AMI ID. Required for the first alpha bootstrap path. |
 | `ami_channel` | Future AMI channel selector. Do not rely on it for `v0.1.0-alpha.2`. |
 | `bootstrap_mode` | `cloud_init` by default. Use `cloud_init` for ordinary Linux AMIs that install BetterNAT at first boot. Use `prebaked_ami` only for BetterNAT AMIs that already contain Docker or the selected LoxiLB runtime, LoxiLB, `betternat`, `betternat-agent`, `loxicmd`, sysctl settings, and systemd units. |
+| `associate_public_ip_address` | Optional advanced override for the launch template network interface public IPv4 setting. Leave unset for provider-derived behavior. |
 | `betternat_version` | BetterNAT runtime release tag. The provider uses it with `instance_type` to derive agent/CLI bootstrap URLs and checksums. |
 | `agent_binary_url` | Sensitive URL override for `betternat-agent`. Usually leave unset when `betternat_version` is set. |
 | `agent_binary_sha256` | SHA256 checksum override for the agent artifact. Usually leave unset when `betternat_version` is set. |
@@ -76,6 +77,11 @@ baseline sysctl profile, and starts preinstalled services. With
 IPv4 because bootstrap downloads are not required and the shared EIP provides
 the egress identity. With `stable_egress_ip=false`, per-node public IPv4 remains
 enabled because the active gateway node's public IP is the egress identity.
+
+Set `associate_public_ip_address` only when you deliberately want to override
+that derived behavior. For example, a private VPC with NAT/VPC endpoints may set
+it to `false` even in `cloud_init` mode. A troubleshooting environment may set
+it to `true` even for a prebaked stable-EIP AMI.
 
 ### Capacity
 

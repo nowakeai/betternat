@@ -57,6 +57,7 @@ type GatewayResourceModel struct {
 	AMIID                    types.String `tfsdk:"ami_id"`
 	AMIChannel               types.String `tfsdk:"ami_channel"`
 	BootstrapMode            types.String `tfsdk:"bootstrap_mode"`
+	AssociatePublicIPAddress types.Bool   `tfsdk:"associate_public_ip_address"`
 	InstanceType             types.String `tfsdk:"instance_type"`
 	UseSpot                  types.Bool   `tfsdk:"use_spot"`
 	MinSize                  types.Int64  `tfsdk:"min_size"`
@@ -155,6 +156,11 @@ func (r *GatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Optional:            true,
 				Computed:            true,
 				Default:             stringdefault.StaticString("cloud_init"),
+			},
+			"associate_public_ip_address": schema.BoolAttribute{
+				MarkdownDescription: "Whether gateway node network interfaces should receive auto-assigned public IPv4 addresses. Leave unset to let the provider choose: cloud_init uses true, prebaked_ami with stable_egress_ip uses false, and prebaked_ami without stable_egress_ip uses true.",
+				Optional:            true,
+				Computed:            true,
 			},
 			"instance_type": schema.StringAttribute{
 				Optional: true,
@@ -690,6 +696,9 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	if bootstrapMode == "prebaked_ami" && stableEgressIP {
 		associatePublicIP = false
 	}
+	if !plan.AssociatePublicIPAddress.IsNull() && !plan.AssociatePublicIPAddress.IsUnknown() {
+		associatePublicIP = plan.AssociatePublicIPAddress.ValueBool()
+	}
 	installPlan, err := installplan.Build(installplan.Input{
 		Name:                  plan.Name.ValueString(),
 		Region:                plan.Region.ValueString(),
@@ -725,6 +734,7 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	result.Cloud = types.StringValue(cloud)
 	result.AMIChannel = types.StringValue(amiChannel)
 	result.BootstrapMode = types.StringValue(bootstrapMode)
+	result.AssociatePublicIPAddress = types.BoolValue(associatePublicIP)
 	result.DatapathEngine = types.StringValue(datapathEngine)
 	result.FallbackDatapathEngine = types.StringValue(fallbackEngine)
 	result.InstanceType = types.StringValue(instanceType)
