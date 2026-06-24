@@ -246,8 +246,13 @@ Production-preview requirement:
 - [x] Bootstrap installs BetterNAT agent, CLI, LoxiLB/Docker path, nftables
   fallback tools, and systemd units.
 - [x] Runtime artifacts are checksum-verified when checksums are provided.
-- [ ] Provider or helper workflow makes runtime artifact URLs/checksums easy to
+- [x] Provider or helper workflow makes runtime artifact URLs/checksums easy to
   derive for a released BetterNAT runtime version.
+- [x] Provider/runtime version support matrix documents which
+  `betternat_version` values each provider release supports.
+- [x] Release instructions state that patch releases must not introduce
+  breaking Terraform schema, runtime config, CLI, metrics, HA coordination, or
+  bootstrap compatibility changes.
 
 Optional AMI acceleration path:
 
@@ -813,6 +818,8 @@ Reliability validation update on 2026-06-23:
   - [x] no signing for alpha with checksums only,
   - [ ] implement cosign/minisign/GPG for later releases.
 - [x] Add vulnerability disclosure and patch policy to user docs.
+- [x] Add provider/runtime support matrix and SemVer compatibility policy to
+  release and upgrade docs.
 
 ### Documentation
 

@@ -115,6 +115,67 @@ or explicit pin:
 ami_id = "ami-..."
 ```
 
+### Runtime Support Matrix
+
+The provider must maintain an explicit support matrix for `betternat_version`.
+The matrix is the contract for which BetterNAT runtime releases the provider can
+install through its built-in artifact manifest.
+
+| Provider version | Supported `betternat_version` values | Runtime artifact source | Notes |
+| --- | --- | --- | --- |
+| `0.1.0-alpha.6` | `v0.1.0-alpha.2` | GitHub Release assets, Linux `arm64` and `amd64` | First provider with built-in runtime artifact URL/checksum derivation. |
+
+Rules:
+
+- Every provider release that supports `betternat_version` must document the
+  supported runtime versions in this table or its successor.
+- The provider may support multiple runtime versions at once. New provider
+  versions should prefer additive support over replacing existing runtime
+  entries.
+- Do not remove a documented runtime version from a provider patch release.
+- Removing a supported runtime version requires at least a minor provider
+  release during the alpha line, and should be treated as a major-version
+  concern after a stable `1.0.0` line exists.
+- Runtime entries must include both URL construction and SHA256 values for all
+  architectures the provider claims to support.
+- The provider must fail planning/apply with a clear error when a user selects
+  an unsupported `betternat_version`.
+
+### SemVer Compatibility Policy
+
+BetterNAT follows SemVer semantics for public runtime and provider versioning,
+with explicit alpha caveats.
+
+Provider versioning:
+
+- Patch provider releases must not introduce breaking Terraform schema changes,
+  state incompatibilities, required replacements for unchanged configuration,
+  or removal of supported `betternat_version` values.
+- Minor provider releases may add backward-compatible fields, new supported
+  runtime versions, metrics outputs, safe provider-owned infrastructure
+  migrations, and new optional behaviors.
+- Major provider releases are the normal vehicle for intentional breaking
+  Terraform schema or state changes after the project reaches a stable major
+  version.
+
+Runtime versioning:
+
+- Patch runtime releases must not break the agent config format, CLI command
+  compatibility, metrics names/labels, HA coordination record compatibility, or
+  bootstrap expectations for the same provider-supported release line.
+- Minor runtime releases may add backward-compatible config fields, CLI
+  commands, metrics, and coordination record types.
+- Major runtime releases may make breaking changes, but the provider support
+  matrix must make that boundary explicit.
+
+Pre-1.0 alpha policy:
+
+- Alpha releases may still contain breaking changes when needed, but those
+  changes must be explicit in release notes, the upgrade guide, and the support
+  matrix.
+- Even during alpha, patch releases should be treated as non-breaking. If a
+  breaking change is unavoidable, do not ship it as a patch release.
+
 ## Current Technical Blocker
 
 The current provider implementation lives in the main repo and imports main-repo `internal` packages:

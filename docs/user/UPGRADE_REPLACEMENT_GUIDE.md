@@ -50,6 +50,50 @@ available as advanced overrides for private or unreleased builds.
 
 Changing the provider version does not automatically upgrade running gateway nodes.
 
+## Compatibility Policy
+
+BetterNAT uses separate compatibility contracts for provider versions and
+gateway runtime versions.
+
+Provider patch releases are intended to be non-breaking:
+
+- no removal of existing Terraform fields,
+- no incompatible Terraform state changes,
+- no removal of previously documented `betternat_version` support,
+- no new replacement requirement for unchanged configuration,
+- no route/EIP/datapath mutation outside documented provider-owned
+  infrastructure reconciliation.
+
+Provider minor releases may add backward-compatible fields, supported runtime
+versions, outputs, diagnostics, or safe provider-owned infrastructure
+migrations.
+
+Runtime patch releases are intended to be non-breaking for the same supported
+line:
+
+- no incompatible agent config changes,
+- no CLI command or output contract removal,
+- no metrics name/label removal,
+- no incompatible HA coordination record changes,
+- no bootstrap contract changes for a provider-supported release line.
+
+The current alpha line is still pre-1.0, so breaking changes are possible when
+needed. They should not be shipped as patch releases. Breaking alpha changes
+must be called out in release notes and this guide.
+
+## Provider Runtime Support Matrix
+
+The provider maintains a support matrix for `betternat_version`. Use a
+provider version that explicitly supports the runtime version you want to
+install.
+
+| Provider version | Supported `betternat_version` values | Notes |
+| --- | --- | --- |
+| `0.1.0-alpha.6` | `v0.1.0-alpha.2` | First provider with built-in runtime artifact URL/checksum derivation. |
+
+If you set an unsupported `betternat_version`, Terraform should fail with a
+clear provider error instead of guessing an artifact URL.
+
 Until provider `0.1.0-alpha.6` is available through the Terraform Registry,
 install it from the provider GitHub release as a Terraform filesystem mirror:
 

@@ -99,6 +99,16 @@ Use the lightest useful validation first, then escalate when the touched area re
 - Before adding a dependency, check license, maintenance activity, transitive footprint, and whether it improves product reliability or UX.
 - When network is available, use `./manage deps check` before dependency upgrade work and document any intentional pins.
 
+## Version Compatibility Rules
+
+- Follow SemVer for public BetterNAT runtime and Terraform provider releases once a release line is declared supportable.
+- Patch releases must not introduce breaking user-facing behavior, Terraform schema incompatibility, runtime config incompatibility, or required replacement beyond documented bug/security fixes.
+- Minor releases may add backward-compatible fields, supported runtime versions, metrics, CLI commands, or safe provider-owned infrastructure migrations.
+- Major releases are the only normal place for intentional breaking changes.
+- Pre-1.0 alpha releases may still change behavior, but every breaking change must be called out in release notes and upgrade docs.
+- The Terraform provider must maintain a runtime version support matrix for `betternat_version`. Do not remove support for a previously documented runtime version from a patch provider release.
+- When adding a runtime release to the provider artifact manifest, update the support matrix and validation evidence in the same change.
+
 ## Current Known State
 
 - BetterNAT v0 is LoxiLB-first with nftables fallback.
