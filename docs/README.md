@@ -107,6 +107,7 @@ Read these first when revisiting product or architecture direction:
 - [research/044-ga-legal-trademark-review.md](research/044-ga-legal-trademark-review.md) — GA legal/trademark wording review for BetterNAT and third-party project references.
 - [research/045-ga-release-artifact-governance-review.md](research/045-ga-release-artifact-governance-review.md) — GA release artifact governance review for checksums, notes, compatibility, SemVer, pins, and signing decision.
 - [research/046-provider-alpha8-ga-soak-results.md](research/046-provider-alpha8-ga-soak-results.md) — Provider alpha8 Terraform Registry soak with runtime alpha6, restart/handover events, ASG lifecycle finding, destroy, and residual scan.
+- [research/047-runtime-alpha8-asg-lifecycle-validation.md](research/047-runtime-alpha8-asg-lifecycle-validation.md) — Runtime alpha8 ASG lifecycle validation through provider artifact overrides, completed durable handover, client probe, and cleanup evidence.
 
 ## Supporting Research
 

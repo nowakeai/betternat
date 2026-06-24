@@ -81,17 +81,27 @@ The current alpha line is still pre-1.0, so breaking changes are possible when
 needed. They should not be shipped as patch releases. Breaking alpha changes
 must be called out in release notes and this guide.
 
-## Provider Runtime Support Matrix
+## Provider Runtime Compatibility
 
-The provider maintains a support matrix for `betternat_version`. Use a
-provider version that explicitly supports the runtime version you want to
-install.
+For a production-supportable provider line, the provider maintains a support
+matrix for `betternat_version`.
+
+For the current alpha line, use the recommended provider/runtime pair unless a
+release note or validation document tells you to test explicit artifact URL and
+SHA256 overrides. Do not assume every alpha runtime tag is immediately available
+through `betternat_version`.
+
+Current alpha provider manifest snapshot:
 
 | Provider version | Supported `betternat_version` values | Notes |
 | --- | --- | --- |
 | `0.1.0-alpha.8` | `v0.1.0-alpha.2`, `v0.1.0-alpha.6` | Adds support for the current runtime release artifacts while keeping alpha2 compatibility. |
 | `0.1.0-alpha.7` | `v0.1.0-alpha.2` | Adds `bootstrap_mode` and `associate_public_ip_address` provider UX. |
 | `0.1.0-alpha.6` | `v0.1.0-alpha.2` | First provider with built-in runtime artifact URL/checksum derivation. |
+
+Runtime `v0.1.0-alpha.8` has AWS ASG lifecycle validation through explicit
+artifact URL and SHA256 overrides, not through the provider built-in
+`betternat_version` manifest.
 
 If you set an unsupported `betternat_version`, Terraform should fail with a
 clear provider error instead of guessing an artifact URL.

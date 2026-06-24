@@ -30,7 +30,8 @@ betternat_version = "v0.1.0-alpha.6"
 - `GOCACHE=$PWD/tmp/go-build go build ./cmd/terraform-provider-betternat`:
   passed.
 - The alpha6 release asset checksums were read from the published
-  `SHA256SUMS` file before adding them to the provider support matrix.
+  `SHA256SUMS` file before adding them to the provider built-in artifact
+  manifest.
 
 AWS soak validation is tracked separately in the GA checklist. Do not treat
 this release note as a production SLA or benchmark result.

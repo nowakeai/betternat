@@ -179,6 +179,13 @@ Current:
   covered standby agent restart, active agent restart, active LoxiLB restart,
   proactive handover, active systemd stop, ASG active termination, destroy, and
   residual scan in run `bnat-ga-soak-20260624133429`.
+- Follow-up runtime alpha8 ASG lifecycle validation used Terraform Registry
+  provider `0.1.0-alpha.9` with explicit runtime `v0.1.0-alpha.8` artifact
+  overrides in run `bnat-ga-asg-alpha8-override-20260624151707`. The
+  lifecycle-triggered durable handover record completed, the client probe
+  recorded `136` successful samples and `0` failures, route/EIP ownership
+  converged to the surviving gateway, and cleanup completed after one retry for
+  AWS security group dependency eventual consistency.
 
 Completed for alpha:
 
@@ -197,10 +204,12 @@ Needed before GA:
   returned to the stable EIP. If the GA contract requires every successful
   sample to return only the shared EIP, implement a secondary private IP or
   secondary ENI egress identity and configure LoxiLB SNAT to that private IP.
-- Improve ASG lifecycle-triggered handover retry/backoff and shutdown
-  sequencing. Provider alpha8 GA soak converged through fenced lease takeover
-  after ASG active termination, but the durable lifecycle-triggered handover
-  operation failed while `ec2:ReplaceRoute` hit a context deadline.
+- Keep broader AWS/DynamoDB retry/backoff hardening open. The earlier provider
+  alpha8 GA soak converged through fenced lease takeover after ASG active
+  termination, but the durable lifecycle-triggered handover operation failed
+  while `ec2:ReplaceRoute` hit a context deadline. The later runtime alpha8
+  validation completed the lifecycle-triggered durable handover with no client
+  probe failures, but still logged transient AWS/DynamoDB context errors.
 - Follow-up code added per-attempt `ReplaceRoute` timeouts, route verification
   after ambiguous route mutation errors, and short route-replacement retries in
   the proactive handover path. DynamoDB denial/timeout negative tests and
@@ -1036,17 +1045,15 @@ Defer until benchmark-backed:
 
 ## Suggested Implementation Order
 
-1. Keep `v0.1.0-alpha.6` as the current runtime artifact set until another
-   runtime tag is intentionally validated and added to the provider support
-   matrix.
-2. Re-run ASG lifecycle-triggered proactive handover after the route-replacement
-   retry change and confirm termination-triggered handover records complete
-   instead of relying on lease-expiry takeover.
-3. Decide whether GA accepts the documented transient ordinary public-IP caveat
+1. Keep `v0.1.0-alpha.6` as the normal alpha provider manifest runtime until
+   the next intentionally useful provider release. Runtime `v0.1.0-alpha.8`
+   has ASG lifecycle evidence through explicit artifact overrides; do not
+   publish more alpha versions solely to maintain a formal support matrix.
+2. Decide whether GA accepts the documented transient ordinary public-IP caveat
    in stable mode or requires secondary private IP/ENI egress identity before
    GA.
-4. Add IAM negative tests for denied `ec2:ReplaceRoute`,
+3. Add IAM negative tests for denied `ec2:ReplaceRoute`,
    `ec2:AssociateAddress`, and DynamoDB write paths.
-5. Keep public AMI publication, `ami_channel` resolution, runtime artifact
+4. Keep public AMI publication, `ami_channel` resolution, runtime artifact
    signing, benchmark harness work, and broader performance testing as follow-up
    production hardening rather than release blockers.

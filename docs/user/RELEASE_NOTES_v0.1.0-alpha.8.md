@@ -7,15 +7,20 @@ Date: 2026-06-24
 `v0.1.0-alpha.8` is a BetterNAT runtime alpha release for GA hardening of
 proactive handover and ASG lifecycle termination handling.
 
-Terraform users should wait for a Terraform provider release that explicitly
-lists this runtime version in its support matrix before using:
+The normal alpha Terraform install path should keep using provider
+`nowakeai/betternat` `0.1.0-alpha.8` or newer with runtime
+`v0.1.0-alpha.6` until the next intentionally useful provider release updates
+the built-in artifact manifest.
+
+Do not publish or adopt a provider release solely to advance an alpha support
+matrix. To test this runtime with the current provider line, use explicit
+artifact URL and SHA256 overrides instead of:
 
 ```hcl
 betternat_version = "v0.1.0-alpha.8"
 ```
 
-Until that provider release is available, keep using provider
-`nowakeai/betternat` `0.1.0-alpha.8` with runtime `v0.1.0-alpha.6`.
+The first AWS validation of runtime alpha8 used that override path.
 
 ## What Changed
 
@@ -40,9 +45,17 @@ Local validation before publishing:
 - `GOCACHE=$PWD/tmp/go-build go build ./cmd/betternat ./cmd/betternat-agent ./cmd/terraform-provider-betternat`: passed.
 - `git diff --check`: passed.
 
-AWS validation of this exact runtime should be run through a provider release
-that supports `v0.1.0-alpha.8`. The target scenario is ASG active instance
-termination with lifecycle-triggered proactive handover.
+AWS validation of this exact runtime was completed with Terraform Registry
+provider `0.1.0-alpha.9` plus explicit runtime artifact URL and SHA256
+overrides in run `bnat-ga-asg-alpha8-override-20260624151707`.
+
+The ASG active instance termination case passed:
+
+- durable lifecycle-triggered handover record completed,
+- route and EIP ownership moved to the surviving gateway,
+- ASG launched a replacement standby,
+- private-client probe recorded `136` successful samples and `0` failures,
+- probe source IP stayed on the stable EIP `52.43.198.166`.
 
 ## Known Limitations
 
@@ -59,8 +72,9 @@ termination with lifecycle-triggered proactive handover.
 
 - Existing alpha users should test in a disposable VPC before replacing gateway
   nodes.
-- Provider support is required before the public Terraform install path can use
-  this runtime through `betternat_version`.
+- Provider manifest support is required before the public Terraform install
+  path can use this runtime through `betternat_version`. For alpha testing,
+  explicit artifact URL and SHA256 overrides are acceptable.
 - Updating a launch template does not update already-running gateway nodes by
   itself. Use a controlled ASG replacement or rolling update procedure.
 - This release is intended to be compatible with the alpha6 bootstrap contract.

@@ -123,8 +123,16 @@ Use the lightest useful validation first, then escalate when the touched area re
 - Minor releases may add backward-compatible fields, supported runtime versions, metrics, CLI commands, or safe provider-owned infrastructure migrations.
 - Major releases are the only normal place for intentional breaking changes.
 - Pre-1.0 alpha releases may still change behavior, but every breaking change must be called out in release notes and upgrade docs.
-- The Terraform provider must maintain a runtime version support matrix for `betternat_version`. Do not remove support for a previously documented runtime version from a patch provider release.
-- When adding a runtime release to the provider artifact manifest, update the support matrix and validation evidence in the same change.
+- Once a runtime/provider line is declared production-supportable, the Terraform
+  provider must maintain a runtime version support matrix for
+  `betternat_version`. Do not remove support for a previously documented
+  runtime version from a patch provider release.
+- During the alpha line, avoid version churn just to update a formal support
+  matrix. Alpha releases should document the recommended runtime/provider pair,
+  any explicitly validated artifact override path, and breaking changes in the
+  release notes. Promote the formal support matrix before GA.
+- When adding a runtime release to the provider built-in artifact manifest,
+  update validation evidence in the same change.
 
 ## Current Known State
 

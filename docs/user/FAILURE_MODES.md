@@ -112,6 +112,13 @@ Validation note:
   about 25 seconds after the termination request and ASG launched a replacement
   standby. Treat this as a known hardening area, not a reason to assume ASG
   termination is manual-only.
+- a later 2026-06-24 runtime alpha8 validation, using explicit runtime artifact
+  overrides through Terraform Registry provider alpha9, completed the
+  lifecycle-triggered durable handover record. The client probe recorded `136`
+  successful samples, `0` failures, and only the stable EIP
+  `52.43.198.166`. This confirms the proactive lifecycle path can complete;
+  broader AWS/DynamoDB retry/backoff hardening remains useful because transient
+  context errors still appeared in logs.
 
 Signals:
 
@@ -310,6 +317,9 @@ Validation note:
   recorded `2591` client samples during multiple restart and handover events:
   `2575` ok, `11` timeout failures, and `5` successful samples through ordinary
   node public IPs before final convergence back to the shared EIP.
+- a later runtime alpha8 ASG lifecycle validation recorded `136` successful
+  samples, `0` failures, and no ordinary-public-IP samples during active ASG
+  termination handover.
 
 ## ASG Replacement Failure
 

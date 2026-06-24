@@ -117,11 +117,18 @@ or explicit pin:
 ami_id = "ami-..."
 ```
 
-### Runtime Support Matrix
+### Runtime Compatibility
 
-The provider must maintain an explicit support matrix for `betternat_version`.
-The matrix is the contract for which BetterNAT runtime releases the provider can
-install through its built-in artifact manifest.
+The production-supportable provider line must maintain an explicit support
+matrix for `betternat_version`. That matrix will be the contract for which
+BetterNAT runtime releases the provider can install through its built-in
+artifact manifest.
+
+During the alpha line, avoid publishing more provider releases only to keep a
+formal matrix current. Document the recommended runtime/provider pair, any
+validated explicit artifact override path, and known incompatibilities instead.
+
+Current alpha manifest snapshot:
 
 | Provider version | Supported `betternat_version` values | Runtime artifact source | Notes |
 | --- | --- | --- | --- |
@@ -129,10 +136,11 @@ install through its built-in artifact manifest.
 | `0.1.0-alpha.7` | `v0.1.0-alpha.2` | GitHub Release assets, Linux `arm64` and `amd64` | Adds bootstrap mode and gateway public IPv4 association controls while keeping runtime compatibility. |
 | `0.1.0-alpha.8` | `v0.1.0-alpha.2`, `v0.1.0-alpha.6` | GitHub Release assets, Linux `arm64` and `amd64` | Adds support for the current BetterNAT runtime release while keeping alpha2 compatibility. |
 
-Rules:
+Production-line rules:
 
-- Every provider release that supports `betternat_version` must document the
-  supported runtime versions in this table or its successor.
+- Every production-supportable provider release that supports
+  `betternat_version` must document the supported runtime versions in this table
+  or its successor.
 - The provider may support multiple runtime versions at once. New provider
   versions should prefer additive support over replacing existing runtime
   entries.
@@ -144,6 +152,14 @@ Rules:
   architectures the provider claims to support.
 - The provider must fail planning/apply with a clear error when a user selects
   an unsupported `betternat_version`.
+
+Provider `0.1.0-alpha.9` was published after runtime `v0.1.0-alpha.8`, but its
+built-in manifest still accepts the same runtime values as provider
+`0.1.0-alpha.8`. Runtime `v0.1.0-alpha.8` was validated through explicit
+artifact URL and SHA256 overrides in AWS run
+`bnat-ga-asg-alpha8-override-20260624151707`. Do not publish another alpha
+provider solely to add this manifest entry unless there is a real code, schema,
+or documentation change worth a release.
 
 ### SemVer Compatibility Policy
 

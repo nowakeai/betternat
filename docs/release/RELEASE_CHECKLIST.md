@@ -250,8 +250,9 @@ Production-preview requirement:
 - [x] Runtime artifacts are checksum-verified when checksums are provided.
 - [x] Provider or helper workflow makes runtime artifact URLs/checksums easy to
   derive for a released BetterNAT runtime version.
-- [x] Provider/runtime version support matrix documents which
-  `betternat_version` values each provider release supports.
+- [x] Provider/runtime compatibility policy documents recommended alpha pairs
+  and states that the formal support matrix is promoted for the
+  production-supportable provider line.
 - [x] Release instructions state that patch releases must not introduce
   breaking Terraform schema, runtime config, CLI, metrics, HA coordination, or
   bootstrap compatibility changes.
@@ -883,6 +884,12 @@ Provider alpha8 GA soak update on 2026-06-24:
   was recorded as `failed` after `ec2:ReplaceRoute` hit a context deadline.
   This keeps lifecycle-triggered retry/backoff and shutdown sequencing as a GA
   hardening item.
+- Follow-up runtime alpha8 validation in
+  `bnat-ga-asg-alpha8-override-20260624151707` used Terraform Registry provider
+  alpha9 with explicit runtime artifact overrides. The ASG lifecycle-triggered
+  durable handover completed, route/EIP ownership moved to the survivor, ASG
+  replacement joined as standby, and the client probe recorded `136` ok / `0`
+  fail with only the stable EIP observed.
 - Terraform destroy removed all `16` resources. Residual scan found no ASG,
   DynamoDB table, EIP, ENI, VPC, security group, or non-terminated EC2
   instances for the run; only terminated EC2 instance history remained visible
@@ -899,8 +906,10 @@ Provider alpha8 GA soak update on 2026-06-24:
   - [x] no signing for alpha with checksums only,
   - [ ] implement cosign/minisign/GPG for later releases.
 - [x] Add vulnerability disclosure and patch policy to user docs.
-- [x] Add provider/runtime support matrix and SemVer compatibility policy to
-  release and upgrade docs.
+- [x] Add provider/runtime compatibility and SemVer compatibility policy to
+  release and upgrade docs. The formal runtime support matrix is a
+  production-supportable provider-line requirement, not a reason to publish
+  alpha-only support releases.
 
 ### Documentation
 
