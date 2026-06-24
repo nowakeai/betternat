@@ -636,6 +636,26 @@ Release artifact smoke validation recorded on 2026-06-24:
   -upgrade` and `terraform validate`: passed for `examples/terraform`,
   `examples/terraform-aws-supplemental`, and `examples/terraform-localstack`
   with provider `0.1.0-alpha.3`.
+- Final local release verification on 2026-06-24 after documentation refresh:
+  - `GOCACHE=$PWD/tmp/go-build go test ./...`: passed.
+  - `GOCACHE=$PWD/tmp/go-build go build ./cmd/betternat
+    ./cmd/betternat-agent ./cmd/terraform-provider-betternat`: passed.
+  - `scripts/check-release-pins.sh`: passed.
+  - `BETTERNAT_RELEASE_DIR=$PWD/tmp/release-final-check
+    scripts/release-build.sh`: passed and generated local release artifacts.
+  - `BETTERNAT_VERSION=v0.1.0-alpha.2 scripts/release-url-smoke.sh`: passed
+    for Linux arm64 agent and CLI.
+  - `BETTERNAT_VERSION=v0.1.0-alpha.2 BETTERNAT_SMOKE_ARCH=amd64
+    scripts/release-url-smoke.sh`: passed for Linux amd64 agent and CLI.
+  - `scripts/release-dependency-scan.sh`: passed with `99` modules scanned,
+    `0` missing license files, and `0` restricted license keyword hits.
+  - `BETTERNAT_VERSION=v0.1.0-alpha.2
+    BETTERNAT_PROVIDER_VERSION=0.1.0-alpha.3
+    BETTERNAT_PROVIDER_INSTALL=github-mirror
+    BETTERNAT_RELEASE_DEPLOY_RUN_ID=bnat-final-plan-alpha3-20260624-profile
+    scripts/release-deploy-smoke.sh`: plan-only smoke passed with
+    `AWS_PROFILE=601427795217_AdministratorAccess`; Terraform planned
+    `16` creates, `0` changes, and `0` destroys.
 - [x] Create `github.com/nowakeai/terraform-provider-betternat` for Registry-compatible provider publishing.
 - [x] Expose a thin main-repo public provider factory for the provider repo.
 - [x] Add provider-specific alpha release workflow for Linux provider zip artifacts.

@@ -209,8 +209,12 @@ Completed locally:
 
 - [x] Full Go test suite passed:
   - `GOCACHE=$PWD/tmp/go-build-cache go test ./...`
+  - final 2026-06-24 release verification also passed:
+    `GOCACHE=$PWD/tmp/go-build go test ./...`
 - [x] Terraform provider binary builds:
   - `GOCACHE=$PWD/tmp/go-build-cache go build -o terraform-provider-betternat ./cmd/terraform-provider-betternat`
+  - final 2026-06-24 release verification also passed:
+    `GOCACHE=$PWD/tmp/go-build go build ./cmd/betternat ./cmd/betternat-agent ./cmd/terraform-provider-betternat`
 - [x] Terraform examples validate with local provider dev override and `TMPDIR=$PWD/tmp`:
   - `examples/terraform`
   - `examples/terraform-aws-supplemental`
@@ -227,6 +231,16 @@ Completed locally:
 - [x] Release build script generates artifacts:
   - `BETTERNAT_VERSION=v0.1.0-alpha.test BETTERNAT_RELEASE_DIR=$PWD/tmp/release-test scripts/release-build.sh`
   - `SHA256SUMS` includes host CLI, provider, Linux arm64/amd64 agent, and Linux arm64/amd64 CLI artifacts.
+  - final 2026-06-24 release verification passed:
+    `BETTERNAT_RELEASE_DIR=$PWD/tmp/release-final-check scripts/release-build.sh`
+- [x] Release URL smoke passed for current public runtime artifacts:
+  - `BETTERNAT_VERSION=v0.1.0-alpha.2 scripts/release-url-smoke.sh`
+  - `BETTERNAT_VERSION=v0.1.0-alpha.2 BETTERNAT_SMOKE_ARCH=amd64 scripts/release-url-smoke.sh`
+- [x] Release deploy plan-only smoke passed with provider GitHub mirror:
+  - run id `bnat-final-plan-alpha3-20260624-profile`
+  - provider `0.1.0-alpha.3`
+  - runtime `v0.1.0-alpha.2`
+  - Terraform plan: `16` creates, `0` changes, `0` destroys
 - [x] `git diff --check` passes.
 - [x] Tracked-file hygiene check shows no tracked `.env`, Terraform state, local release artifacts, or `tmp/**` files.
 - [x] Secret/local-path scan has no release-blocking hits. Current hits are documentation examples or historical notes:
