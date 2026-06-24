@@ -1,16 +1,23 @@
-# BetterNAT AMI Release Plan
+# BetterNAT Optional AMI Release Plan
 
 Date: 2026-06-20
 
 ## Purpose
 
-Production BetterNAT should be distributed as a prebuilt AMI.
+This document describes the optional BetterNAT AMI path.
 
-Cloud-init/user-data remains useful for development and AWS control-plane tests, but it is not the preferred production path because first boot should not depend on package downloads, container pulls, GitHub availability, or build-time network behavior.
+The first production-preview release is bootstrap-first: users provide an
+explicit Linux AMI and Terraform/cloud-init installs BetterNAT release artifacts
+at boot. Public BetterNAT AMIs are not required because each published AMI
+version and copied region creates ongoing EBS snapshot-retention cost.
 
-## Release Contract
+Prebuilt AMIs remain useful later for faster boot, lower bootstrap dependency
+surface, and simpler first-run behavior. Treat this plan as an optional
+acceleration path, not a production-preview release blocker.
 
-Each production AMI should contain:
+## Optional AMI Contract
+
+Each BetterNAT AMI should contain:
 
 - `betternat-agent`,
 - `betternat` CLI,
@@ -32,11 +39,11 @@ User data should only provide runtime configuration:
 - start or restart `betternat-agent`,
 - avoid long package installs.
 
-Production AMI launches should not rely on per-node public IPv4 addresses.
-The alpha bootstrap path may temporarily use public subnet auto-assigned
-public IPs so new nodes can download packages and release artifacts before a
-BetterNAT AMI exists. That is a development/install bootstrap compromise, not a
-production networking contract.
+AMI launches should not rely on per-node public IPv4 addresses when
+`stable_egress_ip=true`. The bootstrap-first path may use public subnet
+auto-assigned public IPs so new nodes can download packages and release
+artifacts. That is an accepted production-preview tradeoff for avoiding public
+AMI publication cost.
 
 When `stable_egress_ip=true`, the provider-derived plan sets Launch Template
 `AssociatePublicIpAddress=false` so the shared EIP is the only public egress

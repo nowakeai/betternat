@@ -759,11 +759,22 @@ Minimum panels:
 - route/EIP match,
 - failover attempts/success.
 
-### 8. AMI Build Pipeline
+### 8. Bootstrap-First Production Packaging
 
-For alpha, a documented bootstrap path is the intended release path.
+For alpha and the first production-preview release, a documented bootstrap path
+is the intended release path. Public BetterNAT AMIs remain optional because each
+published AMI version and region creates ongoing EBS snapshot-retention cost.
 
-For production, add:
+For production-preview, improve:
+
+- provider/user workflow for selecting the current runtime release artifact
+  URLs and checksums,
+- clear bootstrap dependency documentation,
+- explicit base Linux AMI requirements,
+- rollback/replacement guidance when bootstrap inputs change,
+- smoke validation for the bootstrap path.
+
+Optional AMI acceleration path, if the project later accepts the ongoing cost:
 
 - Packer or EC2 Image Builder definition,
 - AMI naming/versioning,
@@ -779,7 +790,7 @@ Current implementation:
   nftables, conntrack tools, a pinned LoxiLB image, `loxicmd`, systemd units,
   and baseline sysctls.
 
-Still needed:
+Still needed for the optional AMI path:
 
 - publish arm64 and amd64 AMIs,
 - wire provider `ami_channel` resolution to published AMI metadata,
@@ -922,7 +933,8 @@ Defer until benchmark-backed:
    propagation catches up.
 3. Decide whether to publish another runtime tag for post-RC source changes or
    keep `v0.1.0-alpha.2` as the current runtime artifact set.
-4. Treat AMI publication and AMI channel resolution as the remaining
-   production-preview blockers. Keep runtime artifact signing, benchmark harness
-   work, and broader retry/backoff hardening as follow-up production hardening
-   rather than release blockers.
+4. Treat bootstrap-first install UX polish, especially runtime artifact
+   URL/checksum selection, as the remaining production-preview blocker. Keep
+   public AMI publication, `ami_channel` resolution, runtime artifact signing,
+   benchmark harness work, and broader retry/backoff hardening as follow-up
+   production hardening rather than release blockers.

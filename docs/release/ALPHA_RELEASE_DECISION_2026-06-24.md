@@ -93,8 +93,11 @@ Post-alpha / production work:
 
 - Terraform Registry propagation beyond `0.1.0-alpha.2` and removal of the GitHub
   filesystem-mirror workaround,
-- published arm64 and amd64 AMIs,
-- `ami_channel` resolver,
+- bootstrap-first production-preview UX polish, including easier runtime
+  artifact URL/checksum selection,
+- optional arm64 and amd64 AMIs only if ongoing snapshot-retention cost is
+  accepted,
+- optional `ami_channel` resolver only if public AMIs become supported,
 - stronger artifact signing beyond checksums as later hardening,
 - benchmark harness and sizing guidance as post-production-preview evidence,
 - broader hardening and longer soak tests as follow-up evidence,
