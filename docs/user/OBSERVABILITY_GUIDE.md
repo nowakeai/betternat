@@ -283,9 +283,40 @@ This probe is still useful even when Prometheus is healthy because it validates 
 
 BetterNAT can expose counters grouped by configured owner labels. This is useful when you map known private CIDR ranges to teams, node pools, or workload classes.
 
+Current alpha scope:
+
+- owner attribution is configured explicitly in the agent config under
+  `observability.attribution.owners`,
+- each owner maps one or more private CIDRs to a stable `owner` label,
+- unmatched CIDRs are reported as `owner="unattributed"`,
+- exported owner metrics are aggregate counters:
+  - `betternat_owner_packets_total{owner, direction}`,
+  - `betternat_owner_bytes_total{owner, direction}`,
+- BetterNAT does not currently export automatic top-N source IP, destination IP,
+  destination hostname, port, protocol, pod, namespace, or tenant labels.
+
+Top owner throughput:
+
+```promql
+topk(10, sum by (gateway, ha_group, owner, direction) (rate(betternat_owner_bytes_total[5m])))
+```
+
+Top owner packet rate:
+
+```promql
+topk(10, sum by (gateway, ha_group, owner, direction) (rate(betternat_owner_packets_total[5m])))
+```
+
+Total processed throughput, without owner attribution:
+
+```promql
+sum by (gateway, ha_group, direction) (rate(betternat_processed_bytes_total[5m]))
+```
+
 The first alpha does not provide full Kubernetes pod-level attribution by itself. If private traffic comes from EKS nodes, BetterNAT normally sees node or VPC-level source addresses after the cluster networking layer. For pod-level attribution, combine BetterNAT gateway metrics with Kubernetes-side telemetry such as CNI flow logs, eBPF flow observability, application metrics, or VPC flow logs with ENI/IP metadata.
 
-The first alpha also does not provide exact per-tenant billing attribution, packet capture at scale, or a bundled fleet dashboard.
+The first alpha also does not provide exact per-tenant billing attribution,
+automatic source/destination cardinality analysis, or packet capture at scale.
 
 ## Troubleshooting Patterns
 

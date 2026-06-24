@@ -617,7 +617,7 @@ Provider Registry validation recorded on 2026-06-22:
   - [x] metrics snapshot.
 - [x] Ship Prometheus alert rule examples.
 - [x] Ship Grafana starter dashboard or starter queries.
-- [ ] Clarify top-N source/destination attribution scope and limitations.
+- [x] Clarify top-N source/destination attribution scope and limitations.
 
 ### Reliability
 
