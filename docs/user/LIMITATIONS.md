@@ -8,6 +8,10 @@ Date: 2026-06-21
 
 It is not a drop-in AWS NAT Gateway SLA replacement.
 
+The alpha release does not publish an availability SLO, failover-time SLO, or
+packet-loss SLO. Timing measurements in the docs are validation evidence from
+specific test environments, not service-level commitments.
+
 ## Platform Scope
 
 Current alpha scope:

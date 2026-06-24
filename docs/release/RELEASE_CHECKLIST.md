@@ -558,7 +558,7 @@ Do not mark BetterNAT production-ready until alpha checklist is complete plus:
 - [ ] IAM least-privilege policy is reviewed.
 - [x] provider release process is documented.
 - [x] release artifacts have checksums.
-- [ ] published docs include limitations and SLO language.
+- [x] published docs include limitations and SLO language.
 - [ ] benchmark results are reproducible.
 
 ## P1 Post-Alpha Checklist
