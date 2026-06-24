@@ -95,9 +95,9 @@ Post-alpha / production work:
   filesystem-mirror workaround,
 - published arm64 and amd64 AMIs,
 - `ami_channel` resolver,
-- benchmark harness and sizing guidance,
 - stronger artifact signing beyond checksums,
-- broader production hardening and longer soak tests,
+- benchmark harness and sizing guidance as post-production-preview evidence,
+- broader hardening and longer soak tests as follow-up evidence,
 - CloudFormation delivery if it becomes a supported install path.
 
 ## Release Decision

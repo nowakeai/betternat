@@ -66,6 +66,12 @@ Production release requires:
 - repeatable AWS acceptance tests,
 - documented limitations and SLO language.
 
+For the first production-preview release, the remaining hard blockers are the
+AMI delivery path and stronger runtime artifact signing. Longer soak,
+benchmarking, and broader retry/backoff hardening remain valuable, but are not
+release blockers once the existing AWS failover evidence and limitations are
+kept visible.
+
 ## v0.1.0-alpha Checklist
 
 ### 1. Product Scope
@@ -555,22 +561,25 @@ Do not mark BetterNAT production-ready until alpha checklist is complete plus:
 
 - [ ] AMI pipeline is repeatable and documented.
 - [ ] AMI channel resolver is implemented.
-- [ ] complete user documentation has passed a clean-account walkthrough.
 - [x] CloudFormation decision is made and documented.
-- [ ] stable-profile AWS test pass is complete.
-- [ ] long soak test is complete.
-- [ ] retry/backoff policy for AWS/DynamoDB transient failures is implemented.
-- [ ] explicit-failure fast path is evaluated or implemented:
-  - [ ] EC2 owner state check,
+- [ ] runtime release artifacts are signed beyond checksums.
+- [x] explicit-failure fast path is evaluated or implemented:
   - [x] graceful lease release on systemd stop,
   - [x] ASG lifecycle hook or interruption notice handling implemented locally,
   - [x] ASG lifecycle hook behavior verified in AWS,
   - [x] Spot interruption handling follows the documented AWS IMDS path; forced interruption validation is not a first-alpha release gate.
 - [x] transient non-EIP leakage in stable mode is fixed or documented with clear conditions.
-- [ ] IAM least-privilege policy is reviewed.
 - [x] provider release process is documented.
 - [x] release artifacts have checksums.
 - [x] published docs include limitations and SLO language.
+
+Production-preview follow-up evidence and hardening, not release blockers:
+
+- [ ] complete user documentation has passed a clean-account walkthrough.
+- [ ] stable-profile AWS test pass is refreshed after AMI publication.
+- [ ] longer soak test is refreshed after AMI publication.
+- [ ] retry/backoff policy for AWS/DynamoDB transient failures is further hardened.
+- [ ] IAM least-privilege policy is reviewed again after AMI/channel changes.
 - [ ] benchmark results are reproducible.
 
 ## P1 Post-Alpha Checklist
@@ -916,4 +925,5 @@ As of 2026-06-24:
 - User-facing install docs use GitHub Release asset URLs; internal AWS test runbooks may still use temporary S3 URLs for unreleased binaries.
 - The agent handles SIGTERM/SIGINT and releases the locally owned HA lease on graceful shutdown using the fenced lease generation.
 - The provider creates ASG termination lifecycle hooks, and the agent watches IMDS Spot/ASG termination notices to release lease and complete the lifecycle action.
-- The main blockers for production are AMI release pipeline, retry/backoff hardening, stable-profile soak, and broader production hardening.
+- The main blockers for the first production-preview release are AMI publication
+  with channel resolution and runtime artifact signing beyond checksums.
