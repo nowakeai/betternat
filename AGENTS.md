@@ -91,6 +91,23 @@ Use the lightest useful validation first, then escalate when the touched area re
 - If architecture, user-visible behavior, install UX, validation workflow, or dependency policy changes, update docs in the same change.
 - Treat older research as design history when it conflicts with `docs/architecture.md` or `docs/spec-v0.md`.
 
+## Release Notes Rules
+
+- Every release must have release notes before publication, regardless of
+  whether it is alpha, beta, RC, GA, patch, test, runtime, provider, AMI, or any
+  other tagged release.
+- GitHub Release pages must not be left as empty shells, auto-generated
+  changelog-only pages, or generic checksum-only messages.
+- Release notes must state what changed, who should use the release, validation
+  evidence, known limitations, upgrade or compatibility notes, and artifact
+  integrity guidance when artifacts are published.
+- BetterNAT runtime/main-repo release notes live under `docs/user/` using the
+  `RELEASE_NOTES_<tag>.md` pattern.
+- Split Terraform provider release notes live in the provider repository under
+  `docs/release-notes/<tag>.md`.
+- Release workflows should prefer an explicit checked-in release note file over
+  generated notes.
+
 ## Dependency Rules
 
 - Prefer current supported versions.
