@@ -60,10 +60,9 @@ Public alpha users should install from GitHub Release assets and verify
 - No high-volume benchmark claim.
 - Boot time still depends on package repositories, container pull, and release
   artifact URL reachability.
-- Stable EIP mode requires no per-node public IPv4 addresses to avoid
-  non-shared egress identity during handover. With that path enabled, alpha AWS
-  validation preserved the shared public IP but still observed a short timeout
-  window.
+- Stable EIP mode uses a shared EIP as the intended private-workload egress
+  identity. Gateway nodes may still use ordinary per-node public IPv4 addresses
+  for bootstrap and management/control-plane reachability.
 - Non-stable mode changes public source IP after handover and can be faster
   because it avoids EIP reassociation. A 2026-06-24 AWS probe observed the
   visible source-IP switch within about `435 ms` with `0` failed samples.

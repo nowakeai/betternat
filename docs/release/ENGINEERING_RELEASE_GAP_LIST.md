@@ -162,26 +162,31 @@ Current:
 - `docs/release/ALPHA_BOOTSTRAP_RELEASE_PATH.md` defines the alpha bootstrap release path.
 - Terraform supplemental fixture accepts agent and CLI artifact URLs with SHA256 checksums, plus optional `loxicmd_binary_sha256`.
 - The first public alpha intentionally does not build or publish a BetterNAT AMI.
-- Final alpha6 AWS validation found a production-preview blocker for non-AMI
-  stable-EIP HA: a gateway node without public IP cannot complete cloud-init
-  dependency download or keep SSM/control-plane egress while its subnet default
-  route points to an Internet Gateway. After handover, the old active can hit
-  the same issue when it loses the shared EIP.
+- Final alpha6 AWS validation found that a gateway node without public IP
+  cannot complete cloud-init dependency download or keep SSM/control-plane
+  egress while its subnet default route points to an Internet Gateway.
+- Follow-up implementation changed the provider-derived install plan so gateway
+  nodes default to auto-assigned public IPv4 for bootstrap and management
+  reachability. The shared EIP remains the stable private-workload egress
+  identity when `stable_egress_ip=true`.
 
 Completed for alpha:
 
 - Release notes and user-facing docs explicitly describe the bootstrap path and
   state that no BetterNAT AMI is published in the current alpha.
+- Provider install plans default `associate_public_ip_address=true` for gateway
+  nodes, including stable EIP mode.
 
 Needed before production-preview:
 
-- Fix gateway-node self-egress for non-AMI stable-EIP HA without requiring a
-  paid NAT Gateway.
-- Re-run disposable AWS validation without manually attaching a temporary public
-  IP to standby nodes.
-- Confirm that both active and standby nodes can bootstrap, stay registered,
-  use SSM/control-plane APIs, and survive handover while only the intended
-  stable EIP is user-visible.
+- Re-run disposable AWS validation with the provider default public IPv4 change
+  and no manually attached temporary public IPs.
+- Decide whether production-preview requires stronger separation between
+  per-node management public IPv4 and the shared egress EIP. On AWS, associating
+  a shared EIP to an instance's primary private IP can replace that instance's
+  auto-assigned public IPv4; preserving both identities across handover likely
+  requires a secondary private IP or secondary ENI for the egress identity plus
+  LoxiLB SNAT to that address.
 
 Acceptance:
 
@@ -301,10 +306,13 @@ Completed in disposable AWS:
   - Terraform destroy completed with `16` resources destroyed
   - residual scan found only terminated EC2 records
 - [ ] Release-blocking follow-up from final alpha6 AWS validation:
-  - non-AMI stable-EIP HA bootstrap currently needs a corrected gateway
-    self-egress/control-plane connectivity design. The validation only completed
-    after manually attaching a temporary public IP to the standby node, and one
-    client sample observed that temporary IP during handover.
+  - rerun non-AMI stable-EIP HA bootstrap after provider default public IPv4 is
+    enabled for gateway nodes. The original validation only completed after
+    manually attaching a temporary public IP to the standby node, and one client
+    sample observed that temporary IP during handover.
+  - if stable mode must guarantee that the shared EIP never replaces a node's
+    management public IPv4, implement secondary private IP/ENI based egress
+    identity and configure LoxiLB SNAT to that private IP.
 
 ### 1. Full Go Test Suite
 
@@ -403,8 +411,9 @@ Current status:
 
 - P0 bootstrap acceptance passed in `bnat-p0-20260621044411`.
 - Final alpha6 validation found a new P0 production-preview blocker in the
-  non-AMI stable-EIP HA topology: standby and post-handover old-active gateway
-  nodes without public IP can lose bootstrap/control-plane egress.
+  non-AMI stable-EIP HA topology: gateway nodes without public IP can lose
+  bootstrap/control-plane egress. The provider now defaults gateway nodes to
+  auto-assigned public IPv4, but the AWS validation must be repeated.
 - Full HA timing matrix remains covered by earlier supplemental runs and should be repeated after AMI packaging or major HA changes.
 - The 2026-06-24 route-only/non-stable handover comparison is recorded in
   `docs/research/040-alpha-low-cost-soak-results.md`: `240` client samples, `0`
@@ -830,13 +839,14 @@ Still needed for the optional AMI path:
 - convert the temporary private AWS API reachability requirements into durable
   provider/user documentation before AMI publication.
 
-When `stable_egress_ip=true`, the provider-derived plan now sets
-`AssociatePublicIpAddress=false`. When `stable_egress_ip=false`, nodes may keep
-per-node public IPv4 addresses because failover is allowed to change the public
-source IP. The no-public-IP standby bootstrap/control-plane path has been
-validated with temporary VPC endpoints in the retained AWS test environment.
-The durable production path must cover DynamoDB, EC2, Auto Scaling, STS, SSM,
-EC2 Messages, SSM Messages, and CloudWatch where enabled.
+Provider-derived launch templates now default to
+`AssociatePublicIpAddress=true` so gateway nodes can bootstrap and keep
+management/control-plane reachability without a paid NAT Gateway. Historical
+no-public-IP validation with temporary VPC endpoints remains useful evidence for
+a future private-control-plane option, but it is no longer the default
+bootstrap-first path. If BetterNAT later supports no-public-IP gateway nodes,
+the durable path must cover DynamoDB, EC2, Auto Scaling, STS, SSM, EC2 Messages,
+SSM Messages, and CloudWatch where enabled.
 
 AWS no-public-IP validation on 2026-06-23:
 

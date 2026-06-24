@@ -39,16 +39,17 @@ User data should only provide runtime configuration:
 - start or restart `betternat-agent`,
 - avoid long package installs.
 
-AMI launches should not rely on per-node public IPv4 addresses when
-`stable_egress_ip=true`. The bootstrap-first path may use public subnet
-auto-assigned public IPs so new nodes can download packages and release
-artifacts. That is an accepted production-preview tradeoff for avoiding public
-AMI publication cost.
+AMI launches can avoid per-node public IPv4 addresses only if the environment
+provides another bootstrap and control-plane reachability path. The
+bootstrap-first path uses public subnet auto-assigned public IPv4 by default so
+new nodes can download packages, pull the LoxiLB image, fetch release artifacts,
+join SSM, and call AWS APIs.
 
-When `stable_egress_ip=true`, the provider-derived plan sets Launch Template
-`AssociatePublicIpAddress=false` so the shared EIP is the only public egress
-identity. When `stable_egress_ip=false`, nodes may keep per-node public IPv4
-addresses because failover is allowed to change the public source IP.
+When `stable_egress_ip=true`, the shared EIP is the intended private-workload
+egress identity. Gateway nodes may still have ordinary public IPv4 addresses for
+management. If production AMIs need strict separation between management public
+IPv4 and stable egress EIP, the shared EIP should attach to a secondary private
+IP or secondary ENI and the datapath should SNAT to that egress private IP.
 
 Before using no-public-IP standby nodes, the install environment must provide a
 bootstrap/control-plane reachability path. One possible shape is private AWS API

@@ -71,6 +71,23 @@ This is a production-preview blocker for the non-AMI stable-EIP HA path. It is
 not a blocker for describing the current release as an alpha technical preview
 with documented limitations.
 
+## Follow-Up Decision
+
+After this validation, the provider-derived install plan was changed so gateway
+nodes default to ordinary auto-assigned public IPv4 addresses. Those addresses
+are for bootstrap and management/control-plane reachability. The shared EIP in
+stable mode remains the intended private-workload egress identity.
+
+This should remove the standby bootstrap blocker and must be revalidated in AWS
+without manually attaching temporary public IPs.
+
+There is still a deeper AWS identity concern: associating a shared EIP to an
+instance's primary private IPv4 can replace that instance's auto-assigned public
+IPv4. If BetterNAT needs every gateway node to retain a separate management
+public IPv4 even while owning the shared egress EIP, the stable egress identity
+should move to a secondary private IP or secondary ENI, and LoxiLB should SNAT
+private workload traffic to that egress private IP.
+
 ## Handover Evidence
 
 With both gateway nodes healthy, active-to-standby handover succeeded:
@@ -123,10 +140,10 @@ Terminated instance records:
 
 Before production-preview:
 
-1. Fix gateway-node self-egress for non-AMI stable-EIP HA without requiring a
-   paid NAT Gateway.
-2. Re-run this validation without manually attaching temporary public IPs.
-3. Confirm both gateway nodes can bootstrap, remain registered, reach
+1. Re-run this validation with default gateway public IPv4 and without manually
+   attaching temporary public IPs.
+2. Confirm both gateway nodes can bootstrap, remain registered, reach
    control-plane APIs, and survive handover while only the stable EIP is
    user-visible.
-
+3. Decide whether to implement secondary private IP or secondary ENI based
+   shared-EIP ownership for strict management/egress public identity separation.

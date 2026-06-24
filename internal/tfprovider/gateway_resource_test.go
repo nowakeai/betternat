@@ -125,8 +125,8 @@ func TestDeriveGatewayState(t *testing.T) {
 	if !strings.Contains(derived.InstallPlanJSON.ValueString(), `"instance_type":"t3.small"`) {
 		t.Fatalf("missing instance type in install plan: %s", derived.InstallPlanJSON.ValueString())
 	}
-	if !strings.Contains(derived.InstallPlanJSON.ValueString(), `"associate_public_ip_address":false`) {
-		t.Fatalf("baked AMI path should not associate per-node public IPs: %s", derived.InstallPlanJSON.ValueString())
+	if !strings.Contains(derived.InstallPlanJSON.ValueString(), `"associate_public_ip_address":true`) {
+		t.Fatalf("gateway nodes should associate public IPs for bootstrap and management egress: %s", derived.InstallPlanJSON.ValueString())
 	}
 	if strings.Contains(derived.InstallPlanJSON.ValueString(), `"use_spot":true`) {
 		t.Fatalf("use_spot should be omitted when false: %s", derived.InstallPlanJSON.ValueString())
@@ -288,8 +288,8 @@ func TestDeriveGatewayStateBinaryURLs(t *testing.T) {
 	if !strings.Contains(derived.UserData.ValueString(), "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb") {
 		t.Fatalf("missing loxicmd checksum in user data: %s", derived.UserData.ValueString())
 	}
-	if !strings.Contains(derived.InstallPlanJSON.ValueString(), `"associate_public_ip_address":false`) {
-		t.Fatalf("stable EIP path should not associate per-node public IPs even with bootstrap downloads: %s", derived.InstallPlanJSON.ValueString())
+	if !strings.Contains(derived.InstallPlanJSON.ValueString(), `"associate_public_ip_address":true`) {
+		t.Fatalf("stable EIP path should still associate per-node public IPs for bootstrap and management egress: %s", derived.InstallPlanJSON.ValueString())
 	}
 }
 

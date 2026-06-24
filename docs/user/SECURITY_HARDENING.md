@@ -130,8 +130,10 @@ Production targets:
 
 - publish versioned AMIs,
 - bake BetterNAT binaries and LoxiLB into the AMI,
-- avoid per-node public IPv4 addresses by default; use the shared EIP for egress
-  identity and private AWS API reachability for standby control-plane access,
+- decide whether to keep per-node public IPv4 for simple management reachability
+  or move to private AWS API reachability. If strict separation is required,
+  bind the shared egress EIP to a secondary private IP or secondary ENI rather
+  than the primary management private IP,
 - attach SBOM and dependency inventory to releases,
 - sign release metadata or artifacts,
 - record third-party license notices inside the AMI,

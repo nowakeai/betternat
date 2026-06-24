@@ -59,7 +59,7 @@ It does not eliminate:
 
 - EC2 instance charges,
 - EBS charges,
-- EIP charges where applicable,
+- public IPv4 and EIP charges where applicable,
 - public internet data transfer charges,
 - DynamoDB charges,
 - CloudWatch, SSM, and logging charges.
@@ -92,6 +92,11 @@ The first alpha boot path depends on:
 - cloud-init execution.
 
 Boot-to-ready timing is not representative of a future prebuilt AMI.
+
+Gateway nodes use ordinary auto-assigned public IPv4 addresses by default for
+bootstrap and management/control-plane egress. In stable EIP mode, the shared
+EIP remains the intended private-workload egress identity; the per-node public
+IPv4 addresses are operational reachability, not fixed allowlist addresses.
 
 ## Tuning Semantics
 

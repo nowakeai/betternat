@@ -787,9 +787,11 @@ Reliability validation update on 2026-06-23:
 - Client egress probing during one manual handover recorded `240` samples with
   `0` failed samples.
 - The same probe observed `5` successful samples through non-shared gateway
-  public IPs during handover because this temporary environment still assigns
-  per-node public IPv4 addresses. Production AMI rollout must remove per-node
-  public IP assignment before claiming stable shared-EIP identity.
+  public IPs during handover because this temporary environment assigned
+  per-node public IPv4 addresses and the shared EIP was not isolated onto a
+  separate egress private IP. Future strict stable-identity work should use a
+  secondary private IP or secondary ENI for the shared EIP if per-node
+  management public IPv4 remains enabled.
 - Follow-up no-public-IP validation on 2026-06-23 used VPC endpoints for
   private AWS API reachability, refreshed the ASG to launch template version
   `16` with `AssociatePublicIpAddress=false`, and completed a manual handover

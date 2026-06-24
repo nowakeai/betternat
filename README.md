@@ -205,6 +205,11 @@ The active node owns:
 - the private route table default route,
 - the shared EIP when `stable_egress_ip=true`.
 
+Gateway nodes may also have ordinary public IPv4 addresses for bootstrap and
+management reachability. In stable EIP mode, the shared EIP is the intended
+public source IP for private-subnet egress; the per-node public IPv4 addresses
+are not stable allowlist identities.
+
 On failure, a standby node takes over by reconciling datapath state, claiming the EIP when configured, and replacing the private route target.
 
 When `stable_egress_ip=false`, takeover skips shared-EIP reassociation and can

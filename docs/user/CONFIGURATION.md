@@ -62,6 +62,13 @@ the provider is registered in the OpenTofu Registry.
 
 Launch templates created by the provider require IMDSv2 and set the metadata hop limit to `1`.
 
+Gateway nodes launch in the configured public subnets with auto-assigned public
+IPv4 enabled by default. That per-node public IPv4 is for bootstrap and
+management/control-plane reachability: package repositories, Docker image pull,
+GitHub release artifacts, SSM, and AWS APIs. It is separate from
+`stable_egress_ip`, which controls whether BetterNAT also manages a shared EIP
+as the public identity for private-subnet egress.
+
 ### Capacity
 
 | Name | Default | Description |
@@ -86,7 +93,7 @@ LoxiLB has its own eBPF conntrack state. Linux `nf_conntrack_max` is not the pri
 
 | Name | Default | Description |
 | --- | --- | --- |
-| `stable_egress_ip` | `true` | If true, BetterNAT manages a shared EIP so new flows converge back to the same public IP after failover. If false, the public source IP changes to the active instance's public IP after failover. |
+| `stable_egress_ip` | `true` | If true, BetterNAT manages a shared EIP so new private-subnet egress flows converge back to the same public IP after failover. Gateway nodes may still have ordinary per-node public IPv4 addresses for bootstrap and management. If false, BetterNAT skips the shared EIP and the public source IP changes to the active instance's public IP after failover. |
 
 ### HA Timing
 

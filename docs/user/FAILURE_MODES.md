@@ -30,11 +30,11 @@ When failover happens:
 In the current alpha handover path, route and EIP ownership are both verified
 after mutation, but AWS control-plane convergence is not perfectly atomic.
 Validation on 2026-06-23 and 2026-06-24 showed two different behavior profiles:
-stable EIP mode preserved the shared public IP after per-node public IPv4 was
-disabled, but had a short timeout window during handover; non-stable mode changed
-public source IP as expected and completed the visible route-only switch in
-about 435 ms at the client probe's sampling granularity. Treat these as
-environment-specific measurements, not SLAs.
+stable EIP mode can preserve the shared public IP after convergence but has a
+longer control-plane path during handover; non-stable mode changed public source
+IP as expected and completed the visible route-only switch in about 435 ms at
+the client probe's sampling granularity. Treat these as environment-specific
+measurements, not SLAs.
 
 ## Summary Table
 
@@ -251,7 +251,10 @@ Validation note:
   source IP switch from `52.24.117.43` to `52.24.240.255` within about `435 ms`
   between the last old-IP sample and first new-IP sample.
 - the comparable stable/no-public-IP handover preserved the shared EIP with `0`
-  non-shared public IP samples, but recorded `3` one-second client timeouts.
+  non-shared public IP samples, but recorded `3` one-second client timeouts. The
+  current bootstrap-first default keeps per-node public IPv4 enabled for gateway
+  management; strict management/egress identity separation needs a secondary
+  egress private IP or equivalent design.
 
 ## ASG Replacement Failure
 
