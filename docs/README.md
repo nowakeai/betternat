@@ -61,6 +61,7 @@ These are executable plans and runbooks, not product docs.
 - [testing/AWS_TEST_PLAN.md](testing/AWS_TEST_PLAN.md) — AWS integration test plan for route replacement, EIP failover, DynamoDB lease, LoxiLB on EC2, public egress, rollback, and cleanup.
 - [testing/AWS_SUPPLEMENTAL_TEST_PLAN.md](testing/AWS_SUPPLEMENTAL_TEST_PLAN.md) — Low-cost supplemental AWS tests and deferred expensive work.
 - [testing/AWS_SUPPLEMENTAL_RUNBOOK.md](testing/AWS_SUPPLEMENTAL_RUNBOOK.md) — Execution checklist for the low-cost AWS supplemental test pass.
+- [testing/LOW_COST_SOAK_RUNBOOK.md](testing/LOW_COST_SOAK_RUNBOOK.md) — Low-cost soak runbook with periodic egress probes, agent restarts, LoxiLB restart checks, and handover evidence collection.
 
 ## Development
 

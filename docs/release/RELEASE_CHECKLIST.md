@@ -644,6 +644,11 @@ Provider Registry validation recorded on 2026-06-22:
   - [ ] Live LoxiLB restart validation remains environment-dependent because
     local OrbStack LoxiLB API/eBPF startup is not reliable in the current VM.
 - [ ] Run a low-cost soak test with periodic egress probes and agent restarts.
+  - [x] Reusable egress probe monitor added:
+    `scripts/egress-probe-monitor.sh`.
+  - [x] Low-cost soak runbook added:
+    `docs/testing/LOW_COST_SOAK_RUNBOOK.md`.
+  - [ ] Actual AWS soak execution remains pending.
 - [x] Document transient public-IP leakage conditions in non-stable and stable modes, or fix them if observed.
 
 Reliability validation update on 2026-06-23:
