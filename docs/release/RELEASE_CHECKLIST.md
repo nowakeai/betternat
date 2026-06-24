@@ -20,6 +20,7 @@ This document complements:
 - `docs/research/035-p0-open-source-release-acceptance-results.md`
 - `docs/research/037-v0.1.0-alpha-aws-release-candidate-results.md`
 - `docs/research/032-failover-stability-industry-patterns.md`
+- `docs/research/042-provider-alpha7-clean-aws-validation.md`
 
 ## Release Levels
 
@@ -262,6 +263,8 @@ Optional AMI acceleration path:
   IPv4; the default `cloud_init` path keeps per-node public IPv4 for bootstrap.
 - [x] Provider exposes `associate_public_ip_address` as an advanced manual
   override for the derived launch-template public IPv4 behavior.
+- [x] Default `cloud_init` stable-EIP HA path was revalidated with provider
+  `0.1.0-alpha.7` and without manually attached temporary public IPs.
 - [ ] AMI names include version, date, arch, and base OS if public AMIs are
   ever published.
 - [ ] arm64 and x86_64 AMIs are published only if the project accepts ongoing
@@ -276,6 +279,7 @@ Evidence:
 - `internal/bootstrap/bootstrap.go`
 - `internal/bootstrap/bootstrap_test.go`
 - `docs/release/AMI_RELEASE_PLAN.md`
+- `docs/research/042-provider-alpha7-clean-aws-validation.md`
 - P0 AWS bootstrap acceptance result
 
 ### 6. AWS Acceptance Tests
@@ -315,6 +319,24 @@ Already proven by low-cost supplemental runs:
   client probe sampling granularity. This is materially faster than the stable
   shared-EIP path because it skips EIP reassociation and public-identity
   verification, but the public source IP changes by design.
+- 2026-06-24 provider alpha7 clean validation:
+  - provider `0.1.0-alpha.7` installed from Terraform Registry with no local
+    override,
+  - runtime `v0.1.0-alpha.2` derived by `betternat_version`,
+  - Terraform apply created `16` resources,
+  - both gateway nodes bootstrapped and reached SSM `Online` without manually
+    attaching a temporary EIP,
+  - private client baseline egress returned stable EIP `44.227.137.203` for
+    `10` of `10` samples,
+  - manual proactive handover completed from `i-06057b9370299c4ad` to
+    `i-07e05fdc9ce5e2d19`,
+  - post-handover route, lease, EIP ownership, status, and `doctor --live`
+    converged,
+  - client probe during handover recorded `238` samples: `236` ok, `1` curl
+    timeout, and `2` transient samples from the standby node's ordinary public
+    IPv4 before returning to the stable EIP,
+  - Terraform destroy completed with `16` resources destroyed,
+  - residual scan found only terminated EC2 records.
 
 Must repeat before alpha if release artifacts differ from the tested build:
 
@@ -329,6 +351,7 @@ Evidence:
 - `docs/research/035-p0-open-source-release-acceptance-results.md`
 - `docs/research/037-v0.1.0-alpha-aws-release-candidate-results.md`
 - `docs/research/040-alpha-low-cost-soak-results.md`
+- `docs/research/042-provider-alpha7-clean-aws-validation.md`
 - fresh AWS run logs under ignored `tmp/aws-alpha-results/`
 - Terraform apply/destroy output
 - AWS residual scan output
@@ -347,8 +370,9 @@ GOCACHE=$PWD/tmp/go-build-cache go test ./...
 git diff --check
 ```
 
-- [x] Terraform examples validate with provider `0.1.0-alpha.6` installed from
-  the provider GitHub release as a filesystem mirror.
+- [x] Terraform examples validate with provider `0.1.0-alpha.7` installed from
+  Terraform Registry during final clean validation. Older alpha filesystem
+  mirror validation remains historical fallback evidence.
 - [x] LocalStack expectations are documented, including current ASG limitation.
 
 Evidence:

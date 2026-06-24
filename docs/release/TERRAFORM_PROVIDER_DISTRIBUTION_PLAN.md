@@ -53,7 +53,7 @@ terraform {
   required_providers {
     betternat = {
       source  = "nowakeai/betternat"
-      version = "= 0.1.0-alpha.6"
+      version = "= 0.1.0-alpha.7"
     }
   }
 }
@@ -66,9 +66,11 @@ This controls:
 - state migration behavior,
 - Terraform/OpenTofu plugin protocol implementation.
 
-For the current alpha, provider `0.1.0-alpha.6` is available through the
+For the current alpha, provider `0.1.0-alpha.7` is available through the
 Terraform Registry. The GitHub release filesystem mirror remains a fallback for
-temporary Registry availability issues.
+temporary Registry availability issues. OpenTofu Registry propagation can lag
+Terraform Registry propagation and should be checked separately during release
+validation.
 
 ### BetterNAT Runtime Version
 
@@ -124,6 +126,7 @@ install through its built-in artifact manifest.
 | Provider version | Supported `betternat_version` values | Runtime artifact source | Notes |
 | --- | --- | --- | --- |
 | `0.1.0-alpha.6` | `v0.1.0-alpha.2` | GitHub Release assets, Linux `arm64` and `amd64` | First provider with built-in runtime artifact URL/checksum derivation. |
+| `0.1.0-alpha.7` | `v0.1.0-alpha.2` | GitHub Release assets, Linux `arm64` and `amd64` | Adds bootstrap mode and gateway public IPv4 association controls while keeping runtime compatibility. |
 
 Rules:
 
@@ -454,10 +457,24 @@ amd64 zip. At publication time, Terraform Registry had not yet ingested
 `0.1.0-alpha.6` with overview and gateway docs, and Terraform `v1.14.7`
 installed the provider directly from Registry with the self-signed release key.
 
-The public examples and Quick Start now use provider `0.1.0-alpha.6` through the
-Terraform Registry by default. The release zip filesystem mirror path remains
-documented as a fallback. Registry install and `terraform validate` passed for a
-temporary smoke configuration and for `examples/terraform`.
+At the time, public examples and Quick Start used provider `0.1.0-alpha.6`
+through the Terraform Registry by default, with the release zip filesystem
+mirror path documented as a fallback. Registry install and `terraform validate`
+passed for a temporary smoke configuration and for `examples/terraform`.
+
+Provider `0.1.0-alpha.7` was published to GitHub on 2026-06-24 to add
+`bootstrap_mode` and `associate_public_ip_address` controls. GitHub release
+artifact checksum verification passed. After a manual Terraform Registry
+resync, Terraform `v1.14.7` installed `0.1.0-alpha.7` directly from Registry
+and `terraform validate` passed. A clean AWS validation run then deployed
+provider `0.1.0-alpha.7` from Terraform Registry with no local override,
+completed bootstrap, proactive handover, destroy, and a clean residual scan.
+OpenTofu Registry still reported `0.1.0-alpha.6` during that validation window,
+so OpenTofu sync verification remains pending.
+
+The public examples and Quick Start should use provider `0.1.0-alpha.7` through
+the Terraform Registry by default. The release zip filesystem mirror path
+remains documented as a fallback.
 
 Important OpenTofu source-address note:
 

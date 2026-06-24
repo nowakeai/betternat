@@ -169,6 +169,11 @@ Current:
   nodes default to auto-assigned public IPv4 for bootstrap and management
   reachability. The shared EIP remains the stable private-workload egress
   identity when `stable_egress_ip=true`.
+- Final provider alpha7 AWS validation confirmed the default `cloud_init`
+  stable-EIP path works without manually attaching temporary public IPs:
+  standby bootstrapped, both nodes reached SSM `Online`, proactive handover
+  completed, route/lease/EIP ownership converged, and Terraform destroy plus
+  residual scan were clean.
 
 Completed for alpha:
 
@@ -176,17 +181,17 @@ Completed for alpha:
   state that no BetterNAT AMI is published in the current alpha.
 - Provider install plans default `associate_public_ip_address=true` for gateway
   nodes, including stable EIP mode.
+- Disposable AWS validation with the provider default public IPv4 change passed
+  in run `bnat-ga-clean-20260624123001`.
 
-Needed before production-preview:
+Needed before GA:
 
-- Re-run disposable AWS validation with the provider default public IPv4 change
-  and no manually attached temporary public IPs.
-- Decide whether production-preview requires stronger separation between
-  per-node management public IPv4 and the shared egress EIP. On AWS, associating
-  a shared EIP to an instance's primary private IP can replace that instance's
-  auto-assigned public IPv4; preserving both identities across handover likely
-  requires a secondary private IP or secondary ENI for the egress identity plus
-  LoxiLB SNAT to that address.
+- Decide whether GA requires strict stable public identity preservation during
+  handover. Provider alpha7 validation recorded `1` curl timeout and `2`
+  transient samples from the standby node's ordinary public IPv4 before traffic
+  returned to the stable EIP. If the GA contract requires every successful
+  sample to return only the shared EIP, implement a secondary private IP or
+  secondary ENI egress identity and configure LoxiLB SNAT to that private IP.
 
 Acceptance:
 
@@ -305,13 +310,28 @@ Completed in disposable AWS:
     workaround, with `0` failed client curl samples over `90` seconds
   - Terraform destroy completed with `16` resources destroyed
   - residual scan found only terminated EC2 records
-- [ ] Release-blocking follow-up from final alpha6 AWS validation:
-  - rerun non-AMI stable-EIP HA bootstrap after provider default public IPv4 is
-    enabled for gateway nodes. The original validation only completed after
-    manually attaching a temporary public IP to the standby node, and one client
-    sample observed that temporary IP during handover.
-  - if stable mode must guarantee that the shared EIP never replaces a node's
-    management public IPv4, implement secondary private IP/ENI based egress
+- [x] Final provider alpha7 Registry validation in disposable AWS:
+  - run id `bnat-ga-clean-20260624123001`
+  - provider `0.1.0-alpha.7` installed from Terraform Registry with no local
+    override
+  - runtime `v0.1.0-alpha.2` derived by `betternat_version`
+  - Terraform apply created `16` resources
+  - both gateway nodes bootstrapped and reached SSM `Online` without manually
+    attaching a temporary EIP
+  - private client baseline egress returned stable EIP `44.227.137.203` for
+    `10` of `10` samples
+  - manual proactive handover completed from `i-06057b9370299c4ad` to
+    `i-07e05fdc9ce5e2d19`
+  - post-handover route, lease, EIP ownership, status, and `doctor --live`
+    converged
+  - client probe during handover recorded `238` samples: `236` ok, `1` curl
+    timeout, and `2` transient samples from the standby node's ordinary public
+    IPv4 before returning to the stable EIP
+  - Terraform destroy completed with `16` resources destroyed
+  - residual scan found only terminated EC2 records
+- [ ] GA stable-identity decision:
+  - if stable mode must guarantee that every successful handover sample returns
+    only the shared EIP, implement secondary private IP/ENI based egress
     identity and configure LoxiLB SNAT to that private IP.
 
 ### 1. Full Go Test Suite
@@ -410,10 +430,16 @@ Acceptance:
 Current status:
 
 - P0 bootstrap acceptance passed in `bnat-p0-20260621044411`.
-- Final alpha6 validation found a new P0 production-preview blocker in the
+- Final alpha6 validation found a P0 production-preview blocker in the
   non-AMI stable-EIP HA topology: gateway nodes without public IP can lose
-  bootstrap/control-plane egress. The provider now defaults gateway nodes to
-  auto-assigned public IPv4, but the AWS validation must be repeated.
+  bootstrap/control-plane egress. Final provider alpha7 validation resolved
+  that blocker by defaulting gateway nodes to auto-assigned public IPv4 for the
+  `cloud_init` path and revalidating a clean two-node bootstrap and handover
+  without a manually attached temporary EIP.
+- Provider alpha7 validation still recorded `1` curl timeout and `2` transient
+  ordinary-public-IPv4 samples during stable-EIP proactive handover. Treat this
+  as a GA hardening decision about strict public identity preservation, not as a
+  remaining bootstrap blocker.
 - Full HA timing matrix remains covered by earlier supplemental runs and should be repeated after AMI packaging or major HA changes.
 - The 2026-06-24 route-only/non-stable handover comparison is recorded in
   `docs/research/040-alpha-low-cost-soak-results.md`: `240` client samples, `0`
