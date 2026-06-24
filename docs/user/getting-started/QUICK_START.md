@@ -10,12 +10,16 @@ Use this first. Do not start by replacing a production NAT Gateway.
 
 ## Scope
 
-This guide is for `v0.1.0-alpha.6`.
+This guide is for the current public alpha Terraform install path: provider
+`0.1.0-alpha.8` with BetterNAT runtime `v0.1.0-alpha.6`.
 
 Important:
 
 - BetterNAT does not publish a BetterNAT AMI in the current alpha.
 - Terraform launches an explicit Linux AMI and uses cloud-init to install release artifacts at boot.
+- Runtime `v0.1.0-alpha.8` exists for GA hardening validation, but this quick
+  start uses `v0.1.0-alpha.6` because that is the runtime in the provider's
+  built-in artifact manifest.
 - The example uses one AZ.
 - The example uses small EC2 instances and tiny HTTP probes.
 - It does not run expensive multi-TB traffic tests.
@@ -226,7 +230,8 @@ Use SSM to run on the active gateway node:
 betternat version
 betternat-agent --version
 systemctl is-active betternat-agent.service
-betternat doctor --live --config /etc/betternat/agent.json
+betternat status
+betternat doctor --live
 ```
 
 From the private test client, verify public egress:

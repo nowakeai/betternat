@@ -34,13 +34,13 @@ For each HA group, verify:
 Current CLI commands:
 
 ```sh
-betternat status --config /etc/betternat/agent.json
+betternat status
 betternat status --watch --interval 2s
-betternat doctor --config /etc/betternat/agent.json
-betternat doctor --live --config /etc/betternat/agent.json
-betternat failover status --config /etc/betternat/agent.json
-betternat datapath status --config /etc/betternat/agent.json
-betternat datapath ready --config /etc/betternat/agent.json
+betternat doctor
+betternat doctor --live
+betternat failover status
+betternat datapath status
+betternat datapath ready
 betternat handover current
 betternat handover history --limit 20
 betternat handover inspect <request-id>
@@ -66,6 +66,8 @@ Current behavior:
 Important:
 
 - Run datapath commands on the gateway node, usually through SSM Session Manager.
+- Gateway-local commands read `/etc/betternat/agent.json` by default. Use
+  `--config <path>` only for debugging a non-default config.
 - The CLI does not currently connect to a central BetterNAT API.
 - The CLI now has a live doctor path for AWS IAM/DynamoDB/route/EIP/datapath/Prometheus checks, but it is still node-local. Fleet-level visibility comes from the coordination registry and per-agent metrics.
 
@@ -256,11 +258,11 @@ Useful commands on the gateway node:
 ```sh
 sudo systemctl status betternat-agent.service
 sudo journalctl -u betternat-agent.service -n 200 --no-pager
-sudo betternat status --config /etc/betternat/agent.json
-sudo betternat doctor --config /etc/betternat/agent.json
-sudo betternat doctor --live --config /etc/betternat/agent.json
-sudo betternat datapath ready --config /etc/betternat/agent.json
-sudo betternat support bundle --config /etc/betternat/agent.json
+sudo betternat status
+sudo betternat doctor
+sudo betternat doctor --live
+sudo betternat datapath ready
+sudo betternat support bundle
 curl -fsS http://127.0.0.1:9108/metrics | head
 loxicmd get firewall -o json
 loxicmd get conntrack -o json

@@ -4,7 +4,16 @@ Date: 2026-06-21
 
 ## Alpha Quality
 
-`v0.1.0-alpha.2` is for technical evaluation in disposable or non-critical AWS environments.
+The current public alpha install path is for technical evaluation in disposable
+or non-critical AWS environments.
+
+Recommended public alpha install path:
+
+- Terraform provider: `0.1.0-alpha.8`
+- BetterNAT runtime through `betternat_version`: `v0.1.0-alpha.6`
+
+Runtime `v0.1.0-alpha.8` has targeted ASG lifecycle validation through explicit
+artifact overrides, but it is not the normal quick-start runtime yet.
 
 It is not a drop-in AWS NAT Gateway SLA replacement.
 

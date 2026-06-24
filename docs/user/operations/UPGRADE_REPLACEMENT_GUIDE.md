@@ -153,8 +153,8 @@ terraform output standby_instance_ids
 Then check metrics or node-local diagnostics:
 
 ```sh
-sudo betternat doctor --live --config /etc/betternat/agent.json
-sudo betternat datapath ready --config /etc/betternat/agent.json
+sudo betternat doctor --live
+sudo betternat datapath ready
 ```
 
 ## Provider-Owned Infrastructure Reconciliation
@@ -253,8 +253,8 @@ curl -fsS https://checkip.amazonaws.com
 On the active node:
 
 ```sh
-sudo betternat doctor --live --config /etc/betternat/agent.json
-sudo betternat datapath ready --config /etc/betternat/agent.json
+sudo betternat doctor --live
+sudo betternat datapath ready
 ```
 
 ### Option B: Blue/Green Gateway Replacement

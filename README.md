@@ -2,11 +2,14 @@
 
 Self-owned, observable, highly available egress for high-volume AWS private subnet workloads.
 
-**Alpha technical preview.** Start with the [documentation index](docs/README.md), then follow the [Quick Start](docs/user/getting-started/QUICK_START.md), [Cost Model](docs/user/reference/COST_MODEL.md), [Operations Guide](docs/user/operations/OPERATIONS_GUIDE.md), and [Limitations](docs/user/reference/LIMITATIONS.md).
+**Alpha technical preview.** If you are evaluating BetterNAT as a NAT Gateway
+replacement, start with the [Cost Model](docs/user/reference/COST_MODEL.md),
+then read [Limitations](docs/user/reference/LIMITATIONS.md), run the
+[Quick Start](docs/user/getting-started/QUICK_START.md) in a disposable VPC, and
+use the [Operations Guide](docs/user/operations/OPERATIONS_GUIDE.md) for day-2
+checks.
 
 BetterNAT targets the NAT Gateway bill line that hurts at scale: per-GB data processing. It is built for crawler fleets, blockchain/RPC nodes syncing from public peers, Kubernetes nodes pulling large public images, and other private workloads that download tens of TB per month from the public internet.
-
-Better not be surprised by NAT Gateway bills.
 
 ## Why BetterNAT
 
@@ -58,8 +61,13 @@ terraform {
 ```
 
 Provider versions and BetterNAT runtime artifact versions are separate. The
-current alpha provider is `0.1.0-alpha.8`; the current runtime release assets
-referenced by the quick start are `v0.1.0-alpha.6`.
+current alpha provider is `0.1.0-alpha.8`; the recommended runtime artifacts
+for the public quick start are `v0.1.0-alpha.6`.
+
+Runtime `v0.1.0-alpha.8` exists for GA hardening validation, but the normal
+Terraform alpha install path should keep using `betternat_version =
+"v0.1.0-alpha.6"` until a later provider release intentionally updates the
+built-in artifact manifest.
 
 Terraform Registry install is the default path. If Registry availability is
 temporarily delayed, install the provider from the GitHub release as a
@@ -139,7 +147,7 @@ export BETTERNAT_VERSION="v0.1.0-alpha.6"
 Then follow:
 
 - [Quick Start](docs/user/getting-started/QUICK_START.md) for release artifact setup, disposable VPC apply, verification, and destroy.
-- [Existing VPC Install](docs/user/getting-started/EXISTING_VPC_INSTALL.md) when you are ready to test against real route tables.
+- [Existing VPC Install](docs/user/getting-started/EXISTING_VPC_INSTALL.md) only after the disposable run, when you are ready to test against real route tables.
 - [Configuration](docs/user/getting-started/CONFIGURATION.md) for all `betternat_gateway` fields.
 
 BetterNAT uses LoxiLB as the local datapath inside each node; see the [LoxiLB overview](https://github.com/loxilb-io/loxilb/assets/75648333/87da0183-1a65-493f-b6fe-5bc738ba5468) and [standalone mode docs](https://github.com/loxilb-io/loxilbdocs/blob/main/docs/standalone.md).
@@ -149,7 +157,8 @@ BetterNAT uses LoxiLB as the local datapath inside each node; see the [LoxiLB ov
 Run on a gateway node through SSM:
 
 ```sh
-betternat doctor --live --config /etc/betternat/agent.json
+betternat status
+betternat doctor --live
 ```
 
 Check public egress from a private client:
@@ -230,8 +239,8 @@ Architecture docs:
 
 ## Alpha Status
 
-`v0.1.0-alpha.6` is an early technical preview runtime used with provider
-`0.1.0-alpha.8`.
+The recommended public alpha install path uses provider `0.1.0-alpha.8` with
+runtime `v0.1.0-alpha.6`.
 
 Current scope:
 

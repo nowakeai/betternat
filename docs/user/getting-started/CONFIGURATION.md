@@ -154,5 +154,5 @@ systemctl restart betternat-agent.service
 Then verify:
 
 ```sh
-betternat doctor --live --config /etc/betternat/agent.json
+betternat doctor --live
 ```

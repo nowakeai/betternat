@@ -4,7 +4,8 @@ Date: 2026-06-24
 
 ## Purpose
 
-This document describes the AWS IAM permissions needed by BetterNAT `v0.1.0-alpha.2`.
+This document describes the AWS IAM permissions needed by the current BetterNAT
+alpha install path.
 
 There are two IAM surfaces:
 
@@ -119,7 +120,7 @@ Review status on 2026-06-24:
 Run on a gateway node:
 
 ```sh
-betternat doctor --live --config /etc/betternat/agent.json
+betternat doctor --live
 ```
 
 If a required permission is denied:

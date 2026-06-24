@@ -53,12 +53,12 @@ terraform output egress_public_ips
 Run CLI diagnostics on a gateway node, usually through SSM Session Manager:
 
 ```sh
-sudo betternat status --config /etc/betternat/agent.json
-sudo betternat doctor --config /etc/betternat/agent.json
-sudo betternat doctor --live --config /etc/betternat/agent.json
-sudo betternat failover status --config /etc/betternat/agent.json
-sudo betternat datapath status --config /etc/betternat/agent.json
-sudo betternat datapath ready --config /etc/betternat/agent.json
+sudo betternat status
+sudo betternat doctor
+sudo betternat doctor --live
+sudo betternat failover status
+sudo betternat datapath status
+sudo betternat datapath ready
 ```
 
 Use `doctor` for static configuration checks. Use `doctor --live` when you want local datapath, IAM, lease, route, EIP, Prometheus, and egress-probe checks from the node's point of view. Use `status` for registry-backed fleet visibility across active and standby nodes.
@@ -354,7 +354,7 @@ Check:
 
 Check:
 
-1. `sudo betternat datapath ready --config /etc/betternat/agent.json`.
+1. `sudo betternat datapath ready`.
 2. `loxicmd get firewall -o json`.
 3. `loxicmd get conntrack -o json`.
 4. Agent logs around LoxiLB reconciliation.

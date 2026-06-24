@@ -28,18 +28,18 @@ These are meant to be readable by external users.
 Read them in this order for the first full pass:
 
 - [user/README.md](user/README.md) — User documentation index by task.
-- [user/getting-started/QUICK_START.md](user/getting-started/QUICK_START.md) — First alpha quick start.
-- [user/getting-started/EXISTING_VPC_INSTALL.md](user/getting-started/EXISTING_VPC_INSTALL.md) — Existing-VPC install and route ownership warnings.
 - [user/reference/COST_MODEL.md](user/reference/COST_MODEL.md) — NAT Gateway processing-fee model, BetterNAT cost formula, example savings, endpoint guidance, and CLI estimate usage.
+- [user/reference/LIMITATIONS.md](user/reference/LIMITATIONS.md) — Alpha limitations: SLA, failover, cost, performance, bootstrap, and tuning.
+- [user/getting-started/QUICK_START.md](user/getting-started/QUICK_START.md) — First alpha quick start.
+- [user/operations/OPERATIONS_GUIDE.md](user/operations/OPERATIONS_GUIDE.md) — Day-2 operations: CLI, metrics, alerts, AWS checks, SSM access, troubleshooting, and cleanup.
+- [user/getting-started/EXISTING_VPC_INSTALL.md](user/getting-started/EXISTING_VPC_INSTALL.md) — Existing-VPC install and route ownership warnings.
 - [user/getting-started/CONFIGURATION.md](user/getting-started/CONFIGURATION.md) — `betternat_gateway` Terraform input reference and runtime configuration notes.
 - [user/reference/IAM_POLICY.md](user/reference/IAM_POLICY.md) — Terraform execution and gateway runtime IAM requirements.
 - [user/reference/SECURITY_HARDENING.md](user/reference/SECURITY_HARDENING.md) — Current alpha security posture, IAM/network/bootstrap hardening, artifact integrity, and production checklist.
-- [user/operations/OPERATIONS_GUIDE.md](user/operations/OPERATIONS_GUIDE.md) — Day-2 operations: CLI, metrics, alerts, AWS checks, SSM access, troubleshooting, and cleanup.
 - [user/operations/OBSERVABILITY_GUIDE.md](user/operations/OBSERVABILITY_GUIDE.md) — Prometheus metrics, CLI checks, AWS cross-checks, alerts, attribution scope, and current observability limits.
 - [user/operations/ROLLBACK_GUIDE.md](user/operations/ROLLBACK_GUIDE.md) — Safe destroy, private route restoration, manual rollback, and residual-resource checks.
 - [user/operations/UPGRADE_REPLACEMENT_GUIDE.md](user/operations/UPGRADE_REPLACEMENT_GUIDE.md) — In-place capacity updates, explicit replacement, blue/green upgrade workflow, and alpha rolling-upgrade limits.
 - [user/operations/FAILURE_MODES.md](user/operations/FAILURE_MODES.md) — Failure-mode behavior and limitations.
-- [user/reference/LIMITATIONS.md](user/reference/LIMITATIONS.md) — Alpha limitations: SLA, failover, cost, performance, bootstrap, and tuning.
 - [user/releases/README.md](user/releases/README.md) — Release notes index and release-note rules.
 - [user/releases/v0.1/v0.1.0-alpha.8.md](user/releases/v0.1/v0.1.0-alpha.8.md) — Current runtime alpha release notes and validation caveats.
 - [user/releases/v0.1/v0.1.0-alpha.7.md](user/releases/v0.1/v0.1.0-alpha.7.md) — Provider-module support release notes for split provider alpha8.
