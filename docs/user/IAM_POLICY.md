@@ -1,6 +1,6 @@
 # BetterNAT IAM Policy
 
-Date: 2026-06-23
+Date: 2026-06-24
 
 ## Purpose
 
@@ -94,7 +94,7 @@ Before production:
 - narrow DynamoDB permissions to the coordination table and any legacy lease table still used by an old alpha environment,
 - decide whether `iam:SimulatePrincipalPolicy` remains enabled by default or becomes an optional diagnostics permission.
 
-Review status on 2026-06-23:
+Review status on 2026-06-24:
 
 - Runtime fleet status no longer requires `autoscaling:DescribeAutoScalingGroups`
   or `ec2:DescribeInstances`; agents self-register through DynamoDB and the CLI
@@ -108,6 +108,11 @@ Review status on 2026-06-23:
   stricter runtime role is required.
 - The policy is acceptable for alpha, but production should still scope route
   and EIP actions to the exact managed route tables and allocation IDs.
+- GA IAM review is recorded in
+  `docs/research/043-ga-iam-security-review.md`. No immediate blocker was found
+  for the current Terraform Registry plus `cloud_init` production-preview path,
+  but the final GA policy should replace the current inline `Resource="*"`
+  runtime statement with scoped statements where AWS supports clean scoping.
 
 ## Diagnostic Behavior
 

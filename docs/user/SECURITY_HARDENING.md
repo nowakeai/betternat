@@ -1,6 +1,6 @@
 # BetterNAT Security And Supply Chain Guide
 
-Date: 2026-06-22
+Date: 2026-06-24
 
 ## Purpose
 
@@ -115,6 +115,10 @@ Current gaps:
   addresses for package and artifact downloads. `prebaked_ami` stable EIP
   deployments avoid those first-boot downloads and disable per-node
   auto-assigned public IPv4.
+- gateway security group ingress from configured private CIDRs also makes
+  unauthenticated metrics port `9108` and bearer-token-protected peer API port
+  `9109` reachable from those CIDRs unless operators add narrower monitoring
+  and peer-control network boundaries.
 
 Recommended alpha usage:
 
@@ -140,6 +144,11 @@ Production targets:
 - sign release metadata or artifacts,
 - record third-party license notices inside the AMI,
 - document AMI refresh and security patch policy.
+- split datapath forwarding ingress from metrics and peer-control access where
+  topology allows it.
+
+The GA IAM and security posture review is recorded in
+`docs/research/043-ga-iam-security-review.md`.
 
 ## systemd Hardening
 

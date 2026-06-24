@@ -400,7 +400,7 @@ rg -n "X-Amz|AWSAccessKeyId|BEGIN (RSA|OPENSSH|EC|PRIVATE) KEY|BETTERNAT_AGENT_B
 
 Production requirement:
 
-- [ ] least-privilege IAM reviewed.
+- [x] least-privilege IAM reviewed.
 - [x] AMI supply-chain story documented.
 - [x] systemd hardening reviewed.
 - [ ] public release artifacts are signed or otherwise supply-chain hardened beyond checksums.
@@ -409,6 +409,7 @@ Evidence:
 
 - `docs/research/013-security-model.md`
 - `docs/user/SECURITY_HARDENING.md`
+- `docs/research/043-ga-iam-security-review.md`
 - `docs/spec-v0.md`
 - release artifact checksums
 
@@ -445,19 +446,22 @@ Alpha minimum:
 
 Production requirement:
 
-- [ ] Legal review completed for third-party licenses.
-- [ ] Trademark review completed for BetterNAT, LoxiLB, AWS, Terraform, Prometheus, Grafana, and any cloud/provider names used in public copy.
-- [ ] Product name, logo, domain, and package names are approved.
-- [ ] Any use of "powered by", "integrates with", or similar third-party wording is approved.
+- [x] Engineering legal/trademark wording review completed for third-party licenses and public docs.
+- [x] Engineering trademark wording review completed for BetterNAT, LoxiLB, AWS, Terraform, OpenTofu, Prometheus, Grafana, and cloud/provider names used in public copy.
+- [ ] Formal legal counsel review completed before paid distribution, marketplace publication, public AMIs, or co-marketing.
+- [ ] Product name, logo, domain, and package names are formally approved before major brand investment.
+- [x] Current docs avoid "powered by", "certified", "official partner", and similar third-party endorsement wording.
 - [x] Open-source license for BetterNAT itself is chosen and documented.
 - [x] Vulnerability and dependency disclosure process is documented.
 
 Evidence:
 
 - `THIRD_PARTY_NOTICES.md`
+- `docs/research/044-ga-legal-trademark-review.md`
 - AMI file listing or Packer/EC2 Image Builder manifest
 - release manifest with third-party versions and checksums
-- legal review record before production release
+- formal legal review record before paid distribution, marketplace publication,
+  public AMIs, or co-marketing
 
 ### 10. Observability
 
@@ -625,6 +629,8 @@ Do not mark BetterNAT production-ready until alpha checklist is complete plus:
 - [x] transient non-EIP leakage in stable mode is fixed or documented with clear conditions.
 - [x] provider release process is documented.
 - [x] release artifacts have checksums.
+- [x] release artifact governance review is complete for checksums, release
+  notes, compatibility matrix, SemVer policy, and signing decision.
 - [x] published docs include limitations and SLO language.
 
 Production-preview follow-up evidence and hardening, not release blockers:
@@ -639,6 +645,12 @@ Production-preview follow-up evidence and hardening, not release blockers:
 - [ ] IAM least-privilege policy is reviewed again after provider/bootstrap UX
   changes.
 - [ ] benchmark results are reproducible.
+
+Artifact governance evidence:
+
+- `docs/research/045-ga-release-artifact-governance-review.md`
+- `docs/release/ARTIFACT_SIGNING_DECISION.md`
+- `docs/release/TERRAFORM_PROVIDER_DISTRIBUTION_PLAN.md`
 
 ## P1 Post-Alpha Checklist
 

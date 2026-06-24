@@ -102,6 +102,9 @@ Read these first when revisiting product or architecture direction:
 - [research/040-alpha-low-cost-soak-results.md](research/040-alpha-low-cost-soak-results.md) — Alpha low-cost soak smoke with client probes, active systemd-stop handover, and live LoxiLB restart recovery.
 - [research/041-alpha6-final-aws-validation.md](research/041-alpha6-final-aws-validation.md) — Final alpha6 Registry/provider AWS validation and non-AMI stable-EIP HA bootstrap blocker.
 - [research/042-provider-alpha7-clean-aws-validation.md](research/042-provider-alpha7-clean-aws-validation.md) — Provider alpha7 Registry install, clean AWS bootstrap/handover validation, destroy, residual scan, and stable-EIP identity caveat.
+- [research/043-ga-iam-security-review.md](research/043-ga-iam-security-review.md) — GA IAM least-privilege and default security posture review after provider alpha7.
+- [research/044-ga-legal-trademark-review.md](research/044-ga-legal-trademark-review.md) — GA legal/trademark wording review for BetterNAT and third-party project references.
+- [research/045-ga-release-artifact-governance-review.md](research/045-ga-release-artifact-governance-review.md) — GA release artifact governance review for checksums, notes, compatibility, SemVer, pins, and signing decision.
 
 ## Supporting Research
 
