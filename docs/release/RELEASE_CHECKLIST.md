@@ -597,6 +597,11 @@ P1 items are not required to publish the first alpha, but they should be priorit
 
 Release artifact smoke validation recorded on 2026-06-24:
 
+- `scripts/check-release-pins.sh`: passed and verifies the current BetterNAT to
+  LoxiLB pin plus the default `scripts/release-build.sh` version.
+- `BETTERNAT_RELEASE_DIR=$PWD/tmp/release-default-check
+  scripts/release-build.sh`: passed without explicitly setting
+  `BETTERNAT_VERSION`; `manifest.json` reported `v0.1.0-alpha.2`.
 - `BETTERNAT_VERSION=v0.1.0-alpha.2 scripts/release-url-smoke.sh`: passed for
   Linux arm64 agent and CLI checksum verification.
 - `BETTERNAT_VERSION=v0.1.0-alpha.2 BETTERNAT_SMOKE_ARCH=amd64

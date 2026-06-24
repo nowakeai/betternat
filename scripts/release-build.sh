@@ -25,7 +25,7 @@ else
   exit 2
 fi
 
-VERSION="${BETTERNAT_VERSION:-v0.1.0-alpha.1}"
+VERSION="${BETTERNAT_VERSION:-v0.1.0-alpha.2}"
 COMMIT="${BETTERNAT_COMMIT:-$(git rev-parse --short=12 HEAD)}"
 BUILD_DATE="${BETTERNAT_BUILD_DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 HOST_GOOS="$(go env GOOS)"

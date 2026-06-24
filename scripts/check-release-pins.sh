@@ -43,6 +43,7 @@ require_contains docs/release/DEPENDENCY_PINS.md "$BETTERNAT_VERSION"
 require_contains docs/release/DEPENDENCY_PINS.md "$LOXILB_VERSION"
 require_contains docs/release/DEPENDENCY_PINS.md "$LOXILB_PACKAGE_URL"
 require_contains THIRD_PARTY_NOTICES.md "$LOXILB_VERSION"
+require_contains scripts/release-build.sh "VERSION=\"\${BETTERNAT_VERSION:-$BETTERNAT_VERSION}\""
 
 require_absent internal/bootstrap/bootstrap.go "ghcr.io/loxilb-io/loxilb:latest"
 require_absent packer/betternat.pkr.hcl "ghcr.io/loxilb-io/loxilb:latest"

@@ -124,7 +124,7 @@ base OS version
 Use one product version for the first release:
 
 ```text
-v0.1.0-alpha.1
+v0.1.0-alpha.2
 ```
 
 Artifacts should include the same product version:
@@ -216,7 +216,7 @@ Before tagging:
 GOCACHE=$PWD/tmp/go-build-cache go test ./...
 scripts/release-dependency-scan.sh
 git diff --check
-BETTERNAT_VERSION=v0.1.0-alpha.1 scripts/release-build.sh
+BETTERNAT_VERSION=v0.1.0-alpha.2 scripts/release-build.sh
 ```
 
 Terraform examples must validate with local provider override.
