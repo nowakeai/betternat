@@ -179,6 +179,17 @@ Repeated takeover attempts:
 increase(betternat_takeover_attempts_total[15m]) > 1
 ```
 
+Recent failed lifecycle handover records:
+
+```sh
+betternat handover history --limit 20
+```
+
+A failed `termination-*` handover record means the proactive ASG or Spot
+termination path did not complete. Check whether `betternat status`, route
+owner, EIP owner, and lease owner have still converged through normal lease
+takeover before treating it as an active outage.
+
 ## AWS Checks
 
 Use AWS CLI or console to verify cloud state.
@@ -335,6 +346,26 @@ Check:
 3. Agent logs around lease acquisition and route replacement.
 4. IAM permission for `ec2:ReplaceRoute`.
 5. Whether an old gateway node is still renewing lease.
+
+### Failed ASG Lifecycle Handover Record
+
+Check:
+
+1. `betternat handover history --limit 20` for the `termination-*` request.
+2. `betternat status` from a surviving gateway node.
+3. DynamoDB lease owner and generation.
+4. Private route table default route target.
+5. Shared EIP association when stable mode is enabled.
+6. ASG activity history and replacement instance health.
+7. `journalctl -u betternat-agent` around the termination event.
+
+Interpretation:
+
+- if the durable handover record failed but lease, route, EIP, and ASG capacity
+  converged, service recovered through the passive fenced takeover path,
+- if convergence did not happen after lease expiry, collect a support bundle
+  from the surviving node and inspect AWS IAM/API errors such as
+  `ec2:ReplaceRoute`, `ec2:AssociateAddress`, or DynamoDB write failures.
 
 ### Stable EIP Not Preserved
 

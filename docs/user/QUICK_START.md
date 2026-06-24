@@ -160,11 +160,11 @@ binaries.
 
 ## Install Provider
 
-The public Quick Start uses provider version `0.1.0-alpha.6`:
+The public Quick Start uses provider version `0.1.0-alpha.8`:
 
 ```hcl
 source  = "nowakeai/betternat"
-version = "= 0.1.0-alpha.6"
+version = "= 0.1.0-alpha.8"
 ```
 
 Terraform Registry install is the default path:

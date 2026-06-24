@@ -41,7 +41,7 @@ measurements, not SLAs.
 | Failure | Expected Behavior | User Impact | Primary Signals | Recovery |
 | --- | --- | --- | --- | --- |
 | Active EC2 terminates | Standby acquires lease, claims EIP if configured, replaces route | Short new-connection outage; active flows reset | lease generation changes, route/EIP owner changes, failover metrics | Automatic if standby is healthy |
-| Active ASG scale-in or Spot interruption notice | Agent observes IMDS termination signal, releases local lease, and completes the ASG lifecycle action | Shorter new-connection outage than waiting for lease TTL when notice arrives in time | termination event log, lease release, lifecycle action completion, route/EIP owner changes | Automatic if standby is healthy |
+| Active ASG scale-in or Spot interruption notice | Agent observes IMDS termination signal and attempts proactive handover before completing the ASG lifecycle action | Shorter new-connection outage when proactive handover completes; otherwise standby recovers through fenced lease takeover | termination event log, durable handover record, lease generation change, route/EIP owner changes | Automatic if standby is healthy |
 | Standby EC2 terminates | Active continues serving; ASG launches replacement | HA degraded until replacement ready | ASG unhealthy, no standby, stale standby metrics | Automatic ASG repair |
 | LoxiLB process restarts | Agent reconciles missing datapath rules | Possible datapath interruption on affected instance | `betternat_datapath_ready=0`, LoxiLB command errors | Automatic reconcile if process returns |
 | Agent process stops on active | Graceful SIGTERM releases the local lease; crashes rely on lease expiry | Outage depends on HA profile, stop path, and detection timing | stale HA status, lease expiry or release, takeover attempt | Automatic if standby is healthy |
@@ -80,6 +80,57 @@ Low-cost AWS supplemental tests observed about 12 seconds for owner termination 
 AWS SDK calls use a bounded retry policy for transient errors and throttling:
 up to four attempts with retry backoff capped at three seconds. HA controller
 step deadlines still bound total reconciliation time.
+
+## ASG Termination Or Spot Interruption
+
+Scenario:
+
+- Auto Scaling moves the active gateway into terminating lifecycle state,
+- or EC2 Spot interruption metadata appears on the active gateway.
+
+Expected:
+
+1. Agent observes IMDS termination metadata.
+2. Agent starts a durable handover operation when the coordination registry is
+   configured.
+3. Active attempts to prepare a healthy standby peer.
+4. Active moves shared EIP and private route ownership to the target.
+5. Active transfers the fenced lease.
+6. Agent completes the ASG lifecycle action.
+
+Fallback:
+
+- if the terminating active cannot complete proactive handover before shutdown
+  or AWS API timeout, the standby should still acquire the lease after expiry
+  and repair route/EIP ownership through the normal takeover path.
+
+Validation note:
+
+- a 2026-06-24 provider alpha8 soak terminated the active ASG instance. The
+  lifecycle-triggered durable handover record failed during `ec2:ReplaceRoute`
+  with a context deadline, but the fleet converged through fenced lease takeover
+  about 25 seconds after the termination request and ASG launched a replacement
+  standby. Treat this as a known hardening area, not a reason to assume ASG
+  termination is manual-only.
+
+Signals:
+
+```text
+betternat handover history --limit 20
+betternat status
+betternat_lease_generation
+betternat_route_target_match
+betternat_public_identity_match
+```
+
+Operator response:
+
+- if `handover history` shows a failed `termination-*` record but `status`,
+  route, lease, and EIP owners have converged, keep monitoring and record the
+  failure for support evidence,
+- if route or EIP ownership does not converge after lease expiry, inspect
+  `doctor --live`, AWS route table state, EIP association, DynamoDB lease, and
+  agent logs on the surviving node.
 
 ## Standby EC2 Failure
 
@@ -255,6 +306,10 @@ Validation note:
   current bootstrap-first default keeps per-node public IPv4 enabled for gateway
   management; strict management/egress identity separation needs a secondary
   egress private IP or equivalent design.
+- a later provider alpha8 stable-mode soak with default per-node public IPv4
+  recorded `2591` client samples during multiple restart and handover events:
+  `2575` ok, `11` timeout failures, and `5` successful samples through ordinary
+  node public IPs before final convergence back to the shared EIP.
 
 ## ASG Replacement Failure
 

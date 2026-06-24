@@ -21,6 +21,7 @@ This document complements:
 - `docs/research/037-v0.1.0-alpha-aws-release-candidate-results.md`
 - `docs/research/032-failover-stability-industry-patterns.md`
 - `docs/research/042-provider-alpha7-clean-aws-validation.md`
+- `docs/research/046-provider-alpha8-ga-soak-results.md`
 
 ## Release Levels
 
@@ -636,13 +637,13 @@ Do not mark BetterNAT production-ready until alpha checklist is complete plus:
 Production-preview follow-up evidence and hardening, not release blockers:
 
 - [ ] runtime release artifacts are signed beyond checksums.
-- [ ] complete user documentation has passed a clean-account walkthrough.
-- [ ] stable-profile AWS test pass is refreshed after production-preview docs
+- [ ] complete user documentation has passed an external walkthrough.
+- [x] stable-profile AWS test pass is refreshed after production-preview docs
   and provider UX updates.
-- [ ] longer soak test is refreshed after production-preview docs and provider
+- [x] longer soak test is refreshed after production-preview docs and provider
   UX updates.
 - [ ] retry/backoff policy for AWS/DynamoDB transient failures is further hardened.
-- [ ] IAM least-privilege policy is reviewed again after provider/bootstrap UX
+- [x] IAM least-privilege policy is reviewed again after provider/bootstrap UX
   changes.
 - [ ] benchmark results are reproducible.
 
@@ -651,6 +652,7 @@ Artifact governance evidence:
 - `docs/research/045-ga-release-artifact-governance-review.md`
 - `docs/release/ARTIFACT_SIGNING_DECISION.md`
 - `docs/release/TERRAFORM_PROVIDER_DISTRIBUTION_PLAN.md`
+- `docs/research/046-provider-alpha8-ga-soak-results.md`
 
 ## P1 Post-Alpha Checklist
 
@@ -856,6 +858,34 @@ Reliability validation update on 2026-06-23:
 - 2026-06-24 low-cost soak evidence:
   `docs/research/040-alpha-low-cost-soak-results.md`.
 
+Provider alpha8 GA soak update on 2026-06-24:
+
+- Terraform Registry provider `nowakeai/betternat` `0.1.0-alpha.8` plus
+  runtime `v0.1.0-alpha.6` applied from the public Registry with no local
+  provider override in run `bnat-ga-soak-20260624133429`.
+- The stable-EIP `cloud_init` run created `16` resources, bootstrapped two Spot
+  gateway nodes and one Spot private client, and required no manual temporary
+  standby public IP/EIP workaround.
+- Fault injection covered standby agent restart, active agent restart, active
+  LoxiLB restart, manual proactive handover, explicit active systemd stop, and
+  ASG active termination with desired capacity preserved.
+- Client probe result: `2591` samples, `2575` ok, `11` timeout failures, `5`
+  unexpected ordinary public IP samples, longest consecutive failure run `7`,
+  first and last IP both `54.184.48.49`.
+- Completed durable handovers covered active restart, manual proactive
+  handover, and explicit systemd-stop handover.
+- ASG lifecycle termination converged through fenced lease takeover and ASG
+  replacement, but the lifecycle-triggered proactive handover operation itself
+  was recorded as `failed` after `ec2:ReplaceRoute` hit a context deadline.
+  This keeps lifecycle-triggered retry/backoff and shutdown sequencing as a GA
+  hardening item.
+- Terraform destroy removed all `16` resources. Residual scan found no ASG,
+  DynamoDB table, EIP, ENI, VPC, security group, or non-terminated EC2
+  instances for the run; only terminated EC2 instance history remained visible
+  through tag-based resource listing.
+- Detailed evidence:
+  `docs/research/046-provider-alpha8-ga-soak-results.md`.
+
 ### Security And Supply Chain
 
 - [x] Review runtime IAM least-privilege policy against real AWS actions.
@@ -903,7 +933,12 @@ Reliability validation update on 2026-06-23:
     reported `0.1.0-alpha.6` with overview and gateway docs; Terraform `v1.14.7`
     installed `nowakeai/betternat` `0.1.0-alpha.6` from Registry and validate
     passed for a temporary smoke configuration and `examples/terraform`.
-  - [x] Public examples use provider `0.1.0-alpha.6` from Terraform Registry by
+    Rechecked after manual Terraform Registry resync for provider
+    `0.1.0-alpha.8`: Terraform installed `nowakeai/betternat`
+    `0.1.0-alpha.8` from the public Registry and validated
+    `examples/terraform`, `examples/terraform-aws-supplemental`, and
+    `examples/terraform-localstack`.
+  - [x] Public examples use provider `0.1.0-alpha.8` from Terraform Registry by
     default; `scripts/setup-provider-github-mirror.sh` remains a fallback.
   - [x] Clean clone `examples/terraform-aws-supplemental init` and `validate` passed with `HTTP_PROXY`/`HTTPS_PROXY` set to `http://127.0.0.1:10808`.
 - [x] Add provider installation guide.
@@ -1005,15 +1040,19 @@ As of 2026-06-24:
 - `stable_egress_ip=true` and `stable_egress_ip=false` modes have both passed owner-termination HA tests.
 - Terraform provider exposes `ha_profile = "default"` plus advanced lease timing overrides.
 - ASG repair and replacement standby behavior have passed.
-- GitHub Release assets and checksums have been published and verified for the first alpha path.
-- Public examples use provider `0.1.0-alpha.6` from Terraform Registry by
-  default; the provider GitHub release filesystem mirror remains documented as a
-  fallback.
+- GitHub Release assets and checksums have been published and verified for the
+  current alpha path.
+- Public examples use provider `0.1.0-alpha.8` from Terraform Registry by
+  default; the provider GitHub release filesystem mirror remains documented as
+  a fallback.
 - User-facing install docs use `betternat_version` so the provider derives
   GitHub Release asset URLs and checksums; internal AWS test runbooks may still
   use temporary S3 URLs for unreleased binaries.
 - The agent handles SIGTERM/SIGINT and releases the locally owned HA lease on graceful shutdown using the fenced lease generation.
 - The provider creates ASG termination lifecycle hooks, and the agent watches IMDS Spot/ASG termination notices to release lease and complete the lifecycle action.
-- The main remaining blocker for the first production-preview release is running
-  the alpha6 bootstrap Quick Start in a disposable AWS environment with
-  Terraform Registry install and `betternat_version` artifact derivation.
+- The first production-preview Terraform Registry path has passed disposable
+  AWS apply, health, handover, destroy, and residual-scan validation with
+  provider `0.1.0-alpha.8` and runtime `v0.1.0-alpha.6`.
+- Remaining GA hardening is concentrated on ASG lifecycle-triggered proactive
+  handover retry/backoff, strict stable public identity semantics, IAM negative
+  tests, external documentation walkthrough, and benchmark-backed sizing.

@@ -51,15 +51,15 @@ terraform {
   required_providers {
     betternat = {
       source  = "nowakeai/betternat"
-      version = "= 0.1.0-alpha.7"
+      version = "= 0.1.0-alpha.8"
     }
   }
 }
 ```
 
 Provider versions and BetterNAT runtime artifact versions are separate. The
-current alpha provider is `0.1.0-alpha.7`; the current runtime release assets
-referenced by the quick start are `v0.1.0-alpha.2`.
+current alpha provider is `0.1.0-alpha.8`; the current runtime release assets
+referenced by the quick start are `v0.1.0-alpha.6`.
 
 Terraform Registry install is the default path. If Registry availability is
 temporarily delayed, install the provider from the GitHub release as a
@@ -110,7 +110,7 @@ resource "betternat_gateway" "egress" {
   instance_type       = "t4g.small"
   desired_capacity    = 2
   max_size            = 3
-  betternat_version   = "v0.1.0-alpha.2"
+  betternat_version   = "v0.1.0-alpha.6"
   stable_egress_ip    = true
   prometheus_enabled  = true
   rollback_on_destroy = true
@@ -133,7 +133,7 @@ For a disposable VPC run:
 export AWS_PROFILE="<your-profile>"
 export AWS_REGION="us-west-2"
 export BETTERNAT_AZ="us-west-2a"
-export BETTERNAT_VERSION="v0.1.0-alpha.2"
+export BETTERNAT_VERSION="v0.1.0-alpha.6"
 ```
 
 Then follow:
@@ -230,7 +230,8 @@ Architecture docs:
 
 ## Alpha Status
 
-`v0.1.0-alpha.2` is an early technical preview.
+`v0.1.0-alpha.6` is an early technical preview runtime used with provider
+`0.1.0-alpha.8`.
 
 Current scope:
 
@@ -259,7 +260,7 @@ Read before using real route tables:
 - [Operations Guide](docs/user/OPERATIONS_GUIDE.md)
 - [Observability Guide](docs/user/OBSERVABILITY_GUIDE.md)
 - [IAM Policy](docs/user/IAM_POLICY.md)
-- [Release Notes](docs/user/RELEASE_NOTES_v0.1.0-alpha.2.md)
+- [Release Notes](docs/user/RELEASE_NOTES_v0.1.0-alpha.6.md)
 
 ## Development
 

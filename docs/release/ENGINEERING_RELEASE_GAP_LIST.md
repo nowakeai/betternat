@@ -174,6 +174,11 @@ Current:
   standby bootstrapped, both nodes reached SSM `Online`, proactive handover
   completed, route/lease/EIP ownership converged, and Terraform destroy plus
   residual scan were clean.
+- Final provider alpha8 GA soak with runtime alpha6 reconfirmed the public
+  Terraform Registry `cloud_init` path after provider UX updates. The run
+  covered standby agent restart, active agent restart, active LoxiLB restart,
+  proactive handover, active systemd stop, ASG active termination, destroy, and
+  residual scan in run `bnat-ga-soak-20260624133429`.
 
 Completed for alpha:
 
@@ -192,6 +197,10 @@ Needed before GA:
   returned to the stable EIP. If the GA contract requires every successful
   sample to return only the shared EIP, implement a secondary private IP or
   secondary ENI egress identity and configure LoxiLB SNAT to that private IP.
+- Improve ASG lifecycle-triggered handover retry/backoff and shutdown
+  sequencing. Provider alpha8 GA soak converged through fenced lease takeover
+  after ASG active termination, but the durable lifecycle-triggered handover
+  operation failed while `ec2:ReplaceRoute` hit a context deadline.
 
 Acceptance:
 
@@ -773,6 +782,33 @@ AWS automatic-trigger and AMI validation on 2026-06-23:
   history` also hides stale non-terminal records from older lease generations by
   default while retaining `--include-stale` for support evidence collection.
 
+Provider alpha8 GA soak update on 2026-06-24:
+
+- Terraform Registry provider `nowakeai/betternat` `0.1.0-alpha.8` with runtime
+  `v0.1.0-alpha.6` applied successfully in scratch run
+  `bnat-ga-soak-20260624133429`.
+- The run used default `cloud_init`, `stable_egress_ip=true`, provider-default
+  gateway public IPv4 assignment, no local provider override, and no manual
+  temporary standby public IP/EIP workaround.
+- Fault injection covered standby agent restart, active agent restart, active
+  LoxiLB restart, manual proactive handover, explicit active
+  `systemctl stop betternat-agent`, and ASG active termination with desired
+  capacity preserved.
+- Completed durable handovers covered active restart, manual proactive
+  handover, and explicit systemd-stop handover.
+- The ASG lifecycle-triggered durable handover operation was recorded as
+  failed after `ec2:ReplaceRoute` hit a context deadline, but final service
+  state converged by fenced lease takeover to active `i-01bc958b3e526d472` and
+  replacement standby `i-0c729bfacd61d021f`.
+- Client probe result: `2591` samples, `2575` ok, `11` timeout failures, `5`
+  unexpected ordinary public IP samples, longest consecutive failure run `7`,
+  first and last IP both the stable EIP `54.184.48.49`.
+- Terraform destroy removed all `16` resources and residual scan found no ASG,
+  DynamoDB table, EIP, ENI, VPC, security group, or non-terminated EC2
+  instance. Only terminated EC2 instance history remained visible.
+- Detailed evidence:
+  `docs/research/046-provider-alpha8-ga-soak-results.md`.
+
 AWS documentation basis:
 
 - EC2 Spot interruption notices are exposed through instance metadata and AWS
@@ -989,19 +1025,24 @@ Defer until benchmark-backed:
 - `betternat-agent` handles SIGTERM/SIGINT and releases its currently owned HA lease on graceful shutdown using the fenced lease generation.
 - Provider-created ASG termination lifecycle hooks and agent-side IMDS Spot/ASG termination handling are implemented. ASG lifecycle behavior and standalone active systemd-stop handover have been verified in AWS; forced Spot interruption validation is not a first-alpha release gate.
 - Current CLI fleet status uses the daemon/coordination-registry path by default; the older direct AWS discovery mode remains a debug fallback.
-- Release packaging now has a bootstrap artifact path; AMI packaging remains the biggest production-release workflow gap.
+- Release packaging now has a validated non-AMI bootstrap artifact path.
+  Public AMI packaging is an optional acceleration path, not the main
+  production-preview blocker.
 - The first release should avoid making unproven performance claims.
 
 ## Suggested Implementation Order
 
-1. Run the alpha6 bootstrap Quick Start in a disposable AWS environment using
-   Terraform Registry install and `betternat_version = "v0.1.0-alpha.6"` with no
-   explicit agent/CLI artifact URLs.
-2. Record apply, private-client egress, `betternat status`, graceful handover,
-   destroy rollback, and residual cleanup evidence.
-3. Keep `v0.1.0-alpha.6` as the current runtime artifact set until another
+1. Keep `v0.1.0-alpha.6` as the current runtime artifact set until another
    runtime tag is intentionally validated and added to the provider support
    matrix.
-4. Keep public AMI publication, `ami_channel` resolution, runtime artifact
-   signing, benchmark harness work, and broader retry/backoff hardening as
-   follow-up production hardening rather than release blockers.
+2. Harden ASG lifecycle-triggered proactive handover retry/backoff and shutdown
+   sequencing so termination-triggered handover records complete instead of
+   relying on lease-expiry takeover.
+3. Decide whether GA accepts the documented transient ordinary public-IP caveat
+   in stable mode or requires secondary private IP/ENI egress identity before
+   GA.
+4. Add IAM negative tests for denied `ec2:ReplaceRoute`,
+   `ec2:AssociateAddress`, and DynamoDB write paths.
+5. Keep public AMI publication, `ami_channel` resolution, runtime artifact
+   signing, benchmark harness work, and broader performance testing as follow-up
+   production hardening rather than release blockers.

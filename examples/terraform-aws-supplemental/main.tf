@@ -6,7 +6,7 @@ terraform {
     }
     betternat = {
       source  = "nowakeai/betternat"
-      version = "= 0.1.0-alpha.6"
+      version = "= 0.1.0-alpha.8"
     }
   }
 }
@@ -279,7 +279,7 @@ resource "betternat_gateway" "egress" {
   desired_capacity = var.desired_capacity
   max_size         = var.max_size
 
-  betternat_version      = var.betternat_version
+  betternat_version     = var.betternat_version
   agent_binary_url      = var.agent_binary_url
   agent_binary_sha256   = var.agent_binary_sha256
   cli_binary_url        = var.cli_binary_url

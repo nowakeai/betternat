@@ -53,7 +53,7 @@ terraform {
   required_providers {
     betternat = {
       source  = "nowakeai/betternat"
-      version = "= 0.1.0-alpha.7"
+      version = "= 0.1.0-alpha.8"
     }
   }
 }
@@ -66,7 +66,7 @@ This controls:
 - state migration behavior,
 - Terraform/OpenTofu plugin protocol implementation.
 
-For the current alpha, provider `0.1.0-alpha.7` is available through the
+For the current alpha, provider `0.1.0-alpha.8` is available through the
 Terraform Registry. The GitHub release filesystem mirror remains a fallback for
 temporary Registry availability issues. OpenTofu Registry propagation can lag
 Terraform Registry propagation and should be checked separately during release
