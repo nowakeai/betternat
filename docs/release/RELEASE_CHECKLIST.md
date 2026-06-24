@@ -529,9 +529,9 @@ Beta / CloudFormation preparation:
 
 Production:
 
-- [ ] Decide whether CloudFormation is:
+- [x] Decide whether CloudFormation is:
   - [ ] a first-class supported install path,
-  - [ ] or deferred.
+  - [x] or deferred.
 
 Useful references:
 
@@ -544,7 +544,7 @@ Do not mark BetterNAT production-ready until alpha checklist is complete plus:
 - [ ] AMI pipeline is repeatable and documented.
 - [ ] AMI channel resolver is implemented.
 - [ ] complete user documentation has passed a clean-account walkthrough.
-- [ ] CloudFormation decision is made and documented.
+- [x] CloudFormation decision is made and documented.
 - [ ] stable-profile AWS test pass is complete.
 - [ ] long soak test is complete.
 - [ ] retry/backoff policy for AWS/DynamoDB transient failures is implemented.
@@ -695,7 +695,7 @@ P2 items are valuable, but should not block alpha or early P1 hardening.
 - [ ] Add `ami_channel` resolver.
 - [ ] Preload LoxiLB image or binary in AMI.
 - [ ] Include third-party license bundle inside AMI.
-- [ ] Add CloudFormation template or make an explicit decision to defer it.
+- [x] Add CloudFormation template or make an explicit decision to defer it.
 - [x] Evaluate Terraform Registry publication.
 
 ### Performance And Tuning

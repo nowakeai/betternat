@@ -51,6 +51,7 @@ These are maintainer-facing release documents.
 - [release/AMI_RELEASE_PLAN.md](release/AMI_RELEASE_PLAN.md) — AMI-first production release contract and AMI readiness tests.
 - [release/DEPENDENCY_PINS.md](release/DEPENDENCY_PINS.md) — BetterNAT release to LoxiLB version/digest pin table and validation policy.
 - [release/ARTIFACT_SIGNING_DECISION.md](release/ARTIFACT_SIGNING_DECISION.md) — Alpha checksum-only decision and production signing target.
+- [release/CLOUDFORMATION_DELIVERY_DECISION.md](release/CLOUDFORMATION_DELIVERY_DECISION.md) — Decision to defer CloudFormation while Terraform remains the supported install path.
 - [release/TERRAFORM_PROVIDER_DISTRIBUTION_PLAN.md](release/TERRAFORM_PROVIDER_DISTRIBUTION_PLAN.md) — Split-repo provider publishing plan, Registry release model, versioning, and OpenTofu compatibility.
 
 ## Testing
