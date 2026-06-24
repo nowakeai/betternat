@@ -328,6 +328,14 @@ checksum verification passed for Linux amd64, Linux arm64, and manifest.
 Terraform Registry installation was not yet available at verification time:
 `terraform init` returned no available release matching `0.1.0-alpha.3`.
 
+Rechecked on 2026-06-24 with Terraform `v1.14.7`:
+
+- `nowakeai/betternat` `0.1.0-alpha.3`: `terraform init` still returned no
+  available releases matching `0.1.0-alpha.3`.
+- `nowakeai/betternat` `0.1.0-alpha.2`: `terraform init -upgrade` installed
+  successfully from Terraform Registry and `terraform validate` passed for the
+  temporary registry smoke configuration.
+
 Important OpenTofu source-address note:
 
 - Terraform resolves `source = "nowakeai/betternat"` as `registry.terraform.io/nowakeai/betternat`.

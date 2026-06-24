@@ -688,6 +688,9 @@ Reliability validation update on 2026-06-23:
   - [x] Clean clone can install `nowakeai/betternat` `0.1.0-alpha.2` from Terraform Registry and validate `examples/terraform`.
   - [x] Provider `0.1.0-alpha.3` GitHub release artifact checksum verification passed for Linux amd64, Linux arm64, and manifest.
   - [ ] Provider `0.1.0-alpha.3` Terraform Registry install validation after Registry propagation.
+    Rechecked on 2026-06-24 with Terraform `v1.14.7`: `0.1.0-alpha.3` was
+    still unavailable in the Terraform Registry; `0.1.0-alpha.2` Registry
+    install and `terraform validate` still passed.
   - [x] Clean clone `examples/terraform-aws-supplemental init` and `validate` passed with `HTTP_PROXY`/`HTTPS_PROXY` set to `http://127.0.0.1:10808`.
 - [x] Add provider installation guide.
 - [x] Add observability guide.
