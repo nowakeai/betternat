@@ -61,9 +61,9 @@ Required before public release:
 
 Optional but recommended:
 
-- [ ] `CODE_OF_CONDUCT.md`.
-- [ ] GitHub issue templates.
-- [ ] Pull request template.
+- [x] `CODE_OF_CONDUCT.md`.
+- [x] GitHub issue templates.
+- [x] Pull request template.
 - [x] Release drafter or changelog automation.
 
 ## License Choice

@@ -1,0 +1,55 @@
+name: Feature request
+description: Propose a product, runtime, provider, or documentation improvement.
+title: "feat: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user or operator problem should BetterNAT solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the desired UX, API, Terraform field, CLI command, metric, or documentation change.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Terraform provider
+        - Runtime agent
+        - CLI
+        - HA/failover
+        - Datapath
+        - Observability
+        - Packaging/AMI
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Include current workarounds or other tools you compared.
+  - type: textarea
+    id: risks
+    attributes:
+      label: Operational risks or compatibility concerns
+      description: Note route/EIP, IAM, upgrade, cost, or security tradeoffs.
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: This request fits the current AWS-first BetterNAT scope.
+          required: false
+        - label: This request affects release docs or user-visible behavior.
+          required: false

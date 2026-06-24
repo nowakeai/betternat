@@ -1,0 +1,50 @@
+name: Operations question
+description: Ask about install, validation, failover, cost, or cleanup behavior.
+title: "ops: "
+labels:
+  - question
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not paste credentials, private keys, Terraform state, or full account
+        identifiers. For security-sensitive issues, use the security policy.
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What are you trying to do, and where are you blocked?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: BetterNAT version
+      placeholder: v0.1.0-alpha.2
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: AWS us-west-2, single-AZ disposable VPC, t4g.small Spot
+  - type: dropdown
+    id: stable_egress_ip
+    attributes:
+      label: stable_egress_ip
+      options:
+        - "true"
+        - "false"
+        - unknown/not applicable
+  - type: textarea
+    id: commands
+    attributes:
+      label: Commands or outputs
+      description: Include `betternat status`, `betternat doctor --live`, Terraform errors, or metrics if relevant.
+      render: text
+  - type: checkboxes
+    id: docs
+    attributes:
+      label: Docs checked
+      options:
+        - label: I checked the Quick Start.
+        - label: I checked the Operations Guide.
+        - label: I checked the Failure Modes and Limitations docs.

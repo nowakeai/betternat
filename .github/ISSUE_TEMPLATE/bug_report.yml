@@ -1,0 +1,99 @@
+name: Bug report
+description: Report a reproducible BetterNAT bug.
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        BetterNAT is currently an alpha technical preview. Include enough
+        runtime and AWS context for maintainers to distinguish product bugs from
+        environment, IAM, route, or bootstrap issues.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: Describe outage, failed command, cost leak, route drift, datapath issue, or documentation mismatch.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: BetterNAT version
+      description: Output of `betternat version` or the release tag/provider version.
+      placeholder: v0.1.0-alpha.2
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Terraform provider
+        - betternat-agent
+        - betternat CLI
+        - LoxiLB datapath
+        - nftables fallback
+        - AWS failover/handover
+        - Bootstrap/user data
+        - AMI/Packer
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: cloud
+    attributes:
+      label: Cloud and region
+      placeholder: AWS us-west-2
+    validations:
+      required: true
+  - type: input
+    id: instance
+    attributes:
+      label: Instance type and architecture
+      placeholder: t4g.small arm64, t3.small amd64
+  - type: dropdown
+    id: stable_egress_ip
+    attributes:
+      label: stable_egress_ip
+      options:
+        - "true"
+        - "false"
+        - unknown/not applicable
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Include Terraform config snippets, CLI commands, or AWS actions. Redact account IDs if needed.
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Paste relevant logs, command output, metrics, or screenshots. Redact secrets and private data.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submit checks
+      options:
+        - label: I have removed AWS credentials, private keys, tokens, Terraform state, and presigned URLs.
+          required: true
+        - label: I can destroy or have already destroyed any disposable test resources created for this report.
+          required: false

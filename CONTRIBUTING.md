@@ -46,7 +46,7 @@ Update documentation when changing:
 - release artifacts,
 - installation or cleanup behavior.
 
-Release-facing docs live under `docs/deployment/`.
+Release-facing docs live under `docs/release/`.
 Research and decision records live under `docs/research/`.
 
 ## Security

@@ -123,6 +123,12 @@ Implemented:
 - `SECURITY.md`
 - `CONTRIBUTING.md`
 - `THIRD_PARTY_NOTICES.md`
+- `CODE_OF_CONDUCT.md`
+- GitHub issue templates:
+  - bug report,
+  - feature request,
+  - operations question.
+- Pull request template.
 
 Acceptance:
 
