@@ -32,6 +32,12 @@ Each BetterNAT AMI should contain:
 - systemd unit files,
 - `betternat doctor`.
 
+Terraform should set:
+
+```hcl
+bootstrap_mode = "prebaked_ami"
+```
+
 User data should only provide runtime configuration:
 
 - write `/etc/betternat/agent.json`,
@@ -39,11 +45,14 @@ User data should only provide runtime configuration:
 - start or restart `betternat-agent`,
 - avoid long package installs.
 
-AMI launches can avoid per-node public IPv4 addresses only if the environment
-provides another bootstrap and control-plane reachability path. The
-bootstrap-first path uses public subnet auto-assigned public IPv4 by default so
-new nodes can download packages, pull the LoxiLB image, fetch release artifacts,
-join SSM, and call AWS APIs.
+In `prebaked_ami` mode, stable EIP deployments can avoid per-node public IPv4
+addresses because the AMI already contains the runtime and the shared EIP is the
+private-workload egress identity. Non-stable deployments still need per-node
+public IPv4 because the active gateway node's public IP is the egress identity.
+
+The bootstrap-first `cloud_init` path uses public subnet auto-assigned public
+IPv4 by default so new nodes can download packages, pull the LoxiLB image, fetch
+release artifacts, join SSM, and call AWS APIs.
 
 When `stable_egress_ip=true`, the shared EIP is the intended private-workload
 egress identity. Gateway nodes may still have ordinary public IPv4 addresses for

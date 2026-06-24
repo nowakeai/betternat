@@ -74,12 +74,20 @@ with documented limitations.
 ## Follow-Up Decision
 
 After this validation, the provider-derived install plan was changed so gateway
-nodes default to ordinary auto-assigned public IPv4 addresses. Those addresses
-are for bootstrap and management/control-plane reachability. The shared EIP in
-stable mode remains the intended private-workload egress identity.
+nodes using the default `cloud_init` bootstrap path get ordinary auto-assigned
+public IPv4 addresses. Those addresses are for bootstrap and
+management/control-plane reachability. The shared EIP in stable mode remains the
+intended private-workload egress identity.
 
 This should remove the standby bootstrap blocker and must be revalidated in AWS
 without manually attaching temporary public IPs.
+
+The follow-up AMI decision is narrower: a private or future public BetterNAT AMI
+can set `bootstrap_mode="prebaked_ami"`. In that mode, stable EIP deployments
+disable per-node auto-assigned public IPv4 because the runtime is already
+installed and no first-boot package/image/artifact downloads are required.
+Non-stable deployments still keep per-node public IPv4 because the active node's
+public IP is the egress identity.
 
 There is still a deeper AWS identity concern: associating a shared EIP to an
 instance's primary private IPv4 can replace that instance's auto-assigned public

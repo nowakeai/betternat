@@ -51,6 +51,24 @@ func TestRenderUserDataWithBinaryURLs(t *testing.T) {
 	assertContains(t, script, "chmod 0755 '/usr/local/bin/loxicmd'")
 }
 
+func TestRenderUserDataPreinstalledAMI(t *testing.T) {
+	script, err := RenderUserData(Spec{
+		AgentConfig:  `{"version":"v0","gateway_id":"prod-egress"}`,
+		Preinstalled: true,
+	})
+	if err != nil {
+		t.Fatalf("render user data: %v", err)
+	}
+
+	assertContains(t, script, "chmod 0600 '/etc/betternat/agent.json'")
+	assertContains(t, script, "systemctl enable --now loxilb.service")
+	assertContains(t, script, "systemctl restart betternat-agent.service || systemctl enable --now betternat-agent.service")
+	assertNotContains(t, script, "install_package docker")
+	assertNotContains(t, script, "curl -fsSL")
+	assertNotContains(t, script, "docker run -d")
+	assertNotContains(t, script, "cat > /etc/systemd/system/betternat-agent.service")
+}
+
 func TestRenderUserDataRequiresConfig(t *testing.T) {
 	_, err := RenderUserData(Spec{})
 	if err == nil {
@@ -62,5 +80,12 @@ func assertContains(t *testing.T, text string, want string) {
 	t.Helper()
 	if !strings.Contains(text, want) {
 		t.Fatalf("missing %q in:\n%s", want, text)
+	}
+}
+
+func assertNotContains(t *testing.T, text string, want string) {
+	t.Helper()
+	if strings.Contains(text, want) {
+		t.Fatalf("unexpected %q in:\n%s", want, text)
 	}
 }

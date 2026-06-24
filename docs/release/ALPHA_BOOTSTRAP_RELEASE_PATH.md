@@ -96,6 +96,30 @@ The supplemental fixture supports the public path:
 betternat_version = var.betternat_version
 ```
 
+The default provider path uses:
+
+```hcl
+bootstrap_mode = "cloud_init"
+```
+
+Use this for ordinary Linux AMIs. In this mode the launch template keeps
+per-node auto-assigned public IPv4 enabled so new gateway nodes can download
+packages, pull the LoxiLB image, fetch BetterNAT release artifacts, join SSM,
+and call AWS APIs before any node owns the shared EIP.
+
+Private BetterNAT AMIs that already include the runtime can opt into:
+
+```hcl
+bootstrap_mode = "prebaked_ami"
+```
+
+In `prebaked_ami` mode, user data writes `/etc/betternat/agent.json`, reapplies
+baseline sysctls, starts preinstalled `loxilb.service`, and restarts or enables
+`betternat-agent.service`. With `stable_egress_ip=true`, the provider disables
+per-node auto-assigned public IPv4 because bootstrap downloads are not needed.
+With `stable_egress_ip=false`, per-node public IPv4 remains enabled because the
+active gateway node's public IP is the egress identity.
+
 and private test-build overrides:
 
 ```hcl

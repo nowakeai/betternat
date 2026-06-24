@@ -93,10 +93,12 @@ The first alpha boot path depends on:
 
 Boot-to-ready timing is not representative of a future prebuilt AMI.
 
-Gateway nodes use ordinary auto-assigned public IPv4 addresses by default for
-bootstrap and management/control-plane egress. In stable EIP mode, the shared
-EIP remains the intended private-workload egress identity; the per-node public
-IPv4 addresses are operational reachability, not fixed allowlist addresses.
+The default `cloud_init` path uses ordinary auto-assigned public IPv4 addresses
+for bootstrap and management/control-plane egress. In stable EIP mode, the
+shared EIP remains the intended private-workload egress identity; the per-node
+public IPv4 addresses are operational reachability, not fixed allowlist
+addresses. Private prebaked AMIs can opt into `bootstrap_mode="prebaked_ami"`;
+stable EIP deployments in that mode disable per-node auto-assigned public IPv4.
 
 ## Tuning Semantics
 

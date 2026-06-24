@@ -52,6 +52,7 @@ the provider is registered in the OpenTofu Registry.
 | --- | --- |
 | `ami_id` | Explicit Linux AMI ID. Required for the first alpha bootstrap path. |
 | `ami_channel` | Future AMI channel selector. Do not rely on it for `v0.1.0-alpha.2`. |
+| `bootstrap_mode` | `cloud_init` by default. Use `cloud_init` for ordinary Linux AMIs that install BetterNAT at first boot. Use `prebaked_ami` only for BetterNAT AMIs that already contain Docker or the selected LoxiLB runtime, LoxiLB, `betternat`, `betternat-agent`, `loxicmd`, sysctl settings, and systemd units. |
 | `betternat_version` | BetterNAT runtime release tag. The provider uses it with `instance_type` to derive agent/CLI bootstrap URLs and checksums. |
 | `agent_binary_url` | Sensitive URL override for `betternat-agent`. Usually leave unset when `betternat_version` is set. |
 | `agent_binary_sha256` | SHA256 checksum override for the agent artifact. Usually leave unset when `betternat_version` is set. |
@@ -62,12 +63,19 @@ the provider is registered in the OpenTofu Registry.
 
 Launch templates created by the provider require IMDSv2 and set the metadata hop limit to `1`.
 
-Gateway nodes launch in the configured public subnets with auto-assigned public
-IPv4 enabled by default. That per-node public IPv4 is for bootstrap and
-management/control-plane reachability: package repositories, Docker image pull,
-GitHub release artifacts, SSM, and AWS APIs. It is separate from
-`stable_egress_ip`, which controls whether BetterNAT also manages a shared EIP
-as the public identity for private-subnet egress.
+In `cloud_init` mode, gateway nodes launch in the configured public subnets with
+auto-assigned public IPv4 enabled by default. That per-node public IPv4 is for
+bootstrap and management/control-plane reachability: package repositories,
+Docker image pull, GitHub release artifacts, SSM, and AWS APIs. It is separate
+from `stable_egress_ip`, which controls whether BetterNAT also manages a shared
+EIP as the public identity for private-subnet egress.
+
+In `prebaked_ami` mode, user data only writes runtime config, applies the
+baseline sysctl profile, and starts preinstalled services. With
+`stable_egress_ip=true`, the provider disables per-node auto-assigned public
+IPv4 because bootstrap downloads are not required and the shared EIP provides
+the egress identity. With `stable_egress_ip=false`, per-node public IPv4 remains
+enabled because the active gateway node's public IP is the egress identity.
 
 ### Capacity
 

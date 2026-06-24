@@ -257,6 +257,9 @@ Production-preview requirement:
 Optional AMI acceleration path:
 
 - [x] AMI build pipeline is repeatable and documented.
+- [x] Provider supports `bootstrap_mode="prebaked_ami"` for private/future
+  BetterNAT AMIs. In stable EIP mode this disables per-node auto-assigned public
+  IPv4; the default `cloud_init` path keeps per-node public IPv4 for bootstrap.
 - [ ] AMI names include version, date, arch, and base OS if public AMIs are
   ever published.
 - [ ] arm64 and x86_64 AMIs are published only if the project accepts ongoing
@@ -797,6 +800,10 @@ Reliability validation update on 2026-06-23:
   `16` with `AssociatePublicIpAddress=false`, and completed a manual handover
   between no-public-IP gateway nodes. The client probe observed `0` non-shared
   public IP samples and `3` one-second curl timeouts out of `240` samples.
+- Provider behavior now exposes that no-public-IP path as
+  `bootstrap_mode="prebaked_ami"` plus `stable_egress_ip=true`. The default
+  `cloud_init` path keeps `AssociatePublicIpAddress=true` so ordinary Linux AMIs
+  can complete first-boot dependency and artifact downloads.
 - Non-stable public-IP validation on 2026-06-24 refreshed the ASG to launch
   template version `17` with `AssociatePublicIpAddress=true` and no
   `ha.public_identity`. Manual route-only handover completed, and the client
@@ -877,7 +884,7 @@ P2 items are valuable, but should not block alpha or early P1 hardening.
 - [ ] Keep public AMI publication optional; do not publish all-region AMIs until
   ongoing snapshot-retention cost is accepted.
 - [ ] Add `ami_channel` resolver only if public AMIs become a supported path.
-- [ ] Preload LoxiLB image or binary in AMI.
+- [x] Preload LoxiLB image or binary in AMI.
 - [ ] Include third-party license bundle inside AMI.
 - [x] Add CloudFormation template or make an explicit decision to defer it.
 - [x] Evaluate Terraform Registry publication.

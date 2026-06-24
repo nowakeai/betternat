@@ -56,6 +56,7 @@ type GatewayResourceModel struct {
 	VPCID                    types.String `tfsdk:"vpc_id"`
 	AMIID                    types.String `tfsdk:"ami_id"`
 	AMIChannel               types.String `tfsdk:"ami_channel"`
+	BootstrapMode            types.String `tfsdk:"bootstrap_mode"`
 	InstanceType             types.String `tfsdk:"instance_type"`
 	UseSpot                  types.Bool   `tfsdk:"use_spot"`
 	MinSize                  types.Int64  `tfsdk:"min_size"`
@@ -148,6 +149,12 @@ func (r *GatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Optional: true,
 				Computed: true,
 				Default:  stringdefault.StaticString("stable"),
+			},
+			"bootstrap_mode": schema.StringAttribute{
+				MarkdownDescription: "Gateway node bootstrap mode. Use cloud_init for ordinary Linux AMIs that install BetterNAT at first boot. Use prebaked_ami only for BetterNAT AMIs that already contain Docker, LoxiLB, betternat, betternat-agent, loxicmd, and systemd units.",
+				Optional:            true,
+				Computed:            true,
+				Default:             stringdefault.StaticString("cloud_init"),
 			},
 			"instance_type": schema.StringAttribute{
 				Optional: true,
@@ -565,6 +572,7 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	desiredCapacity := int64Default(plan.DesiredCapacity, 2)
 	maxSize := int64Default(plan.MaxSize, 3)
 	amiChannel := stringDefault(plan.AMIChannel, "stable")
+	bootstrapMode := stringDefault(plan.BootstrapMode, "cloud_init")
 	routeMode := stringDefault(plan.RouteMode, "replace_route")
 	routeDestinationCIDR := stringDefault(plan.RouteDestinationCIDR, "0.0.0.0/0")
 	routeTargetType := stringDefault(plan.RouteTargetType, "instance")
@@ -572,6 +580,9 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	allowDestroyNoRollback := boolDefault(plan.AllowDestroyNoRollback, false)
 	if amiChannel != "stable" && amiChannel != "candidate" && amiChannel != "dev" {
 		return GatewayResourceModel{}, fmt.Errorf("unsupported ami_channel %q", amiChannel)
+	}
+	if bootstrapMode != "cloud_init" && bootstrapMode != "prebaked_ami" {
+		return GatewayResourceModel{}, fmt.Errorf("unsupported bootstrap_mode %q", bootstrapMode)
 	}
 	if routeMode != "replace_route" {
 		return GatewayResourceModel{}, fmt.Errorf("unsupported route_mode %q", routeMode)
@@ -585,9 +596,16 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	if err != nil {
 		return GatewayResourceModel{}, err
 	}
-	bootstrapArtifacts, err := resolveBootstrapArtifacts(plan, betterNATVersion, instanceType)
-	if err != nil {
-		return GatewayResourceModel{}, err
+	bootstrapArtifacts := bootstrapArtifacts{}
+	if bootstrapMode == "prebaked_ami" {
+		if hasBootstrapArtifactOverride(plan) {
+			return GatewayResourceModel{}, fmt.Errorf("bootstrap_mode prebaked_ami cannot use bootstrap artifact overrides")
+		}
+	} else {
+		bootstrapArtifacts, err = resolveBootstrapArtifacts(plan, betterNATVersion, instanceType)
+		if err != nil {
+			return GatewayResourceModel{}, err
+		}
 	}
 
 	azs := sortedKeys(routeTablesByAZ)
@@ -658,6 +676,7 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 		CLIBinarySHA256:     bootstrapArtifacts.CLIBinarySHA256,
 		LoxiCMDBinaryURL:    stringDefault(plan.LoxiCMDBinaryURL, ""),
 		LoxiCMDBinarySHA256: stringDefault(plan.LoxiCMDBinarySHA256, ""),
+		Preinstalled:        bootstrapMode == "prebaked_ami",
 	})
 	if err != nil {
 		return GatewayResourceModel{}, err
@@ -666,6 +685,10 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	rollbackJSON, err := plannedRollbackJSON(routeTablesByAZ, routeDestinationCIDR)
 	if err != nil {
 		return GatewayResourceModel{}, err
+	}
+	associatePublicIP := true
+	if bootstrapMode == "prebaked_ami" && stableEgressIP {
+		associatePublicIP = false
 	}
 	installPlan, err := installplan.Build(installplan.Input{
 		Name:                  plan.Name.ValueString(),
@@ -687,6 +710,7 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 		MaxSize:               int32(maxSize),
 		RouteDestinationCIDR:  routeDestinationCIDR,
 		RouteTargetType:       routeTargetType,
+		AssociatePublicIP:     &associatePublicIP,
 		Tags:                  tags,
 	})
 	if err != nil {
@@ -700,6 +724,7 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	result.ID = types.StringValue(plan.Name.ValueString())
 	result.Cloud = types.StringValue(cloud)
 	result.AMIChannel = types.StringValue(amiChannel)
+	result.BootstrapMode = types.StringValue(bootstrapMode)
 	result.DatapathEngine = types.StringValue(datapathEngine)
 	result.FallbackDatapathEngine = types.StringValue(fallbackEngine)
 	result.InstanceType = types.StringValue(instanceType)
@@ -811,6 +836,15 @@ func resolveBootstrapArtifacts(plan *GatewayResourceModel, version string, insta
 		result.CLIBinarySHA256 = artifactSet.CLISHA256
 	}
 	return result, nil
+}
+
+func hasBootstrapArtifactOverride(plan *GatewayResourceModel) bool {
+	return stringDefault(plan.AgentBinaryURL, "") != "" ||
+		stringDefault(plan.AgentBinarySHA256, "") != "" ||
+		stringDefault(plan.CLIBinaryURL, "") != "" ||
+		stringDefault(plan.CLIBinarySHA256, "") != "" ||
+		stringDefault(plan.LoxiCMDBinaryURL, "") != "" ||
+		stringDefault(plan.LoxiCMDBinarySHA256, "") != ""
 }
 
 func sortedRuntimeVersions() []string {

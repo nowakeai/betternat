@@ -293,6 +293,103 @@ func TestDeriveGatewayStateBinaryURLs(t *testing.T) {
 	}
 }
 
+func TestDeriveGatewayStatePrebakedAMIStableEgressDisablesPublicIP(t *testing.T) {
+	plan := validGatewayPlan()
+	plan.BootstrapMode = types.StringValue("prebaked_ami")
+	plan.StableEgressIP = types.BoolValue(true)
+	plan.BetterNATVersion = types.StringValue("v9.9.9")
+	derived, err := DeriveGatewayState(context.Background(), &plan)
+	if err != nil {
+		t.Fatalf("derive gateway state: %v", err)
+	}
+	if derived.BootstrapMode.ValueString() != "prebaked_ami" {
+		t.Fatalf("unexpected bootstrap mode: %s", derived.BootstrapMode.ValueString())
+	}
+	if !strings.Contains(derived.InstallPlanJSON.ValueString(), `"associate_public_ip_address":false`) {
+		t.Fatalf("prebaked AMI with stable EIP should disable per-node public IPs: %s", derived.InstallPlanJSON.ValueString())
+	}
+	if !strings.Contains(derived.UserData.ValueString(), "systemctl enable --now loxilb.service") {
+		t.Fatalf("prebaked AMI should start preinstalled loxilb service: %s", derived.UserData.ValueString())
+	}
+	if strings.Contains(derived.UserData.ValueString(), "install_package docker") {
+		t.Fatalf("prebaked AMI should not install docker in user data: %s", derived.UserData.ValueString())
+	}
+	if strings.Contains(derived.UserData.ValueString(), "curl -fsSL") {
+		t.Fatalf("prebaked AMI should not download runtime artifacts in user data: %s", derived.UserData.ValueString())
+	}
+}
+
+func TestDeriveGatewayStatePrebakedAMINonStableEgressKeepsPublicIP(t *testing.T) {
+	plan := validGatewayPlan()
+	plan.BootstrapMode = types.StringValue("prebaked_ami")
+	plan.StableEgressIP = types.BoolValue(false)
+	derived, err := DeriveGatewayState(context.Background(), &plan)
+	if err != nil {
+		t.Fatalf("derive gateway state: %v", err)
+	}
+	if !strings.Contains(derived.InstallPlanJSON.ValueString(), `"associate_public_ip_address":true`) {
+		t.Fatalf("non-stable egress needs per-node public IPs: %s", derived.InstallPlanJSON.ValueString())
+	}
+}
+
+func TestDeriveGatewayStateRejectsInvalidBootstrapMode(t *testing.T) {
+	plan := validGatewayPlan()
+	plan.BootstrapMode = types.StringValue("magic")
+	_, err := DeriveGatewayState(context.Background(), &plan)
+	if err == nil {
+		t.Fatal("expected unsupported bootstrap mode error")
+	}
+	if !strings.Contains(err.Error(), "unsupported bootstrap_mode") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestDeriveGatewayStateRejectsPrebakedAMIArtifactOverrides(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*GatewayResourceModel)
+	}{
+		{
+			name: "agent url",
+			mutate: func(plan *GatewayResourceModel) {
+				plan.AgentBinaryURL = types.StringValue("https://example.invalid/betternat-agent")
+			},
+		},
+		{
+			name: "agent checksum",
+			mutate: func(plan *GatewayResourceModel) {
+				plan.AgentBinarySHA256 = types.StringValue("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+			},
+		},
+		{
+			name: "cli url",
+			mutate: func(plan *GatewayResourceModel) {
+				plan.CLIBinaryURL = types.StringValue("https://example.invalid/betternat")
+			},
+		},
+		{
+			name: "loxicmd url",
+			mutate: func(plan *GatewayResourceModel) {
+				plan.LoxiCMDBinaryURL = types.StringValue("https://example.invalid/loxicmd")
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plan := validGatewayPlan()
+			plan.BootstrapMode = types.StringValue("prebaked_ami")
+			tt.mutate(&plan)
+			_, err := DeriveGatewayState(context.Background(), &plan)
+			if err == nil {
+				t.Fatal("expected bootstrap artifact override error")
+			}
+			if !strings.Contains(err.Error(), "prebaked_ami cannot use bootstrap artifact overrides") {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
 func TestDeriveGatewayStateBetterNATVersionDerivesArm64Artifacts(t *testing.T) {
 	plan := validGatewayPlan()
 	plan.BetterNATVersion = types.StringValue("v0.1.0-alpha.2")

@@ -111,8 +111,10 @@ Current gaps:
 - no generated SBOM attached to release assets,
 - no pinned OS package repository snapshot,
 - LoxiLB image is pulled at boot in the alpha path,
-- alpha bootstrap may rely on auto-assigned per-node public IPv4 addresses for
-  package and artifact downloads.
+- `cloud_init` bootstrap may rely on auto-assigned per-node public IPv4
+  addresses for package and artifact downloads. `prebaked_ami` stable EIP
+  deployments avoid those first-boot downloads and disable per-node
+  auto-assigned public IPv4.
 
 Recommended alpha usage:
 

@@ -23,6 +23,7 @@ type Spec struct {
 	LoxiLBContainer     string
 	PrimaryInterface    string
 	MetricsPort         int
+	Preinstalled        bool
 }
 
 func RenderUserData(spec Spec) (string, error) {
@@ -78,6 +79,7 @@ func shellQuote(value string) string {
 const userDataTemplate = `#!/bin/bash
 set -euo pipefail
 
+{{- if not .Preinstalled }}
 install_package() {
   if command -v dnf >/dev/null 2>&1; then
     dnf install -y "$@"
@@ -91,7 +93,9 @@ install_package() {
     exit 1
   fi
 }
+{{- end }}
 
+{{- if not .Preinstalled }}
 if ! command -v curl >/dev/null 2>&1; then
   install_package curl ca-certificates
 fi
@@ -99,7 +103,9 @@ fi
 if ! command -v docker >/dev/null 2>&1; then
   install_package docker
 fi
+{{- end }}
 
+{{- if not .Preinstalled }}
 {{- if .AgentBinaryURL }}
 curl -fsSL {{ shellQuote .AgentBinaryURL }} -o {{ shellQuote .AgentBinaryPath }}
 {{- if .AgentBinarySHA256 }}
@@ -122,6 +128,7 @@ curl -fsSL {{ shellQuote .LoxiCMDBinaryURL }} -o {{ shellQuote .LoxiCMDBinaryPat
 echo {{ shellQuote .LoxiCMDBinarySHA256 }} {{ shellQuote .LoxiCMDBinaryPath }} | sha256sum -c -
 {{- end }}
 chmod 0755 {{ shellQuote .LoxiCMDBinaryPath }}
+{{- end }}
 {{- end }}
 
 install -d -m 0755 /etc/betternat
@@ -148,6 +155,11 @@ for rp_filter in /proc/sys/net/ipv4/conf/*/rp_filter; do
   [ -e "$rp_filter" ] && echo 0 > "$rp_filter"
 done
 
+{{- if .Preinstalled }}
+systemctl daemon-reload
+systemctl enable --now loxilb.service
+systemctl restart betternat-agent.service || systemctl enable --now betternat-agent.service
+{{- else }}
 systemctl enable --now docker
 docker rm -f {{ .LoxiLBContainer }} >/dev/null 2>&1 || true
 docker run -d \
@@ -185,4 +197,5 @@ BETTERNAT_AGENT_SERVICE
 
 systemctl daemon-reload
 systemctl enable --now betternat-agent.service
+{{- end }}
 `

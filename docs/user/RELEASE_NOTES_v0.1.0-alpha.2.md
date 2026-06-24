@@ -63,6 +63,10 @@ Public alpha users should install from GitHub Release assets and verify
 - Stable EIP mode uses a shared EIP as the intended private-workload egress
   identity. Gateway nodes may still use ordinary per-node public IPv4 addresses
   for bootstrap and management/control-plane reachability.
+- Private prebaked BetterNAT AMIs can use `bootstrap_mode="prebaked_ami"`. In
+  stable EIP mode this disables per-node auto-assigned public IPv4 because the
+  AMI already contains the runtime. The default `cloud_init` path keeps per-node
+  public IPv4 enabled so ordinary Linux AMIs can complete first-boot installs.
 - Non-stable mode changes public source IP after handover and can be faster
   because it avoids EIP reassociation. A 2026-06-24 AWS probe observed the
   visible source-IP switch within about `435 ms` with `0` failed samples.

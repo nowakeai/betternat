@@ -205,10 +205,13 @@ The active node owns:
 - the private route table default route,
 - the shared EIP when `stable_egress_ip=true`.
 
-Gateway nodes may also have ordinary public IPv4 addresses for bootstrap and
-management reachability. In stable EIP mode, the shared EIP is the intended
-public source IP for private-subnet egress; the per-node public IPv4 addresses
-are not stable allowlist identities.
+In the default `cloud_init` bootstrap mode, gateway nodes also have ordinary
+public IPv4 addresses for bootstrap and management reachability. In stable EIP
+mode, the shared EIP is the intended public source IP for private-subnet egress;
+the per-node public IPv4 addresses are not stable allowlist identities.
+Prebaked BetterNAT AMIs can use `bootstrap_mode = "prebaked_ami"` to skip
+download/install work; in that mode, stable EIP deployments disable per-node
+auto-assigned public IPv4.
 
 On failure, a standby node takes over by reconciling datapath state, claiming the EIP when configured, and replacing the private route target.
 
@@ -233,7 +236,8 @@ Current scope:
 - Single-AZ HA group.
 - Terraform provider first.
 - No published BetterNAT AMI in the current alpha.
-- Install path is Terraform plus cloud-init bootstrap on an explicit Linux AMI.
+- Default install path is Terraform plus cloud-init bootstrap on an explicit
+  Linux AMI. Private prebaked AMIs can opt into `bootstrap_mode = "prebaked_ami"`.
 - LoxiLB/eBPF is the datapath.
 - New connections recover after failover; active connections may reset.
 - No NAT Gateway equivalent SLA.

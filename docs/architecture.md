@@ -110,11 +110,18 @@ Implementation note for the current Go provider/applier split:
 - `instance_type` defaults to `t3.small` when not specified.
 - `use_spot` is available for low-cost tests and interruption-tolerant environments, but it defaults to `false`.
 - Before BetterNAT AMIs exist, AWS installs use an official Linux AMI plus cloud-init. The provider derives agent and CLI GitHub Release artifact URLs and SHA256 checksums from `betternat_version`; explicit artifact URLs remain available for private or unreleased test builds.
-- Gateway nodes default to ordinary auto-assigned public IPv4 for bootstrap and
-  management/control-plane reachability. In stable mode, the shared EIP is the
-  private-workload egress identity. If strict separation between management
-  public IPv4 and stable egress EIP is required, the egress identity should move
-  to a secondary private IP or secondary ENI.
+- `bootstrap_mode="cloud_init"` is the default for ordinary Linux AMIs. Gateway
+  nodes use ordinary auto-assigned public IPv4 for bootstrap and
+  management/control-plane reachability.
+- `bootstrap_mode="prebaked_ami"` is only for AMIs that already contain
+  BetterNAT, LoxiLB, dependencies, and systemd units. In stable EIP mode, this
+  path disables per-node auto-assigned public IPv4 because no first-boot
+  downloads are required. In non-stable mode, per-node public IPv4 remains
+  enabled because the active gateway node's public IP is the egress identity.
+- In stable mode, the shared EIP is the private-workload egress identity. If
+  strict separation between management public IPv4 and stable egress EIP is
+  required while management public IPv4 stays enabled, the egress identity
+  should move to a secondary private IP or secondary ENI.
 - Existing appliance instance IDs can still be supplied by an outer installer, which is useful for tests, bring-your-own-AMI flows, or phased migration.
 - Production self-healing should move instance ownership to Launch Templates and one ASG per AZ. In that model the provider manages the pool and stable AWS resources, while the agent dynamically elects the active owner from the ASG instances.
 
