@@ -53,7 +53,7 @@ terraform {
   required_providers {
     betternat = {
       source  = "nowakeai/betternat"
-      version = "= 0.1.0-alpha.5"
+      version = "= 0.1.0-alpha.6"
     }
   }
 }
@@ -66,7 +66,7 @@ This controls:
 - state migration behavior,
 - Terraform/OpenTofu plugin protocol implementation.
 
-For the current alpha, provider `0.1.0-alpha.5` is published as a GitHub
+For the current alpha, provider `0.1.0-alpha.6` is published as a GitHub
 provider release and used by public examples through a Terraform filesystem
 mirror until Registry propagation is confirmed for that exact version.
 
@@ -384,11 +384,18 @@ bootstrap, route ownership, EIP mode, rollback, and per-field guidance. GitHub
 release artifact checksum verification passed for the Linux amd64 zip. At
 publication time, Terraform Registry had not yet ingested `0.1.0-alpha.5`.
 
-The public examples and Quick Start now use provider `0.1.0-alpha.5` plus
+Provider `0.1.0-alpha.6` was published to GitHub on 2026-06-24 to add
+`betternat_version` to `betternat_gateway` and let the provider derive the
+agent/CLI release artifact URLs and checksums from its built-in runtime
+manifest. GitHub release artifact checksum verification passed for the Linux
+amd64 zip. At publication time, Terraform Registry had not yet ingested
+`0.1.0-alpha.6`.
+
+The public examples and Quick Start now use provider `0.1.0-alpha.6` plus
 `scripts/setup-provider-github-mirror.sh` until Registry propagation catches up.
-That path was validated with `terraform init -upgrade` and `terraform validate`
-for `examples/terraform`, `examples/terraform-aws-supplemental`, and
-`examples/terraform-localstack`.
+That path was validated with the release zip as a Terraform filesystem mirror.
+The main repository examples were also validated with a local provider dev
+override for `examples/terraform` and `examples/terraform-aws-supplemental`.
 
 Important OpenTofu source-address note:
 

@@ -160,14 +160,14 @@ binaries.
 
 ## Install Provider
 
-The public Quick Start uses provider version `0.1.0-alpha.5`:
+The public Quick Start uses provider version `0.1.0-alpha.6`:
 
 ```hcl
 source  = "nowakeai/betternat"
-version = "= 0.1.0-alpha.5"
+version = "= 0.1.0-alpha.6"
 ```
 
-Until `0.1.0-alpha.5` is available through the Terraform Registry, install it
+Until `0.1.0-alpha.6` is available through the Terraform Registry, install it
 from the provider GitHub release as a Terraform filesystem mirror:
 
 ```sh

@@ -28,7 +28,7 @@ terraform {
   required_providers {
     betternat = {
       source  = "nowakeai/betternat"
-      version = "= 0.1.0-alpha.5"
+      version = "= 0.1.0-alpha.6"
     }
   }
 }
@@ -50,7 +50,7 @@ available as advanced overrides for private or unreleased builds.
 
 Changing the provider version does not automatically upgrade running gateway nodes.
 
-Until provider `0.1.0-alpha.5` is available through the Terraform Registry,
+Until provider `0.1.0-alpha.6` is available through the Terraform Registry,
 install it from the provider GitHub release as a Terraform filesystem mirror:
 
 ```sh
