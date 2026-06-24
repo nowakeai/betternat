@@ -41,11 +41,11 @@ Read them in this order for the first full pass:
 - [user/operations/FAILURE_MODES.md](user/operations/FAILURE_MODES.md) — Failure-mode behavior and limitations.
 - [user/reference/LIMITATIONS.md](user/reference/LIMITATIONS.md) — Alpha limitations: SLA, failover, cost, performance, bootstrap, and tuning.
 - [user/releases/README.md](user/releases/README.md) — Release notes index and release-note rules.
-- [user/releases/v0.1.0-alpha.8.md](user/releases/v0.1.0-alpha.8.md) — Current runtime alpha release notes and validation caveats.
-- [user/releases/v0.1.0-alpha.7.md](user/releases/v0.1.0-alpha.7.md) — Provider-module support release notes for split provider alpha8.
-- [user/releases/v0.1.0-alpha.6.md](user/releases/v0.1.0-alpha.6.md) — Current recommended runtime alpha release notes for provider alpha8 bootstrap support.
-- [user/releases/v0.1.0-alpha.2.md](user/releases/v0.1.0-alpha.2.md) — Earlier runtime alpha release notes.
-- [user/releases/v0.1.0-alpha.1.md](user/releases/v0.1.0-alpha.1.md) — First alpha release notes.
+- [user/releases/v0.1/v0.1.0-alpha.8.md](user/releases/v0.1/v0.1.0-alpha.8.md) — Current runtime alpha release notes and validation caveats.
+- [user/releases/v0.1/v0.1.0-alpha.7.md](user/releases/v0.1/v0.1.0-alpha.7.md) — Provider-module support release notes for split provider alpha8.
+- [user/releases/v0.1/v0.1.0-alpha.6.md](user/releases/v0.1/v0.1.0-alpha.6.md) — Current recommended runtime alpha release notes for provider alpha8 bootstrap support.
+- [user/releases/v0.1/v0.1.0-alpha.2.md](user/releases/v0.1/v0.1.0-alpha.2.md) — Earlier runtime alpha release notes.
+- [user/releases/v0.1/v0.1.0-alpha.1.md](user/releases/v0.1/v0.1.0-alpha.1.md) — First alpha release notes.
 
 ## Release And Packaging
 

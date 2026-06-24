@@ -260,7 +260,7 @@ Read before using real route tables:
 - [Operations Guide](docs/user/operations/OPERATIONS_GUIDE.md)
 - [Observability Guide](docs/user/operations/OBSERVABILITY_GUIDE.md)
 - [IAM Policy](docs/user/reference/IAM_POLICY.md)
-- [Release Notes](docs/user/releases/v0.1.0-alpha.8.md)
+- [Release Notes](docs/user/releases/v0.1/v0.1.0-alpha.8.md)
 
 ## Development
 

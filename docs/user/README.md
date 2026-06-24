@@ -42,8 +42,8 @@ operations and reference docs as needed.
 Release notes are kept under [releases/](releases/) and named by tag. See the
 [release notes index](releases/README.md) for release-note rules.
 
-- [v0.1.0-alpha.8](releases/v0.1.0-alpha.8.md)
-- [v0.1.0-alpha.7](releases/v0.1.0-alpha.7.md)
-- [v0.1.0-alpha.6](releases/v0.1.0-alpha.6.md)
-- [v0.1.0-alpha.2](releases/v0.1.0-alpha.2.md)
-- [v0.1.0-alpha.1](releases/v0.1.0-alpha.1.md)
+- [v0.1.0-alpha.8](releases/v0.1/v0.1.0-alpha.8.md)
+- [v0.1.0-alpha.7](releases/v0.1/v0.1.0-alpha.7.md)
+- [v0.1.0-alpha.6](releases/v0.1/v0.1.0-alpha.6.md)
+- [v0.1.0-alpha.2](releases/v0.1/v0.1.0-alpha.2.md)
+- [v0.1.0-alpha.1](releases/v0.1/v0.1.0-alpha.1.md)

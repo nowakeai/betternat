@@ -281,7 +281,7 @@ Optional AMI acceleration path:
 Evidence:
 
 - `docs/release/ALPHA_BOOTSTRAP_RELEASE_PATH.md`
-- `docs/user/releases/v0.1.0-alpha.2.md`
+- `docs/user/releases/v0.1/v0.1.0-alpha.2.md`
 - `internal/bootstrap/bootstrap.go`
 - `internal/bootstrap/bootstrap_test.go`
 - `docs/release/AMI_RELEASE_PLAN.md`
@@ -564,7 +564,7 @@ Evidence:
 - `docs/user/reference/IAM_POLICY.md`
 - `docs/user/reference/LIMITATIONS.md`
 - `docs/user/operations/FAILURE_MODES.md`
-- `docs/user/releases/v0.1.0-alpha.2.md`
+- `docs/user/releases/v0.1/v0.1.0-alpha.2.md`
 - `docs/testing/AWS_SUPPLEMENTAL_RUNBOOK.md`
 
 ## CloudFormation Delivery Checklist
