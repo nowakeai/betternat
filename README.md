@@ -210,6 +210,11 @@ The active node owns:
 
 On failure, a standby node takes over by reconciling datapath state, claiming the EIP when configured, and replacing the private route target.
 
+When `stable_egress_ip=false`, takeover skips shared-EIP reassociation and can
+converge faster, but the public source IP changes to the new active node's
+public IP. Use stable EIP mode for allowlisted destinations; use non-stable mode
+only when that source-IP change is acceptable.
+
 Architecture docs:
 
 - [Architecture](docs/architecture.md)

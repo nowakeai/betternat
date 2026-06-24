@@ -45,6 +45,12 @@ During failover:
 
 Observed low-cost AWS tests saw about 12 seconds of client-visible outage for owner termination under test conditions. This is evidence, not an SLA.
 
+The 2026-06-24 route-only/non-stable proactive handover comparison was much
+faster in the retained alpha environment: the client observed the public source
+IP switch within about 435 ms at probe sampling granularity and recorded zero
+failed samples. This does not change the limitation: use non-stable mode only
+when downstream systems do not require a fixed allowlisted egress IP.
+
 ## Cost Semantics
 
 BetterNAT avoids NAT Gateway per-GB processing charges.

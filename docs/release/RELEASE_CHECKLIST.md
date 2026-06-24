@@ -1,6 +1,6 @@
 # BetterNAT Release Checklist
 
-Date: 2026-06-23
+Date: 2026-06-24
 
 ## Purpose
 
@@ -115,9 +115,13 @@ go build -o terraform-provider-betternat ./cmd/terraform-provider-betternat
 - [x] Terraform examples validate:
 
 ```sh
-TMPDIR=$PWD/tmp TF_CLI_CONFIG_FILE=$PWD/tmp/terraform-dev.tfrc terraform -chdir=examples/terraform validate
-TMPDIR=$PWD/tmp TF_CLI_CONFIG_FILE=$PWD/tmp/terraform-dev.tfrc terraform -chdir=examples/terraform-aws-supplemental validate
-TMPDIR=$PWD/tmp TF_CLI_CONFIG_FILE=$PWD/tmp/terraform-dev.tfrc terraform -chdir=examples/terraform-localstack validate
+source scripts/setup-provider-github-mirror.sh
+terraform -chdir=examples/terraform init -upgrade -input=false
+terraform -chdir=examples/terraform validate
+terraform -chdir=examples/terraform-aws-supplemental init -upgrade -input=false
+terraform -chdir=examples/terraform-aws-supplemental validate
+terraform -chdir=examples/terraform-localstack init -upgrade -input=false
+terraform -chdir=examples/terraform-localstack validate
 ```
 
 Evidence:
@@ -178,7 +182,7 @@ Evidence:
 
 Alpha minimum:
 
-- [x] Release notes explicitly state that `v0.1.0-alpha.1` does not publish a BetterNAT AMI.
+- [x] Release notes explicitly state that `v0.1.0-alpha.2` does not publish a BetterNAT AMI.
 - [x] Release clearly uses an explicit `ami_id` with cloud-init bootstrap.
 - [x] Recommended alpha fixture uses the latest official Amazon Linux 2023 arm64 AMI unless the user overrides `ami_id`.
 - [x] Bootstrap downloads and verifies `betternat-agent`.
@@ -232,7 +236,7 @@ Production requirement:
 Evidence:
 
 - `docs/release/ALPHA_BOOTSTRAP_RELEASE_PATH.md`
-- `docs/user/RELEASE_NOTES_v0.1.0-alpha.1.md`
+- `docs/user/RELEASE_NOTES_v0.1.0-alpha.2.md`
 - `internal/bootstrap/bootstrap.go`
 - `internal/bootstrap/bootstrap_test.go`
 - `docs/release/AMI_RELEASE_PLAN.md`
@@ -269,6 +273,12 @@ Already proven by low-cost supplemental runs:
 - `bnat-20260620182614`: stable EIP mode.
 - `bnat-20260620191841`: non-stable egress mode.
 - `bnat-p0-20260621044411`: bootstrap release artifact path, appliance-local `doctor --live`, IAM negative test, private egress, and cleanup.
+- 2026-06-24 retained-environment comparison: non-stable route-only proactive
+  handover recorded `240` client samples, `0` failures, and a visible public
+  source-IP switch from `52.24.117.43` to `52.24.240.255` in about `435 ms` at
+  client probe sampling granularity. This is materially faster than the stable
+  shared-EIP path because it skips EIP reassociation and public-identity
+  verification, but the public source IP changes by design.
 
 Must repeat before alpha if release artifacts differ from the tested build:
 
@@ -282,6 +292,7 @@ Evidence:
 - `docs/research/031-aws-low-cost-supplemental-results.md`
 - `docs/research/035-p0-open-source-release-acceptance-results.md`
 - `docs/research/037-v0.1.0-alpha-aws-release-candidate-results.md`
+- `docs/research/040-alpha-low-cost-soak-results.md`
 - fresh AWS run logs under ignored `tmp/aws-alpha-results/`
 - Terraform apply/destroy output
 - AWS residual scan output
@@ -300,7 +311,8 @@ GOCACHE=$PWD/tmp/go-build-cache go test ./...
 git diff --check
 ```
 
-- [x] Terraform examples validate with local dev override.
+- [x] Terraform examples validate with provider `0.1.0-alpha.3` installed from
+  the provider GitHub release as a filesystem mirror.
 - [x] LocalStack expectations are documented, including current ASG limitation.
 
 Evidence:
@@ -482,7 +494,7 @@ Evidence:
 - `docs/user/IAM_POLICY.md`
 - `docs/user/LIMITATIONS.md`
 - `docs/user/FAILURE_MODES.md`
-- `docs/user/RELEASE_NOTES_v0.1.0-alpha.1.md`
+- `docs/user/RELEASE_NOTES_v0.1.0-alpha.2.md`
 - `docs/testing/AWS_SUPPLEMENTAL_RUNBOOK.md`
 
 ## CloudFormation Delivery Checklist
@@ -813,7 +825,7 @@ Provider version:
 Agent version:
 CLI version:
 AMI IDs:
-  v0.1.0-alpha.1: No published BetterNAT AMI. Bootstrap path uses explicit user/provider-selected Linux AMI.
+  v0.1.0-alpha.2: No published BetterNAT AMI. Bootstrap path uses explicit user/provider-selected Linux AMI.
   us-west-2 arm64:
   us-west-2 amd64:
 
@@ -848,7 +860,7 @@ Date:
 
 ## Current Status Snapshot
 
-As of 2026-06-21:
+As of 2026-06-24:
 
 - Low-cost AWS complete-loop testing is complete for the current cloud-init development path.
 - `stable_egress_ip=true` and `stable_egress_ip=false` modes have both passed owner-termination HA tests.

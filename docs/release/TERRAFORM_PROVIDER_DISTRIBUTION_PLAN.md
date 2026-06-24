@@ -1,6 +1,6 @@
 # Terraform Provider Distribution Plan
 
-Date: 2026-06-21
+Date: 2026-06-24
 
 ## Decision
 
@@ -53,7 +53,7 @@ terraform {
   required_providers {
     betternat = {
       source  = "nowakeai/betternat"
-      version = "= 0.1.0-alpha.2"
+      version = "= 0.1.0-alpha.3"
     }
   }
 }
@@ -65,6 +65,12 @@ This controls:
 - provider create/read/update/delete behavior,
 - state migration behavior,
 - Terraform/OpenTofu plugin protocol implementation.
+
+For the current alpha, provider `0.1.0-alpha.3` is published as a GitHub
+provider release and used by public examples through a Terraform filesystem
+mirror. Terraform Registry `0.1.0-alpha.2` is available, but
+`0.1.0-alpha.3` had not propagated to the Registry at the last 2026-06-24
+check.
 
 ### BetterNAT Runtime Version
 
@@ -182,12 +188,15 @@ Mirroring current files into a provider repo without addressing `internal` impor
 
 ### Phase 0: Alpha Bridge
 
-Status: in progress.
+Status: complete for the current alpha.
 
 - Keep the provider binary in the main BetterNAT GitHub Release for alpha tests.
-- Clearly document that this is not Terraform Registry distribution.
+- Clearly document that the current alpha public examples use the provider
+  GitHub release as a Terraform filesystem mirror until Registry propagation
+  catches up.
 - Use GitHub Release assets for public binaries, not user-provided S3 buckets.
-- Keep examples using local provider dev override until Registry publication is ready.
+- Keep local provider dev override only as a developer/debugging path, not as
+  the public alpha install path.
 
 ### Phase 1: Provider Repository Preparation
 

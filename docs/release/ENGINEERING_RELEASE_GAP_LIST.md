@@ -359,6 +359,12 @@ Current status:
 
 - P0 bootstrap acceptance passed in `bnat-p0-20260621044411`.
 - Full HA timing matrix remains covered by earlier supplemental runs and should be repeated after AMI packaging or major HA changes.
+- The 2026-06-24 route-only/non-stable handover comparison is recorded in
+  `docs/research/040-alpha-low-cost-soak-results.md`: `240` client samples, `0`
+  failures, and a visible public source-IP switch in about `435 ms`. The
+  release conclusion is that non-stable handover can be much faster than stable
+  shared-EIP handover because it avoids EIP reassociation, but it is only
+  appropriate when changing public egress IP is acceptable.
 
 ### 5. IAM Negative Test
 
