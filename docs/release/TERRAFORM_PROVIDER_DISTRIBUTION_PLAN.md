@@ -74,21 +74,7 @@ mirror until Registry propagation is confirmed for that exact version.
 
 Specified by the gateway resource install path.
 
-Current alpha shape:
-
-```hcl
-resource "betternat_gateway" "egress" {
-  # ...
-
-  agent_binary_url    = "https://github.com/nowakeai/betternat/releases/download/v0.1.0-alpha.2/betternat-agent_v0.1.0-alpha.2_linux_arm64"
-  agent_binary_sha256 = "..."
-
-  cli_binary_url      = "https://github.com/nowakeai/betternat/releases/download/v0.1.0-alpha.2/betternat_v0.1.0-alpha.2_linux_arm64"
-  cli_binary_sha256   = "..."
-}
-```
-
-Recommended P1 UX:
+Current production-preview bootstrap shape:
 
 ```hcl
 resource "betternat_gateway" "egress" {
@@ -98,7 +84,19 @@ resource "betternat_gateway" "egress" {
 }
 ```
 
-The provider should derive GitHub Release URLs and checksums from that version, or from a version manifest. Users should still be able to override explicit URLs/checksums for air-gapped, mirrored, or development builds.
+The provider derives GitHub Release URLs and checksums from that version using
+its built-in release manifest. Users can still override explicit URLs/checksums
+for air-gapped, mirrored, or development builds:
+
+```hcl
+resource "betternat_gateway" "egress" {
+  # ...
+
+  betternat_version   = "v0.1.0-alpha.2"
+  agent_binary_url    = "https://mirror.example/betternat-agent"
+  agent_binary_sha256 = "..."
+}
+```
 
 Production AMI path:
 
@@ -279,7 +277,8 @@ terraform {
 }
 ```
 
-- Add `betternat_version` to `betternat_gateway`.
+- Keep `betternat_version` manifest entries current when a BetterNAT runtime
+  release is supported by the provider.
 - Keep explicit URL/checksum overrides for advanced users.
 - Add provider upgrade guide and state migration notes.
 

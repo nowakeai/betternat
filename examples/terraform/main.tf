@@ -44,6 +44,7 @@ resource "betternat_gateway" "egress" {
 
   datapath_engine          = "loxilb"
   fallback_datapath_engine = "nftables"
+  betternat_version        = "v0.1.0-alpha.2"
   stable_egress_ip         = true
   ha_profile               = "default"
   prometheus_enabled       = true

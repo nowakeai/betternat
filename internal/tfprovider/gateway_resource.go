@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -60,6 +61,7 @@ type GatewayResourceModel struct {
 	MinSize                  types.Int64  `tfsdk:"min_size"`
 	DesiredCapacity          types.Int64  `tfsdk:"desired_capacity"`
 	MaxSize                  types.Int64  `tfsdk:"max_size"`
+	BetterNATVersion         types.String `tfsdk:"betternat_version"`
 	AgentBinaryURL           types.String `tfsdk:"agent_binary_url"`
 	AgentBinarySHA256        types.String `tfsdk:"agent_binary_sha256"`
 	CLIBinaryURL             types.String `tfsdk:"cli_binary_url"`
@@ -169,22 +171,31 @@ func (r *GatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Optional: true,
 				Computed: true,
 			},
+			"betternat_version": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "BetterNAT runtime release tag used to derive agent/CLI GitHub Release artifact URLs and checksums for bootstrap installs. Example: v0.1.0-alpha.2. Explicit agent_binary_url, agent_binary_sha256, cli_binary_url, and cli_binary_sha256 values override derived values.",
+			},
 			"agent_binary_url": schema.StringAttribute{
-				Optional:  true,
-				Sensitive: true,
+				Optional:            true,
+				Computed:            true,
+				Sensitive:           true,
+				MarkdownDescription: "Optional URL for the betternat-agent binary. When betternat_version is set and this field is empty, the provider derives the URL from its built-in release artifact manifest.",
 			},
 			"agent_binary_sha256": schema.StringAttribute{
+				Computed:            true,
 				Optional:            true,
-				MarkdownDescription: "Optional SHA256 checksum for agent_binary_url. When set, cloud-init verifies the downloaded agent before execution.",
+				MarkdownDescription: "Optional SHA256 checksum for agent_binary_url. When betternat_version is set and this field is empty, the provider derives the checksum from its built-in release artifact manifest.",
 			},
 			"cli_binary_url": schema.StringAttribute{
 				Optional:            true,
+				Computed:            true,
 				Sensitive:           true,
-				MarkdownDescription: "Optional URL for the BetterNAT CLI binary installed on each gateway node. Set this for bootstrap-based alpha installs so betternat doctor can run locally.",
+				MarkdownDescription: "Optional URL for the BetterNAT CLI binary installed on each gateway node. When betternat_version is set and this field is empty, the provider derives the URL from its built-in release artifact manifest.",
 			},
 			"cli_binary_sha256": schema.StringAttribute{
+				Computed:            true,
 				Optional:            true,
-				MarkdownDescription: "Optional SHA256 checksum for cli_binary_url. When set, cloud-init verifies the downloaded CLI before installation.",
+				MarkdownDescription: "Optional SHA256 checksum for cli_binary_url. When betternat_version is set and this field is empty, the provider derives the checksum from its built-in release artifact manifest.",
 			},
 			"loxicmd_binary_url": schema.StringAttribute{
 				Optional:  true,
@@ -398,7 +409,7 @@ func (r *GatewayResource) Update(ctx context.Context, req resource.UpdateRequest
 	}
 	resp.Diagnostics.AddError(
 		"BetterNAT gateway replacement required",
-		"Only min_size, desired_capacity, and max_size can be updated in-place in this provider version. Changes to agent_binary_url, loxicmd_binary_url, AMI, instance type, subnets, routes, private CIDRs, datapath settings, stable egress IP mode, HA timing, tags, or other installation inputs require replacing the betternat_gateway resource, for example with terraform apply -replace=betternat_gateway.<name>.",
+		"Only min_size, desired_capacity, and max_size can be updated in-place in this provider version. Changes to betternat_version, agent_binary_url, cli_binary_url, loxicmd_binary_url, AMI, instance type, subnets, routes, private CIDRs, datapath settings, stable egress IP mode, HA timing, tags, or other installation inputs require replacing the betternat_gateway resource, for example with terraform apply -replace=betternat_gateway.<name>.",
 	)
 }
 
@@ -501,6 +512,7 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	if plan.VPCID.IsNull() || plan.VPCID.IsUnknown() || plan.VPCID.ValueString() == "" {
 		return GatewayResourceModel{}, fmt.Errorf("vpc_id is required")
 	}
+	betterNATVersion := stringDefault(plan.BetterNATVersion, "")
 	privateCIDRs, err := listStrings(ctx, plan.PrivateCIDRs)
 	if err != nil {
 		return GatewayResourceModel{}, fmt.Errorf("private_cidrs: %w", err)
@@ -573,6 +585,10 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	if err != nil {
 		return GatewayResourceModel{}, err
 	}
+	bootstrapArtifacts, err := resolveBootstrapArtifacts(plan, betterNATVersion, instanceType)
+	if err != nil {
+		return GatewayResourceModel{}, err
+	}
 
 	azs := sortedKeys(routeTablesByAZ)
 	firstAZ := azs[0]
@@ -636,10 +652,10 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	configHash := sha256.Sum256(configBytes)
 	userData, err := bootstrap.RenderUserData(bootstrap.Spec{
 		AgentConfig:         string(configBytes),
-		AgentBinaryURL:      stringDefault(plan.AgentBinaryURL, ""),
-		AgentBinarySHA256:   stringDefault(plan.AgentBinarySHA256, ""),
-		CLIBinaryURL:        stringDefault(plan.CLIBinaryURL, ""),
-		CLIBinarySHA256:     stringDefault(plan.CLIBinarySHA256, ""),
+		AgentBinaryURL:      bootstrapArtifacts.AgentBinaryURL,
+		AgentBinarySHA256:   bootstrapArtifacts.AgentBinarySHA256,
+		CLIBinaryURL:        bootstrapArtifacts.CLIBinaryURL,
+		CLIBinarySHA256:     bootstrapArtifacts.CLIBinarySHA256,
 		LoxiCMDBinaryURL:    stringDefault(plan.LoxiCMDBinaryURL, ""),
 		LoxiCMDBinarySHA256: stringDefault(plan.LoxiCMDBinarySHA256, ""),
 	})
@@ -692,6 +708,21 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	result.MinSize = types.Int64Value(minSize)
 	result.DesiredCapacity = types.Int64Value(desiredCapacity)
 	result.MaxSize = types.Int64Value(maxSize)
+	if betterNATVersion != "" {
+		result.BetterNATVersion = types.StringValue(betterNATVersion)
+	}
+	if bootstrapArtifacts.AgentBinaryURL != "" {
+		result.AgentBinaryURL = types.StringValue(bootstrapArtifacts.AgentBinaryURL)
+	}
+	if bootstrapArtifacts.AgentBinarySHA256 != "" {
+		result.AgentBinarySHA256 = types.StringValue(bootstrapArtifacts.AgentBinarySHA256)
+	}
+	if bootstrapArtifacts.CLIBinaryURL != "" {
+		result.CLIBinaryURL = types.StringValue(bootstrapArtifacts.CLIBinaryURL)
+	}
+	if bootstrapArtifacts.CLIBinarySHA256 != "" {
+		result.CLIBinarySHA256 = types.StringValue(bootstrapArtifacts.CLIBinarySHA256)
+	}
 	result.StableEgressIP = types.BoolValue(stableEgressIP)
 	result.HAProfile = types.StringValue(haProfile)
 	result.HALeaseTTLSeconds = types.Int64Value(haTTLSeconds)
@@ -718,6 +749,86 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	result.ControlPlaneStatusJSON = types.StringValue("{}")
 	result.Status = types.StringValue("planned")
 	return result, nil
+}
+
+type bootstrapArtifacts struct {
+	AgentBinaryURL    string
+	AgentBinarySHA256 string
+	CLIBinaryURL      string
+	CLIBinarySHA256   string
+}
+
+type runtimeArtifactSet struct {
+	AgentSHA256 string
+	CLISHA256   string
+}
+
+var supportedRuntimeArtifacts = map[string]map[string]runtimeArtifactSet{
+	"v0.1.0-alpha.2": {
+		"arm64": {
+			AgentSHA256: "94c96e730035070f7c4aab291b30e2c14c91d980fc334c6aae28aa4199fef89c",
+			CLISHA256:   "003f422c7e44aacc7ed78b3abc3b439e17e73d31b752e8b56b9d5fc5b63527e5",
+		},
+		"amd64": {
+			AgentSHA256: "5c49231100870243f0f31af0703d765f79af5dc8f7248e59f7df36afd48ef5a7",
+			CLISHA256:   "0e671ebeb1b2a93fd88a1e2bcdb5c93de01d35313b10ce776ef6dcc49885d200",
+		},
+	},
+}
+
+func resolveBootstrapArtifacts(plan *GatewayResourceModel, version string, instanceType string) (bootstrapArtifacts, error) {
+	result := bootstrapArtifacts{
+		AgentBinaryURL:    stringDefault(plan.AgentBinaryURL, ""),
+		AgentBinarySHA256: stringDefault(plan.AgentBinarySHA256, ""),
+		CLIBinaryURL:      stringDefault(plan.CLIBinaryURL, ""),
+		CLIBinarySHA256:   stringDefault(plan.CLIBinarySHA256, ""),
+	}
+	if version == "" {
+		return result, nil
+	}
+	if !strings.HasPrefix(version, "v") {
+		return bootstrapArtifacts{}, fmt.Errorf("betternat_version must start with v, got %q", version)
+	}
+	arch := runtimeArchForInstanceType(instanceType)
+	byArch, ok := supportedRuntimeArtifacts[version]
+	if !ok {
+		return bootstrapArtifacts{}, fmt.Errorf("unsupported betternat_version %q; supported versions: %s", version, strings.Join(sortedRuntimeVersions(), ", "))
+	}
+	artifactSet, ok := byArch[arch]
+	if !ok {
+		return bootstrapArtifacts{}, fmt.Errorf("unsupported runtime artifact architecture %q for betternat_version %q", arch, version)
+	}
+	releaseBase := "https://github.com/nowakeai/betternat/releases/download/" + version
+	if result.AgentBinaryURL == "" {
+		result.AgentBinaryURL = releaseBase + "/betternat-agent_" + version + "_linux_" + arch
+	}
+	if result.AgentBinarySHA256 == "" {
+		result.AgentBinarySHA256 = artifactSet.AgentSHA256
+	}
+	if result.CLIBinaryURL == "" {
+		result.CLIBinaryURL = releaseBase + "/betternat_" + version + "_linux_" + arch
+	}
+	if result.CLIBinarySHA256 == "" {
+		result.CLIBinarySHA256 = artifactSet.CLISHA256
+	}
+	return result, nil
+}
+
+func sortedRuntimeVersions() []string {
+	versions := make([]string, 0, len(supportedRuntimeArtifacts))
+	for version := range supportedRuntimeArtifacts {
+		versions = append(versions, version)
+	}
+	sort.Strings(versions)
+	return versions
+}
+
+func runtimeArchForInstanceType(instanceType string) string {
+	family := strings.Split(instanceType, ".")[0]
+	if family == "a1" || strings.HasSuffix(family, "g") || strings.HasSuffix(family, "gd") || strings.HasSuffix(family, "gn") || strings.HasSuffix(family, "gen") {
+		return "arm64"
+	}
+	return "amd64"
 }
 
 func peerAPIAuthTokenForPlan(plan *GatewayResourceModel) (string, error) {

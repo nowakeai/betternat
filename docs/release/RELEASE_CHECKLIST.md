@@ -947,9 +947,11 @@ As of 2026-06-24:
 - Public examples use provider `0.1.0-alpha.5` from the provider GitHub release
   via a Terraform filesystem mirror until Terraform Registry propagation catches
   up.
-- User-facing install docs use GitHub Release asset URLs; internal AWS test runbooks may still use temporary S3 URLs for unreleased binaries.
+- User-facing install docs use `betternat_version` so the provider derives
+  GitHub Release asset URLs and checksums; internal AWS test runbooks may still
+  use temporary S3 URLs for unreleased binaries.
 - The agent handles SIGTERM/SIGINT and releases the locally owned HA lease on graceful shutdown using the fenced lease generation.
 - The provider creates ASG termination lifecycle hooks, and the agent watches IMDS Spot/ASG termination notices to release lease and complete the lifecycle action.
-- The main blocker for the first production-preview release is polishing the
-  bootstrap-first install UX so runtime artifact URLs/checksums are easy to use
-  without publishing public AMIs.
+- The main remaining blocker for the first production-preview release is
+  publishing and validating a provider version that contains the
+  `betternat_version` bootstrap artifact manifest.

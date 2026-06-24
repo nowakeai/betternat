@@ -19,7 +19,10 @@ terraform {
 }
 ```
 
-The gateway runtime version is separate from the provider version. In the first alpha, runtime version is controlled by the `agent_binary_url`, `agent_binary_sha256`, `cli_binary_url`, and `cli_binary_sha256` bootstrap fields. A future `betternat_version` field should let the provider derive those release artifacts automatically.
+The gateway runtime version is separate from the provider version. Set
+`betternat_version` to a supported BetterNAT release tag, such as
+`v0.1.0-alpha.2`. The provider derives the matching agent and CLI GitHub Release
+artifact URLs and SHA256 checksums from its built-in release manifest.
 
 Until provider `0.1.0-alpha.5` is available through the Terraform Registry,
 install it from the provider GitHub release as a Terraform filesystem mirror:
@@ -48,18 +51,13 @@ the provider is registered in the OpenTofu Registry.
 | --- | --- |
 | `ami_id` | Explicit Linux AMI ID. Required for the first alpha bootstrap path. |
 | `ami_channel` | Future AMI channel selector. Do not rely on it for `v0.1.0-alpha.2`. |
-| `agent_binary_url` | Sensitive URL for `betternat-agent`. |
-| `agent_binary_sha256` | SHA256 checksum for the agent artifact. |
-| `cli_binary_url` | Sensitive URL for the `betternat` CLI. |
-| `cli_binary_sha256` | SHA256 checksum for the CLI artifact. |
+| `betternat_version` | BetterNAT runtime release tag. The provider uses it with `instance_type` to derive agent/CLI bootstrap URLs and checksums. |
+| `agent_binary_url` | Sensitive URL override for `betternat-agent`. Usually leave empty when `betternat_version` is set. |
+| `agent_binary_sha256` | SHA256 checksum override for the agent artifact. Usually leave empty when `betternat_version` is set. |
+| `cli_binary_url` | Sensitive URL override for the `betternat` CLI. Usually leave empty when `betternat_version` is set. |
+| `cli_binary_sha256` | SHA256 checksum override for the CLI artifact. Usually leave empty when `betternat_version` is set. |
 | `loxicmd_binary_url` | Optional URL for a host `loxicmd` binary. If empty, bootstrap installs a Docker wrapper. |
 | `loxicmd_binary_sha256` | Optional checksum for `loxicmd_binary_url`. |
-
-Planned P1 convenience field:
-
-| Name | Description |
-| --- | --- |
-| `betternat_version` | Future runtime version selector. The provider should use it to resolve BetterNAT agent/CLI release artifacts or AMIs. |
 
 Launch templates created by the provider require IMDSv2 and set the metadata hop limit to `1`.
 

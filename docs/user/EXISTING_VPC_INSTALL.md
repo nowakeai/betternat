@@ -56,10 +56,7 @@ resource "betternat_gateway" "egress" {
   desired_capacity = 2
   max_size         = 3
 
-  agent_binary_url    = var.agent_binary_url
-  agent_binary_sha256 = var.agent_binary_sha256
-  cli_binary_url      = var.cli_binary_url
-  cli_binary_sha256   = var.cli_binary_sha256
+  betternat_version = "v0.1.0-alpha.2"
 
   public_subnet_ids = {
     "us-west-2a" = var.public_subnet_id

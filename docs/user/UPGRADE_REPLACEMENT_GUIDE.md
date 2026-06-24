@@ -37,14 +37,16 @@ terraform {
 OpenTofu can use the same `source = "nowakeai/betternat"` address now that
 the provider is registered in the OpenTofu Registry.
 
-The gateway runtime version is controlled separately. In the first alpha, it is selected by bootstrap artifact URLs and checksums:
+The gateway runtime version is controlled separately:
 
 ```hcl
-agent_binary_url    = var.agent_binary_url
-agent_binary_sha256 = var.agent_binary_sha256
-cli_binary_url      = var.cli_binary_url
-cli_binary_sha256   = var.cli_binary_sha256
+betternat_version = "v0.1.0-alpha.2"
 ```
+
+The provider derives the agent and CLI release artifact URLs and SHA256
+checksums for supported runtime versions. The explicit `agent_binary_url`,
+`agent_binary_sha256`, `cli_binary_url`, and `cli_binary_sha256` fields remain
+available as advanced overrides for private or unreleased builds.
 
 Changing the provider version does not automatically upgrade running gateway nodes.
 
@@ -135,6 +137,7 @@ Replacement is required for changes such as:
 
 - `ami_id`
 - `ami_channel`
+- `betternat_version`
 - `agent_binary_url`
 - `agent_binary_sha256`
 - `cli_binary_url`

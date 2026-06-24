@@ -63,14 +63,10 @@ resource "betternat_gateway" "egress" {
   instance_type       = "t4g.small"
   desired_capacity    = 2
   max_size            = 3
+  betternat_version   = "v0.1.0-alpha.2"
   stable_egress_ip    = true
   prometheus_enabled  = true
   rollback_on_destroy = true
-
-  agent_binary_url    = var.agent_binary_url
-  agent_binary_sha256 = var.agent_binary_sha256
-  cli_binary_url      = var.cli_binary_url
-  cli_binary_sha256   = var.cli_binary_sha256
 }
 ```
 
@@ -151,50 +147,16 @@ Expected AWS costs:
 - normal public internet data transfer,
 - CloudWatch/SSM/logging if enabled by your account defaults.
 
-## Select Release Artifacts
+## Select Runtime Version
 
-The public alpha install path downloads binaries from GitHub Release assets. BetterNAT does not provide or require a user-managed S3 artifact bucket.
+Set `betternat_version` on the `betternat_gateway` resource. The provider uses
+that version plus `instance_type` to select the correct Linux release artifacts
+and built-in SHA256 checksums for bootstrap.
 
-For the default arm64 test fixture, use these release assets:
-
-```text
-betternat-agent_<version>_linux_arm64
-betternat_<version>_linux_arm64
-SHA256SUMS
-```
-
-Set release URLs:
-
-```sh
-export BETTERNAT_RELEASE_BASE="https://github.com/nowakeai/betternat/releases/download/$BETTERNAT_VERSION"
-
-export BETTERNAT_AGENT_BINARY_URL="$BETTERNAT_RELEASE_BASE/betternat-agent_${BETTERNAT_VERSION}_linux_arm64"
-export BETTERNAT_CLI_BINARY_URL="$BETTERNAT_RELEASE_BASE/betternat_${BETTERNAT_VERSION}_linux_arm64"
-export BETTERNAT_SHA256SUMS_URL="$BETTERNAT_RELEASE_BASE/SHA256SUMS"
-```
-
-Read checksums from the release checksum file:
-
-```sh
-curl -fsSL "$BETTERNAT_SHA256SUMS_URL" -o "tmp/SHA256SUMS-$BETTERNAT_VERSION"
-
-export BETTERNAT_AGENT_BINARY_SHA256="$(
-  awk -v f="betternat-agent_${BETTERNAT_VERSION}_linux_arm64" '$2 == f {print $1}' "tmp/SHA256SUMS-$BETTERNAT_VERSION"
-)"
-
-export BETTERNAT_CLI_BINARY_SHA256="$(
-  awk -v f="betternat_${BETTERNAT_VERSION}_linux_arm64" '$2 == f {print $1}' "tmp/SHA256SUMS-$BETTERNAT_VERSION"
-)"
-```
-
-Check that both checksums were found:
-
-```sh
-test -n "$BETTERNAT_AGENT_BINARY_SHA256"
-test -n "$BETTERNAT_CLI_BINARY_SHA256"
-```
-
-For unreleased local builds, use the maintainer AWS supplemental runbook instead of this user quick start. That runbook may use temporary private artifact hosting for test-only binaries.
+For unreleased local builds, use the maintainer AWS supplemental runbook instead
+of this user quick start. That runbook may override `agent_binary_url`,
+`agent_binary_sha256`, `cli_binary_url`, and `cli_binary_sha256` for test-only
+binaries.
 
 ## Install Provider
 
@@ -231,10 +193,7 @@ terraform -chdir=examples/terraform-aws-supplemental apply \
   -var "run_id=$BETTERNAT_RUN_ID" \
   -var "region=$AWS_REGION" \
   -var "az=$BETTERNAT_AZ" \
-  -var "agent_binary_url=$BETTERNAT_AGENT_BINARY_URL" \
-  -var "agent_binary_sha256=$BETTERNAT_AGENT_BINARY_SHA256" \
-  -var "cli_binary_url=$BETTERNAT_CLI_BINARY_URL" \
-  -var "cli_binary_sha256=$BETTERNAT_CLI_BINARY_SHA256"
+  -var "betternat_version=$BETTERNAT_VERSION"
 ```
 
 Expected:
@@ -282,10 +241,7 @@ terraform -chdir=examples/terraform-aws-supplemental destroy \
   -var "run_id=$BETTERNAT_RUN_ID" \
   -var "region=$AWS_REGION" \
   -var "az=$BETTERNAT_AZ" \
-  -var "agent_binary_url=$BETTERNAT_AGENT_BINARY_URL" \
-  -var "agent_binary_sha256=$BETTERNAT_AGENT_BINARY_SHA256" \
-  -var "cli_binary_url=$BETTERNAT_CLI_BINARY_URL" \
-  -var "cli_binary_sha256=$BETTERNAT_CLI_BINARY_SHA256"
+  -var "betternat_version=$BETTERNAT_VERSION"
 ```
 
 Residual scan:

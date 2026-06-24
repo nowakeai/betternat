@@ -933,8 +933,10 @@ Defer until benchmark-backed:
    propagation catches up.
 3. Decide whether to publish another runtime tag for post-RC source changes or
    keep `v0.1.0-alpha.2` as the current runtime artifact set.
-4. Treat bootstrap-first install UX polish, especially runtime artifact
-   URL/checksum selection, as the remaining production-preview blocker. Keep
-   public AMI publication, `ami_channel` resolution, runtime artifact signing,
-   benchmark harness work, and broader retry/backoff hardening as follow-up
-   production hardening rather than release blockers.
+4. Bootstrap-first install UX polish is now implemented in the provider through
+   `betternat_version` runtime artifact derivation. The remaining closure work is
+   to release a provider version that contains this schema, refresh public docs
+   to that version, and validate the examples. Keep public AMI publication,
+   `ami_channel` resolution, runtime artifact signing, benchmark harness work,
+   and broader retry/backoff hardening as follow-up production hardening rather
+   than release blockers.

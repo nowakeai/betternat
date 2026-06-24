@@ -58,10 +58,7 @@ terraform -chdir=examples/terraform-aws-supplemental destroy \
   -var "run_id=$BETTERNAT_RUN_ID" \
   -var "region=$AWS_REGION" \
   -var "az=$BETTERNAT_AZ" \
-  -var "agent_binary_url=$BETTERNAT_AGENT_BINARY_URL" \
-  -var "agent_binary_sha256=$BETTERNAT_AGENT_BINARY_SHA256" \
-  -var "cli_binary_url=$BETTERNAT_CLI_BINARY_URL" \
-  -var "cli_binary_sha256=$BETTERNAT_CLI_BINARY_SHA256"
+  -var "betternat_version=$BETTERNAT_VERSION"
 ```
 
 Expected order:

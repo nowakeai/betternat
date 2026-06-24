@@ -293,6 +293,86 @@ func TestDeriveGatewayStateBinaryURLs(t *testing.T) {
 	}
 }
 
+func TestDeriveGatewayStateBetterNATVersionDerivesArm64Artifacts(t *testing.T) {
+	plan := validGatewayPlan()
+	plan.BetterNATVersion = types.StringValue("v0.1.0-alpha.2")
+	plan.InstanceType = types.StringValue("t4g.small")
+	derived, err := DeriveGatewayState(context.Background(), &plan)
+	if err != nil {
+		t.Fatalf("derive gateway state: %v", err)
+	}
+	if got := derived.AgentBinaryURL.ValueString(); got != "https://github.com/nowakeai/betternat/releases/download/v0.1.0-alpha.2/betternat-agent_v0.1.0-alpha.2_linux_arm64" {
+		t.Fatalf("unexpected agent url: %s", got)
+	}
+	if got := derived.AgentBinarySHA256.ValueString(); got != "94c96e730035070f7c4aab291b30e2c14c91d980fc334c6aae28aa4199fef89c" {
+		t.Fatalf("unexpected agent checksum: %s", got)
+	}
+	if got := derived.CLIBinaryURL.ValueString(); got != "https://github.com/nowakeai/betternat/releases/download/v0.1.0-alpha.2/betternat_v0.1.0-alpha.2_linux_arm64" {
+		t.Fatalf("unexpected cli url: %s", got)
+	}
+	if got := derived.CLIBinarySHA256.ValueString(); got != "003f422c7e44aacc7ed78b3abc3b439e17e73d31b752e8b56b9d5fc5b63527e5" {
+		t.Fatalf("unexpected cli checksum: %s", got)
+	}
+	if !strings.Contains(derived.UserData.ValueString(), "betternat-agent_v0.1.0-alpha.2_linux_arm64") {
+		t.Fatalf("missing derived arm64 artifact in user data: %s", derived.UserData.ValueString())
+	}
+}
+
+func TestDeriveGatewayStateBetterNATVersionDerivesAMD64Artifacts(t *testing.T) {
+	plan := validGatewayPlan()
+	plan.BetterNATVersion = types.StringValue("v0.1.0-alpha.2")
+	plan.InstanceType = types.StringValue("t3.small")
+	derived, err := DeriveGatewayState(context.Background(), &plan)
+	if err != nil {
+		t.Fatalf("derive gateway state: %v", err)
+	}
+	if !strings.Contains(derived.UserData.ValueString(), "betternat-agent_v0.1.0-alpha.2_linux_amd64") {
+		t.Fatalf("missing derived amd64 agent artifact in user data: %s", derived.UserData.ValueString())
+	}
+	if !strings.Contains(derived.UserData.ValueString(), "5c49231100870243f0f31af0703d765f79af5dc8f7248e59f7df36afd48ef5a7") {
+		t.Fatalf("missing derived amd64 agent checksum in user data: %s", derived.UserData.ValueString())
+	}
+	if !strings.Contains(derived.UserData.ValueString(), "betternat_v0.1.0-alpha.2_linux_amd64") {
+		t.Fatalf("missing derived amd64 cli artifact in user data: %s", derived.UserData.ValueString())
+	}
+	if !strings.Contains(derived.UserData.ValueString(), "0e671ebeb1b2a93fd88a1e2bcdb5c93de01d35313b10ce776ef6dcc49885d200") {
+		t.Fatalf("missing derived amd64 cli checksum in user data: %s", derived.UserData.ValueString())
+	}
+}
+
+func TestDeriveGatewayStateBetterNATVersionAllowsExplicitArtifactOverrides(t *testing.T) {
+	plan := validGatewayPlan()
+	plan.BetterNATVersion = types.StringValue("v0.1.0-alpha.2")
+	plan.InstanceType = types.StringValue("t4g.small")
+	plan.AgentBinaryURL = types.StringValue("https://example.invalid/custom-agent")
+	plan.AgentBinarySHA256 = types.StringValue("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	derived, err := DeriveGatewayState(context.Background(), &plan)
+	if err != nil {
+		t.Fatalf("derive gateway state: %v", err)
+	}
+	if got := derived.AgentBinaryURL.ValueString(); got != "https://example.invalid/custom-agent" {
+		t.Fatalf("explicit agent url should win, got: %s", got)
+	}
+	if got := derived.AgentBinarySHA256.ValueString(); got != "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
+		t.Fatalf("explicit agent checksum should win, got: %s", got)
+	}
+	if got := derived.CLIBinaryURL.ValueString(); got != "https://github.com/nowakeai/betternat/releases/download/v0.1.0-alpha.2/betternat_v0.1.0-alpha.2_linux_arm64" {
+		t.Fatalf("cli url should still derive, got: %s", got)
+	}
+}
+
+func TestDeriveGatewayStateRejectsUnsupportedBetterNATVersion(t *testing.T) {
+	plan := validGatewayPlan()
+	plan.BetterNATVersion = types.StringValue("v9.9.9")
+	_, err := DeriveGatewayState(context.Background(), &plan)
+	if err == nil {
+		t.Fatal("expected unsupported betternat_version error")
+	}
+	if !strings.Contains(err.Error(), "unsupported betternat_version") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestDeriveGatewayStateUseSpot(t *testing.T) {
 	plan := validGatewayPlan()
 	plan.UseSpot = types.BoolValue(true)
@@ -440,6 +520,29 @@ func TestGatewayReplacementRequiredForAgentBinaryURLChange(t *testing.T) {
 	}
 	if gatewayReplacementRequired(state, capacity) {
 		t.Fatal("capacity-only change should not require replacement")
+	}
+}
+
+func TestGatewayReplacementRequiredForBetterNATVersionChange(t *testing.T) {
+	statePlan := validGatewayPlan()
+	statePlan.AgentBinaryURL = types.StringValue("https://example.invalid/agent")
+	statePlan.AgentBinarySHA256 = types.StringValue("old-agent-sha")
+	statePlan.CLIBinaryURL = types.StringValue("https://example.invalid/cli")
+	statePlan.CLIBinarySHA256 = types.StringValue("old-cli-sha")
+	state, err := DeriveGatewayState(context.Background(), &statePlan)
+	if err != nil {
+		t.Fatalf("derive state: %v", err)
+	}
+
+	nextPlan := validGatewayPlan()
+	nextPlan.BetterNATVersion = types.StringValue("v0.1.0-alpha.2")
+	next, err := DeriveGatewayState(context.Background(), &nextPlan)
+	if err != nil {
+		t.Fatalf("derive next: %v", err)
+	}
+
+	if !gatewayReplacementRequired(state, next) {
+		t.Fatal("betternat_version change must require replacement")
 	}
 }
 

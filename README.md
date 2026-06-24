@@ -109,14 +109,10 @@ resource "betternat_gateway" "egress" {
   instance_type       = "t4g.small"
   desired_capacity    = 2
   max_size            = 3
+  betternat_version   = "v0.1.0-alpha.2"
   stable_egress_ip    = true
   prometheus_enabled  = true
   rollback_on_destroy = true
-
-  agent_binary_url    = var.agent_binary_url
-  agent_binary_sha256 = var.agent_binary_sha256
-  cli_binary_url      = var.cli_binary_url
-  cli_binary_sha256   = var.cli_binary_sha256
 }
 ```
 

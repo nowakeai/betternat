@@ -16,19 +16,22 @@ Alpha bootstrap path:
 
 1. Build release artifacts with `scripts/release-build.sh`.
 2. Publish the release artifacts to GitHub Releases for public alpha users.
-3. Provide Terraform with:
+3. Provide Terraform with `betternat_version`; the provider derives the
+   matching agent/CLI GitHub Release artifact URLs and SHA256 checksums from its
+   built-in release manifest.
+4. Optional private or unreleased test builds may still override:
    - `agent_binary_url`,
    - `agent_binary_sha256`,
    - `cli_binary_url`,
    - `cli_binary_sha256`,
-   - optional `loxicmd_binary_url`,
-   - optional `loxicmd_binary_sha256`.
-4. Terraform launches official Amazon Linux 2023 arm64 AMIs.
-5. Cloud-init downloads and verifies the agent and CLI.
-6. Cloud-init applies the baseline BetterNAT sysctl profile.
-7. Cloud-init starts LoxiLB in Docker.
-8. Cloud-init writes `/etc/betternat/agent.json`.
-9. Cloud-init installs and starts `betternat-agent.service`.
+   - `loxicmd_binary_url`,
+   - `loxicmd_binary_sha256`.
+5. Terraform launches an explicit user/provider-selected Linux AMI.
+6. Cloud-init downloads and verifies the agent and CLI.
+7. Cloud-init applies the baseline BetterNAT sysctl profile.
+8. Cloud-init starts LoxiLB in Docker.
+9. Cloud-init writes `/etc/betternat/agent.json`.
+10. Cloud-init installs and starts `betternat-agent.service`.
 
 This is acceptable for alpha because it avoids maintaining a premature AMI pipeline while preserving a reproducible test/install path.
 
@@ -75,16 +78,8 @@ https://github.com/nowakeai/betternat/releases/download/<version>/betternat_<ver
 https://github.com/nowakeai/betternat/releases/download/<version>/SHA256SUMS
 ```
 
-Required values:
-
-```sh
-export BETTERNAT_AGENT_BINARY_URL="https://..."
-export BETTERNAT_AGENT_BINARY_SHA256="<sha256>"
-export BETTERNAT_CLI_BINARY_URL="https://..."
-export BETTERNAT_CLI_BINARY_SHA256="<sha256>"
-```
-
-The SHA must be calculated from the exact uploaded file:
+The provider's built-in release manifest must match the exact uploaded files.
+When updating supported runtime versions, calculate SHAs from `SHA256SUMS`:
 
 ```sh
 awk '$2 == "betternat-agent_v0.1.0-alpha.2_linux_arm64" {print $1}' SHA256SUMS
@@ -95,7 +90,13 @@ Internal pre-release AWS tests may still use a temporary private S3 bucket and p
 
 ## Terraform Inputs
 
-The supplemental fixture supports:
+The supplemental fixture supports the public path:
+
+```hcl
+betternat_version = var.betternat_version
+```
+
+and private test-build overrides:
 
 ```hcl
 agent_binary_url      = var.agent_binary_url

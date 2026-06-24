@@ -191,6 +191,7 @@ BetterNAT config sections to document:
   - `ha_renew_interval_seconds`.
 - bootstrap:
   - `ami_id`,
+  - `betternat_version`,
   - `agent_binary_url`,
   - `agent_binary_sha256`,
   - `cli_binary_url`,

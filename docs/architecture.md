@@ -109,7 +109,7 @@ Implementation note for the current Go provider/applier split:
 - `ami_id` is required when the applier needs to launch appliance instances itself.
 - `instance_type` defaults to `t3.small` when not specified.
 - `use_spot` is available for low-cost tests and interruption-tolerant environments, but it defaults to `false`.
-- Before BetterNAT AMIs exist, AWS tests use an official Linux AMI plus cloud-init. The provider can pass a sensitive `agent_binary_url` so bootstrap downloads the current `betternat-agent` build at first boot.
+- Before BetterNAT AMIs exist, AWS installs use an official Linux AMI plus cloud-init. The provider derives agent and CLI GitHub Release artifact URLs and SHA256 checksums from `betternat_version`; explicit artifact URLs remain available for private or unreleased test builds.
 - Existing appliance instance IDs can still be supplied by an outer installer, which is useful for tests, bring-your-own-AMI flows, or phased migration.
 - Production self-healing should move instance ownership to Launch Templates and one ASG per AZ. In that model the provider manages the pool and stable AWS resources, while the agent dynamically elects the active owner from the ASG instances.
 
