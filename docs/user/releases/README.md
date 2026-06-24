@@ -5,7 +5,7 @@ notes. Group files by minor version directory and name each file by the exact
 Git tag:
 
 ```text
-v0.1/v0.1.0-alpha.8.md
+v0.1/v0.1.0.md
 ```
 
 Rules:
@@ -23,6 +23,7 @@ Rules:
 
 Current releases:
 
+- [v0.1.0](v0.1/v0.1.0.md)
 - [v0.1.0-alpha.8](v0.1/v0.1.0-alpha.8.md)
 - [v0.1.0-alpha.7](v0.1/v0.1.0-alpha.7.md)
 - [v0.1.0-alpha.6](v0.1/v0.1.0-alpha.6.md)

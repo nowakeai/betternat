@@ -124,7 +124,7 @@ func (r *GatewayResource) Configure(_ context.Context, req resource.ConfigureReq
 
 func (r *GatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "BetterNAT gateway resource. v0 installs gateway node infrastructure and records runtime metadata.",
+		MarkdownDescription: "BetterNAT gateway resource. Installs gateway node infrastructure and records runtime metadata.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -144,12 +144,14 @@ func (r *GatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Required: true,
 			},
 			"ami_id": schema.StringAttribute{
-				Optional: true,
+				MarkdownDescription: "Explicit Linux AMI ID for gateway nodes. Required for the cloud_init install path because BetterNAT does not currently resolve ami_channel into a public AMI.",
+				Optional:            true,
 			},
 			"ami_channel": schema.StringAttribute{
-				Optional: true,
-				Computed: true,
-				Default:  stringdefault.StaticString("stable"),
+				MarkdownDescription: "Reserved AMI channel selector. Accepted values are stable, candidate, and dev, but current installs should set ami_id explicitly.",
+				Optional:            true,
+				Computed:            true,
+				Default:             stringdefault.StaticString("stable"),
 			},
 			"bootstrap_mode": schema.StringAttribute{
 				MarkdownDescription: "Gateway node bootstrap mode. Use cloud_init for ordinary Linux AMIs that install BetterNAT at first boot. Use prebaked_ami only for BetterNAT AMIs that already contain Docker, LoxiLB, betternat, betternat-agent, loxicmd, and systemd units.",
@@ -186,7 +188,7 @@ func (r *GatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			},
 			"betternat_version": schema.StringAttribute{
 				Optional:            true,
-				MarkdownDescription: "BetterNAT runtime release tag used to derive agent/CLI GitHub Release artifact URLs and checksums for bootstrap installs. Example: v0.1.0-alpha.6. Explicit agent_binary_url, agent_binary_sha256, cli_binary_url, and cli_binary_sha256 values override derived values.",
+				MarkdownDescription: "BetterNAT runtime release tag used to derive agent/CLI GitHub Release artifact URLs and checksums for bootstrap installs. Example: v0.1.0. Explicit agent_binary_url, agent_binary_sha256, cli_binary_url, and cli_binary_sha256 values override derived values.",
 			},
 			"agent_binary_url": schema.StringAttribute{
 				Optional:            true,

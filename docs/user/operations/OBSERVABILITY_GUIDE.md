@@ -4,13 +4,15 @@ Date: 2026-06-22
 
 ## Purpose
 
-This guide describes what BetterNAT exposes for monitoring and debugging in the first alpha.
+This guide describes what BetterNAT exposes for monitoring and debugging.
 
-BetterNAT v0 is decentralized. Each gateway node runs `betternat-agent`, owns its local datapath reconciliation, and exposes local health data. There is no central BetterNAT control server in the first alpha.
+BetterNAT is decentralized. Each gateway node runs `betternat-agent`, owns its
+local datapath reconciliation, and exposes local health data. There is no
+central BetterNAT control server.
 
 ## What You Can Observe
 
-The first alpha is designed to answer these questions:
+BetterNAT is designed to answer these questions:
 
 - Is the agent process running?
 - Which node is active for an HA group?
@@ -50,18 +52,16 @@ terraform output egress_public_ips
 
 ### Local CLI
 
-Run CLI diagnostics on a gateway node, usually through SSM Session Manager:
+Run CLI diagnostics on a gateway node when you need a live point-in-time view:
 
 ```sh
 sudo betternat status
-sudo betternat doctor
 sudo betternat doctor --live
-sudo betternat failover status
-sudo betternat datapath status
-sudo betternat datapath ready
 ```
 
-Use `doctor` for static configuration checks. Use `doctor --live` when you want local datapath, IAM, lease, route, EIP, Prometheus, and egress-probe checks from the node's point of view. Use `status` for registry-backed fleet visibility across active and standby nodes.
+Use the [Operations Guide](OPERATIONS_GUIDE.md#cli-commands) for the full CLI
+command list and command-by-command behavior. This guide focuses on the
+monitoring signals those commands expose.
 
 ### Prometheus Metrics
 
@@ -75,6 +75,30 @@ Prometheus should scrape every gateway node, not only the current active node. S
 
 Restrict access to the metrics port with security groups. It should be reachable from your monitoring network, not from the public internet.
 
+For the disposable Quick Start, generate scrape targets from the ASG output:
+
+```sh
+export BETTERNAT_ASG_NAME="$(
+  terraform -chdir=examples/terraform-aws-supplemental output -raw asg_name
+)"
+
+export BETTERNAT_GATEWAY_INSTANCE_IDS="$(
+  aws autoscaling describe-auto-scaling-groups \
+    --region "$AWS_REGION" \
+    --auto-scaling-group-names "$BETTERNAT_ASG_NAME" \
+    --query "AutoScalingGroups[0].Instances[].InstanceId" \
+    --output text
+)"
+
+aws ec2 describe-instances \
+  --region "$AWS_REGION" \
+  --instance-ids $BETTERNAT_GATEWAY_INSTANCE_IDS \
+  --query "Reservations[].Instances[].PrivateIpAddress" \
+  --output text |
+  tr '\t' '\n' |
+  sed 's/$/:9108/'
+```
+
 Minimal scrape job:
 
 ```yaml
@@ -86,7 +110,9 @@ scrape_configs:
           - 10.0.1.11:9108
 ```
 
-In production, prefer EC2 service discovery filtered by BetterNAT tags or generate scrape targets from Terraform outputs and ASG membership.
+In production, prefer EC2 service discovery filtered by the tags you pass to
+`betternat_gateway`, or generate scrape targets from Terraform outputs and ASG
+membership.
 
 Starter Prometheus alert rules are available at:
 
@@ -106,36 +132,25 @@ incident policy.
 
 ### AWS Control Plane
 
-Use AWS APIs or AWS CLI to cross-check what the agent reports:
+Use AWS APIs to cross-check what the agent reports: ASG membership, route table
+targets, EIP association, and DynamoDB lease state. The exact AWS CLI commands
+live in the [Operations Guide](OPERATIONS_GUIDE.md#aws-checks).
 
-```sh
-aws autoscaling describe-auto-scaling-groups \
-  --auto-scaling-group-names <asg-name>
+### Gateway Logs And Datapath State
 
-aws ec2 describe-route-tables \
-  --route-table-ids <rtb-id>
-
-aws ec2 describe-addresses \
-  --allocation-ids <eipalloc-id>
-
-aws dynamodb get-item \
-  --table-name <lease-table> \
-  --key '{"pk":{"S":"<ha-group-id>"}}'
-```
-
-### Appliance Logs And Datapath State
-
-On the node:
+For local debugging, collect gateway logs and LoxiLB state from the node:
 
 ```sh
 sudo systemctl status betternat-agent.service
 sudo journalctl -u betternat-agent.service -n 200 --no-pager
-curl -fsS http://127.0.0.1:9108/metrics | head
 loxicmd get firewall -o json
 loxicmd get conntrack -o json
 ```
 
-Use LoxiLB state for datapath-level debugging and Prometheus metrics for alerting and historical trends.
+Use LoxiLB state for datapath-level debugging and Prometheus metrics for
+alerting and historical trends. Use
+[`betternat support bundle`](OPERATIONS_GUIDE.md#support-bundle) when you need a
+redacted archive for incident review.
 
 ## Key Metrics
 
@@ -226,7 +241,26 @@ Repeated takeover attempts:
 increase(betternat_takeover_attempts_total[15m]) > 1
 ```
 
-No traffic through a gateway that should be serving egress:
+Takeover attempts without matching successes:
+
+```promql
+increase(betternat_takeover_attempts_total[15m]) - increase(betternat_takeover_success_total[15m]) > 0
+```
+
+Recent failed lifecycle handover records are not currently a Prometheus metric.
+Check the durable records through the CLI:
+
+```sh
+betternat handover history --limit 20
+```
+
+A failed `termination-*` handover record means the proactive ASG or Spot
+termination path did not complete. Check whether `betternat status`, route
+owner, EIP owner, and lease owner have still converged through normal lease
+takeover before treating it as an active outage.
+
+No traffic through a gateway that should be serving egress. Use this only for
+workloads that should have continuous traffic:
 
 ```promql
 rate(betternat_processed_bytes_total[10m]) == 0
@@ -266,24 +300,21 @@ betternat_failover_duration_seconds
 
 ## Egress IP Probe
 
-From a private client instance:
+Use a private-client synthetic probe to validate the full path from private
+workload to public internet:
 
 ```sh
 curl -fsS https://checkip.amazonaws.com
 ```
 
-Expected behavior:
-
-- stable egress IP mode: the result should match the configured EIP before and after failover for new connections,
-- non-stable mode: the result may change after failover.
-
-This probe is still useful even when Prometheus is healthy because it validates the full path from private workload to public internet.
+This is a black-box complement to Prometheus. Mode-specific interpretation lives
+in the [Operations Guide](OPERATIONS_GUIDE.md#egress-probe).
 
 ## Attribution Scope
 
 BetterNAT can expose counters grouped by configured owner labels. This is useful when you map known private CIDR ranges to teams, node pools, or workload classes.
 
-Current alpha scope:
+Current scope:
 
 - owner attribution is configured explicitly in the agent config under
   `observability.attribution.owners`,
@@ -313,9 +344,14 @@ Total processed throughput, without owner attribution:
 sum by (gateway, ha_group, direction) (rate(betternat_processed_bytes_total[5m]))
 ```
 
-The first alpha does not provide full Kubernetes pod-level attribution by itself. If private traffic comes from EKS nodes, BetterNAT normally sees node or VPC-level source addresses after the cluster networking layer. For pod-level attribution, combine BetterNAT gateway metrics with Kubernetes-side telemetry such as CNI flow logs, eBPF flow observability, application metrics, or VPC flow logs with ENI/IP metadata.
+BetterNAT does not provide full Kubernetes pod-level attribution by itself. If
+private traffic comes from EKS nodes, BetterNAT normally sees node or VPC-level
+source addresses after the cluster networking layer. For pod-level attribution,
+combine BetterNAT gateway metrics with Kubernetes-side telemetry such as CNI
+flow logs, eBPF flow observability, application metrics, or VPC flow logs with
+ENI/IP metadata.
 
-The first alpha also does not provide exact per-tenant billing attribution,
+BetterNAT also does not provide exact per-tenant billing attribution,
 automatic source/destination cardinality analysis, or packet capture at scale.
 
 ## Troubleshooting Patterns
@@ -334,35 +370,19 @@ Check:
 
 Check:
 
-1. DynamoDB lease item for the HA group.
-2. `betternat_ha_status_stale`.
-3. ASG healthy instance count.
-4. Agent logs around lease acquisition and renewal.
-5. Route target and EIP owner.
+1. whether all gateway nodes are being scraped,
+2. `betternat_ha_status_stale`,
+3. `betternat_lease_owner_match`,
+4. `betternat_route_target_match`,
+5. `betternat_public_identity_match` when stable EIP mode is enabled.
 
-### Route Or EIP Mismatch
-
-Check:
-
-1. `betternat_route_target_match`.
-2. `betternat_public_identity_match`.
-3. IAM permissions for `ec2:ReplaceRoute` and `ec2:AssociateAddress`.
-4. AWS route table and EIP association state.
-5. Whether an old instance is still running and renewing the lease.
-
-### Datapath Not Ready
-
-Check:
-
-1. `sudo betternat datapath ready`.
-2. `loxicmd get firewall -o json`.
-3. `loxicmd get conntrack -o json`.
-4. Agent logs around LoxiLB reconciliation.
-5. Appliance service logs if LoxiLB is not reconciling.
+For operator-side investigation, use the [Operations Guide
+troubleshooting](OPERATIONS_GUIDE.md#troubleshooting) sections for route/EIP
+mismatch, failed handover records, and datapath readiness.
 
 ## Current Limits
 
-The first alpha intentionally keeps observability local and simple:
+BetterNAT intentionally keeps observability local and simple:
 
 - no central BetterNAT API server,
 - no hosted BetterNAT dashboard or managed metric retention,
@@ -371,4 +391,4 @@ The first alpha intentionally keeps observability local and simple:
 - no long-term metric retention.
 
 Use Prometheus, the starter dashboard, AWS APIs, and node-local CLI checks as
-the supported first-release workflow.
+the supported workflow.

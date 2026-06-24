@@ -1,4 +1,4 @@
-# BetterNAT Failure Modes And Limitations
+# BetterNAT Failure Modes
 
 Date: 2026-06-23
 
@@ -6,11 +6,19 @@ Date: 2026-06-23
 
 This document describes expected BetterNAT behavior during common failures.
 
-It is intended for users evaluating whether the first free/open-source release fits their workloads.
+It is intended for users evaluating whether BetterNAT fits their workloads. Use
+it as a risk catalog. For step-by-step operations, use:
+
+- [Operations Guide](OPERATIONS_GUIDE.md) for normal incident triage,
+- [Rollback Guide](ROLLBACK_GUIDE.md) for route restore and destroy rollback,
+- [Observability Guide](OBSERVABILITY_GUIDE.md) for metrics, alerts, and PromQL,
+- [Upgrade And Replacement Guide](UPGRADE_REPLACEMENT_GUIDE.md) for replacement
+  planning,
+- [Limitations](../reference/LIMITATIONS.md) for release-scope boundaries.
 
 ## Core Semantics
 
-BetterNAT v0 provides active/standby HA for new egress connections.
+BetterNAT provides active/standby HA for new egress connections.
 
 It does not promise:
 
@@ -27,14 +35,11 @@ When failover happens:
 - stable EIP mode should converge new connections back to the shared public EIP,
 - non-stable mode may change public source IP.
 
-In the current alpha handover path, route and EIP ownership are both verified
-after mutation, but AWS control-plane convergence is not perfectly atomic.
-Validation on 2026-06-23 and 2026-06-24 showed two different behavior profiles:
-stable EIP mode can preserve the shared public IP after convergence but has a
-longer control-plane path during handover; non-stable mode changed public source
-IP as expected and completed the visible route-only switch in about 435 ms at
-the client probe's sampling granularity. Treat these as environment-specific
-measurements, not SLAs.
+In the current handover path, route and EIP ownership are both verified after
+mutation, but AWS control-plane convergence is not perfectly atomic. Stable EIP
+mode has a longer control-plane path than route-only non-stable mode because it
+must also move and verify public identity. Treat retained validation timings as
+environment-specific evidence, not SLAs.
 
 ## Summary Table
 
@@ -46,7 +51,7 @@ measurements, not SLAs.
 | LoxiLB process restarts | Agent reconciles missing datapath rules | Possible datapath interruption on affected instance | `betternat_datapath_ready=0`, LoxiLB command errors | Automatic reconcile if process returns |
 | Agent process stops on active | Graceful SIGTERM releases the local lease; crashes rely on lease expiry | Outage depends on HA profile, stop path, and detection timing | stale HA status, lease expiry or release, takeover attempt | Automatic if standby is healthy |
 | DynamoDB temporarily unavailable | Current active may keep datapath but lease renew can fail | Failover decisions may be delayed or conservative | lease renew errors | Automatic after DDB recovers |
-| `ReplaceRoute` fails | Lease may move but traffic still points to old target | New traffic may fail or continue through old node | route target mismatch | Agent retry/future rollback needed |
+| `ReplaceRoute` fails | Lease may move but traffic still points to old target | New traffic may fail or continue through old node | route target mismatch | Agent retry; use rollback guide if route remains wrong |
 | EIP association fails | Route may move but stable public IP not attached | Stable mode can leak different public IP or lose egress | public identity mismatch, outbound probe mismatch | Agent retry; manual AWS check |
 | ASG cannot launch replacement | Active may continue, but HA remains degraded | No standby protection | ASG activity failure | Fix capacity/quota/AMI/subnet/IAM |
 | Terraform destroy interrupted | Some resources may remain | Cost leak or route drift | residual resource scan | Rerun destroy or manual cleanup |
@@ -106,19 +111,11 @@ Fallback:
 
 Validation note:
 
-- a 2026-06-24 provider alpha8 soak terminated the active ASG instance. The
-  lifecycle-triggered durable handover record failed during `ec2:ReplaceRoute`
-  with a context deadline, but the fleet converged through fenced lease takeover
-  about 25 seconds after the termination request and ASG launched a replacement
-  standby. Treat this as a known hardening area, not a reason to assume ASG
-  termination is manual-only.
-- a later 2026-06-24 runtime alpha8 validation, using explicit runtime artifact
-  overrides through Terraform Registry provider alpha9, completed the
-  lifecycle-triggered durable handover record. The client probe recorded `136`
-  successful samples, `0` failures, and only the stable EIP
-  `52.43.198.166`. This confirms the proactive lifecycle path can complete;
-  broader AWS/DynamoDB retry/backoff hardening remains useful because transient
-  context errors still appeared in logs.
+- validation covered both passive fenced takeover and proactive ASG
+  lifecycle handover paths. Some tests converged through passive takeover after
+  a failed proactive record; later validation completed the proactive lifecycle
+  handover with no failed client probe samples. Treat the measurements as
+  evidence from retained test environments, not as SLAs.
 
 Signals:
 
@@ -130,14 +127,10 @@ betternat_route_target_match
 betternat_public_identity_match
 ```
 
-Operator response:
-
-- if `handover history` shows a failed `termination-*` record but `status`,
-  route, lease, and EIP owners have converged, keep monitoring and record the
-  failure for support evidence,
-- if route or EIP ownership does not converge after lease expiry, inspect
-  `doctor --live`, AWS route table state, EIP association, DynamoDB lease, and
-  agent logs on the surviving node.
+Operator response lives in the [Operations Guide failed lifecycle handover
+section](OPERATIONS_GUIDE.md#failed-asg-lifecycle-handover-record). If private
+egress is down and the previous route target is known, use the [Rollback Guide
+emergency restore path](ROLLBACK_GUIDE.md#emergency-route-restore).
 
 ## Standby EC2 Failure
 
@@ -305,21 +298,13 @@ Impact:
 
 Validation note:
 
-- a 2026-06-24 AWS probe recorded `240` samples, `0` failures, and a public
-  source IP switch from `52.24.117.43` to `52.24.240.255` within about `435 ms`
-  between the last old-IP sample and first new-IP sample.
-- the comparable stable/no-public-IP handover preserved the shared EIP with `0`
-  non-shared public IP samples, but recorded `3` one-second client timeouts. The
-  current bootstrap-first default keeps per-node public IPv4 enabled for gateway
-  management; strict management/egress identity separation needs a secondary
-  egress private IP or equivalent design.
-- a later provider alpha8 stable-mode soak with default per-node public IPv4
-  recorded `2591` client samples during multiple restart and handover events:
-  `2575` ok, `11` timeout failures, and `5` successful samples through ordinary
-  node public IPs before final convergence back to the shared EIP.
-- a later runtime alpha8 ASG lifecycle validation recorded `136` successful
-  samples, `0` failures, and no ordinary-public-IP samples during active ASG
-  termination handover.
+- retained 2026-06-24 validation showed non-stable route-only handover can be
+  materially faster than stable EIP handover in the tested environment.
+- stable mode converges back to the shared EIP, but strict "every successful
+  sample always returns only the shared EIP" semantics remain future hardening
+  for the `cloud_init` path when per-node public IPv4 is enabled.
+- see [Limitations](../reference/LIMITATIONS.md#bootstrap-semantics) for the
+  stable-EIP/bootstrap caveat.
 
 ## ASG Replacement Failure
 
@@ -402,19 +387,14 @@ Scenario:
 
 - new AMI, agent, or config fails readiness.
 
-Current alpha policy:
+Current policy:
 
 - capacity-only Terraform updates may be in-place,
 - non-capacity updates require replacement unless explicitly supported,
 - blue/green replacement is safer than in-place mutation.
 
-Expected future production policy:
-
-1. update standby first,
-2. verify readiness,
-3. planned failover,
-4. replace old active,
-5. keep rollback path.
+Use the [Upgrade And Replacement Guide](UPGRADE_REPLACEMENT_GUIDE.md) for the
+supported replacement model and future rolling-upgrade direction.
 
 ## User Responsibility
 
@@ -435,16 +415,17 @@ Users must also understand:
 - AWS API availability affects failover,
 - BetterNAT does not remove normal AWS data-transfer charges.
 
-## First-Release Limitations
+## Release Limitations
 
-- AWS only.
-- Single-AZ HA group scope.
-- No active-active NAT.
-- No active connection preservation.
-- No central server.
-- No automatic multi-account inventory.
-- Use `betternat support bundle` to collect local redacted diagnostics when
-  opening an issue or sharing evidence.
+Use [Limitations](../reference/LIMITATIONS.md) as the authoritative release
+scope document. The failure-mode summary here should not duplicate the complete
+limitations list.
+
+Operationally important reminders:
+
+- use `betternat support bundle` to collect local redacted diagnostics when
+  opening an issue or sharing evidence,
 - `doctor --live` is node-local; use `betternat status`, Prometheus, and AWS
-  state checks for fleet-wide review.
-- Large multi-TB benchmark is not part of first-release validation.
+  state checks for fleet-wide review,
+- BetterNAT is self-managed infrastructure and does not publish an AWS NAT
+  Gateway equivalent SLA.

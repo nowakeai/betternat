@@ -4,112 +4,33 @@ Date: 2026-06-21
 
 ## Purpose
 
-This guide shows the Terraform migration shape first, then deploys BetterNAT into a disposable AWS VPC, verifies private-subnet egress, and destroys all resources.
+This guide deploys BetterNAT into a disposable AWS VPC, verifies private-subnet
+egress, and destroys all resources.
 
 Use this first. Do not start by replacing a production NAT Gateway.
 
 ## Scope
 
-This guide is for the current public alpha Terraform install path: provider
-`0.1.0-alpha.8` with BetterNAT runtime `v0.1.0-alpha.6`.
+This guide is for the current Terraform install path.
 
 Important:
 
-- BetterNAT does not publish a BetterNAT AMI in the current alpha.
+- BetterNAT does not publish a public BetterNAT AMI yet.
 - Terraform launches an explicit Linux AMI and uses cloud-init to install release artifacts at boot.
-- Runtime `v0.1.0-alpha.8` exists for GA hardening validation, but this quick
-  start uses `v0.1.0-alpha.6` because that is the runtime in the provider's
-  built-in artifact manifest.
 - The example uses one AZ.
 - The example uses small EC2 instances and tiny HTTP probes.
 - It does not run expensive multi-TB traffic tests.
 
-## Terraform UX: Replace The NAT Backend
+## What This Test Proves
 
-If your Terraform currently provisions a single-AZ AWS NAT Gateway, it probably has this shape:
+This disposable test answers the first operational questions:
 
-```hcl
-resource "aws_eip" "nat" {
-  domain = "vpc"
-}
-
-resource "aws_nat_gateway" "main" {
-  allocation_id = aws_eip.nat.id
-  subnet_id     = aws_subnet.public["us-west-2a"].id
-}
-
-resource "aws_route" "private_default" {
-  route_table_id         = aws_route_table.private["us-west-2a"].id
-  destination_cidr_block = "0.0.0.0/0"
-  nat_gateway_id         = aws_nat_gateway.main.id
-}
-```
-
-With BetterNAT, the user-facing replacement is one resource. BetterNAT creates the node pool, EIP, lease table, IAM role, security group, launch template, ASG, and owns the private route target:
-
-```hcl
-resource "betternat_gateway" "egress" {
-  name   = "prod-egress-a"
-  region = "us-west-2"
-  vpc_id = aws_vpc.main.id
-
-  public_subnet_ids = {
-    "us-west-2a" = aws_subnet.public["us-west-2a"].id
-  }
-
-  private_route_table_ids = {
-    "us-west-2a" = [aws_route_table.private["us-west-2a"].id]
-  }
-
-  private_cidrs = [aws_vpc.main.cidr_block]
-
-  ami_id              = data.aws_ami.al2023_arm64.id
-  instance_type       = "t4g.small"
-  desired_capacity    = 2
-  max_size            = 3
-  betternat_version   = "v0.1.0-alpha.6"
-  stable_egress_ip    = true
-  prometheus_enabled  = true
-  rollback_on_destroy = true
-}
-```
-
-The important migration rule:
-
-- before: Terraform owns `aws_route.private_default` with `nat_gateway_id`,
-- after: `betternat_gateway` owns that route table's default route so `betternat-agent` can move it during failover.
-
-Do not keep a separate `aws_route` resource managing the same `0.0.0.0/0` private route after BetterNAT is active.
-
-### Module-Level Switch
-
-In a networking module, keep the old input and add a backend selector:
-
-```hcl
-variable "enable_nat_gateway" {
-  type    = bool
-  default = true
-}
-
-variable "nat_backend" {
-  type    = string
-  default = "aws_nat_gateway"
-
-  validation {
-    condition     = contains(["aws_nat_gateway", "betternat", "none"], var.nat_backend)
-    error_message = "nat_backend must be aws_nat_gateway, betternat, or none."
-  }
-}
-```
-
-Then callers change only:
-
-```hcl
-enable_nat_gateway = true
-nat_backend        = "betternat"
-```
-
-The module can keep compatibility outputs such as `nat_gateway_ip` by returning either the AWS NAT Gateway EIP or the BetterNAT EIP.
+- Terraform can install the BetterNAT provider.
+- BetterNAT gateway nodes can bootstrap from release artifacts.
+- The active node can own the private route target.
+- A private test client can reach the public internet.
+- `betternat status`, `doctor --live`, and metrics expose useful state.
+- Terraform destroy can clean up the test stack.
 
 ## Flow Diagram
 
@@ -129,6 +50,7 @@ Install locally:
 
 - Terraform,
 - AWS CLI,
+- `jq`,
 - an AWS profile with permission to create EC2, Auto Scaling, IAM, DynamoDB, and SSM resources.
 
 Choose:
@@ -137,8 +59,8 @@ Choose:
 export AWS_PROFILE="<your-profile>"
 export AWS_REGION="us-west-2"
 export BETTERNAT_AZ="us-west-2a"
-export BETTERNAT_VERSION="v0.1.0-alpha.6"
-export BETTERNAT_RUN_ID="betternat-alpha-test-$(date -u +%Y%m%d%H%M%S)"
+export BETTERNAT_VERSION="v0.1.0"
+export BETTERNAT_RUN_ID="betternat-test-$(date -u +%Y%m%d%H%M%S)"
 ```
 
 Expected AWS costs:
@@ -164,11 +86,11 @@ binaries.
 
 ## Install Provider
 
-The public Quick Start uses provider version `0.1.0-alpha.8`:
+The public Quick Start pins the current provider version:
 
 ```hcl
 source  = "nowakeai/betternat"
-version = "= 0.1.0-alpha.8"
+version = "= 0.1.0"
 ```
 
 Terraform Registry install is the default path:
@@ -224,21 +146,75 @@ Get outputs:
 terraform -chdir=examples/terraform-aws-supplemental output
 ```
 
-Use SSM to run on the active gateway node:
+Get the active gateway and private client instance IDs:
 
 ```sh
-betternat version
-betternat-agent --version
-systemctl is-active betternat-agent.service
-betternat status
-betternat doctor --live
+export BETTERNAT_ACTIVE_INSTANCE_ID="$(
+  terraform -chdir=examples/terraform-aws-supplemental output -json active_instance_ids |
+    jq -r 'to_entries[0].value'
+)"
+
+export BETTERNAT_PRIVATE_CLIENT_ID="$(
+  terraform -chdir=examples/terraform-aws-supplemental output -raw private_client_instance_id
+)"
+```
+
+Use SSM to run the gateway checks:
+
+```sh
+export BETTERNAT_GATEWAY_CHECK_COMMAND_ID="$(
+  aws ssm send-command \
+    --profile "$AWS_PROFILE" \
+    --region "$AWS_REGION" \
+    --instance-ids "$BETTERNAT_ACTIVE_INSTANCE_ID" \
+    --document-name "AWS-RunShellScript" \
+    --parameters '{"commands":["betternat version","betternat-agent --version","systemctl is-active betternat-agent.service","sudo betternat status","sudo betternat doctor --live"]}' \
+    --query "Command.CommandId" \
+    --output text
+)"
+
+aws ssm wait command-executed \
+  --profile "$AWS_PROFILE" \
+  --region "$AWS_REGION" \
+  --command-id "$BETTERNAT_GATEWAY_CHECK_COMMAND_ID" \
+  --instance-id "$BETTERNAT_ACTIVE_INSTANCE_ID"
+
+aws ssm list-command-invocations \
+  --profile "$AWS_PROFILE" \
+  --region "$AWS_REGION" \
+  --command-id "$BETTERNAT_GATEWAY_CHECK_COMMAND_ID" \
+  --details \
+  --query "CommandInvocations[].CommandPlugins[].Output" \
+  --output text
 ```
 
 From the private test client, verify public egress:
 
 ```sh
-curl -fsS https://checkip.amazonaws.com
-curl -fsSI https://example.com
+export BETTERNAT_CLIENT_CHECK_COMMAND_ID="$(
+  aws ssm send-command \
+    --profile "$AWS_PROFILE" \
+    --region "$AWS_REGION" \
+    --instance-ids "$BETTERNAT_PRIVATE_CLIENT_ID" \
+    --document-name "AWS-RunShellScript" \
+    --parameters '{"commands":["curl -fsS https://checkip.amazonaws.com","curl -fsSI https://example.com"]}' \
+    --query "Command.CommandId" \
+    --output text
+)"
+
+aws ssm wait command-executed \
+  --profile "$AWS_PROFILE" \
+  --region "$AWS_REGION" \
+  --command-id "$BETTERNAT_CLIENT_CHECK_COMMAND_ID" \
+  --instance-id "$BETTERNAT_PRIVATE_CLIENT_ID"
+
+aws ssm list-command-invocations \
+  --profile "$AWS_PROFILE" \
+  --region "$AWS_REGION" \
+  --command-id "$BETTERNAT_CLIENT_CHECK_COMMAND_ID" \
+  --details \
+  --query "CommandInvocations[].CommandPlugins[].Output" \
+  --output text
 ```
 
 For stable EIP mode, the source IP should match the BetterNAT EIP.
@@ -265,3 +241,12 @@ aws resourcegroupstaggingapi get-resources \
 ```
 
 Terminated EC2 instances can remain visible briefly in tag results. Confirm direct EC2 state before treating them as live resources.
+
+## Next Steps
+
+- Read [Operations Guide](../operations/OPERATIONS_GUIDE.md) to understand
+  day-2 status, metrics, handover records, and cleanup checks.
+- Read [EKS Terraform Module Integration](EKS_TERRAFORM_MODULE_INTEGRATION.md)
+  if you need to adapt an existing modular Terraform/EKS repository.
+- Read [Existing VPC Install](EXISTING_VPC_INSTALL.md) before touching real
+  private route tables.

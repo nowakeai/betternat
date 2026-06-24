@@ -4,8 +4,8 @@ Date: 2026-06-24
 
 ## Purpose
 
-This document describes the AWS IAM permissions needed by the current BetterNAT
-alpha install path.
+This document describes the AWS IAM permissions needed by the BetterNAT
+Terraform install path.
 
 There are two IAM surfaces:
 
@@ -43,7 +43,7 @@ The runtime role is used for:
 - route failover,
 - EIP failover,
 - source/destination check self-disable,
-- runtime diagnostics.
+- runtime diagnostics,
 - lifecycle hook completion for graceful ASG/Spot termination handling.
 
 Required runtime actions:
@@ -72,6 +72,17 @@ arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
 
 This enables SSH-less access through AWS Systems Manager Session Manager.
 
+## What The Runtime Role Does Not Need
+
+In the normal registry-backed path, runtime fleet status does not require:
+
+- `autoscaling:DescribeAutoScalingGroups`,
+- `ec2:DescribeInstances`.
+
+Agents self-register through the DynamoDB coordination table. The CLI reads
+coordination records and peer metrics instead of discovering the fleet through
+ASG and EC2 inventory APIs.
+
 ## Instance Metadata
 
 BetterNAT launch templates require IMDSv2:
@@ -86,34 +97,32 @@ The agent uses AWS SDK and IMDSv2-capable metadata access for local EC2 identity
 
 ## Policy Scope
 
-The alpha provider scopes IAM to BetterNAT-created resources where currently practical, but the policy is not yet a final least-privilege production policy.
+The provider scopes IAM to BetterNAT-created resources where currently
+practical, but the policy is intentionally broader than a hand-written
+environment-specific least-privilege policy.
 
 Before production:
 
 - review all IAM resource ARNs,
 - narrow EC2 route/EIP permissions to known route tables and allocation IDs where AWS supports it cleanly,
-- narrow DynamoDB permissions to the coordination table and any legacy lease table still used by an old alpha environment,
+- narrow DynamoDB permissions to the coordination table and any legacy lease table still used by an old environment,
 - decide whether `iam:SimulatePrincipalPolicy` remains enabled by default or becomes an optional diagnostics permission.
 
-Review status on 2026-06-24:
+Scope notes:
 
-- Runtime fleet status no longer requires `autoscaling:DescribeAutoScalingGroups`
-  or `ec2:DescribeInstances`; agents self-register through DynamoDB and the CLI
-  reads the coordination table plus peer metrics.
 - `autoscaling:CompleteLifecycleAction` remains required for provider-created
   termination lifecycle hooks.
 - `ec2:AssociateAddress` is only needed when stable shared-EIP mode is enabled,
-  but the alpha policy still includes it because stable mode is the default.
+  but the current policy still includes it because stable mode is the default.
 - `iam:SimulatePrincipalPolicy` and `sts:GetCallerIdentity` are diagnostics
   permissions used by `doctor --live`; production can make this optional if a
   stricter runtime role is required.
-- The policy is acceptable for alpha, but production should still scope route
-  and EIP actions to the exact managed route tables and allocation IDs.
-- GA IAM review is recorded in
-  `docs/research/043-ga-iam-security-review.md`. No immediate blocker was found
-  for the current Terraform Registry plus `cloud_init` production-preview path,
-  but the final GA policy should replace the current inline `Resource="*"`
-  runtime statement with scoped statements where AWS supports clean scoping.
+- The policy is acceptable for general use, but strict environments should
+  still scope route and EIP actions to the exact managed route tables and
+  allocation IDs where AWS supports clean scoping.
+Strict environments should review the generated policy scope before using
+BetterNAT with existing production route tables. Internal IAM review evidence is
+kept under `docs/research/`.
 
 ## Diagnostic Behavior
 
@@ -130,4 +139,5 @@ If a required permission is denied:
 - the IAM check lists missing actions,
 - dependent checks such as route or EIP may also report AWS access errors.
 
-Older alpha validation used `autoscaling:DescribeAutoScalingGroups` for ASG fleet checks. Registry-backed installs should use the coordination table plus `betternat status` for fleet visibility instead of granting ASG/EC2 discovery permissions to the runtime role.
+Use [Security Hardening](SECURITY_HARDENING.md) for broader security posture,
+network exposure, artifact integrity, and production hardening checklist.

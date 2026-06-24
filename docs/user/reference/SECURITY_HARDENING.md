@@ -4,13 +4,22 @@ Date: 2026-06-24
 
 ## Purpose
 
-This guide describes the current BetterNAT security posture, first-alpha limits, and production hardening checklist.
+This guide describes the BetterNAT security posture and hardening checklist.
 
 BetterNAT is a self-managed network node. Treat it as privileged infrastructure: it changes VPC routes, owns egress identity, and runs a local datapath.
 
-## Current Alpha Posture
+Use this guide for security review decisions. Use:
 
-The first alpha includes:
+- [IAM Policy](IAM_POLICY.md) for exact AWS actions and runtime role scope,
+- [Limitations](LIMITATIONS.md) for release-scope limitations,
+- [Observability Guide](../operations/OBSERVABILITY_GUIDE.md) for metrics
+  exposure and alerting,
+- [Rollback Guide](../operations/ROLLBACK_GUIDE.md) for route restore and
+  cleanup safety.
+
+## Current Posture
+
+BetterNAT includes:
 
 - Terraform-created IAM role and instance profile,
 - AWS SDK based runtime operations,
@@ -23,11 +32,10 @@ The first alpha includes:
 - Apache-2.0 project license,
 - third-party notices for LoxiLB and other integrated components.
 
-Important alpha limitations:
+Security caveats to account for:
 
-- runtime IAM is not yet a final least-privilege production policy,
 - cloud-init downloads runtime artifacts during boot because no BetterNAT AMI is published yet,
-- LoxiLB runs in a privileged container in the alpha bootstrap path,
+- LoxiLB runs in a privileged container in the cloud-init bootstrap path,
 - release binaries use checksums, but BetterNAT application artifacts are not yet signed,
 - no generated SBOM is attached to releases yet,
 - no hosted BetterNAT dashboard or central security/audit server exists.
@@ -39,7 +47,8 @@ BetterNAT has two IAM surfaces:
 1. Terraform execution identity.
 2. Gateway runtime role.
 
-The Terraform identity creates and destroys EC2, ASG, IAM, security group, DynamoDB, route, and EIP resources.
+The Terraform identity creates and destroys EC2, ASG, IAM, security group,
+DynamoDB, route, and EIP resources.
 
 The runtime role is used by `betternat-agent` for:
 
@@ -49,15 +58,19 @@ The runtime role is used by `betternat-agent` for:
 - source/destination check self-disable,
 - live diagnostics.
 
-See [IAM_POLICY.md](IAM_POLICY.md) for the action list and current scope.
+See [IAM Policy](IAM_POLICY.md) for the action list and current scope.
 
-Production hardening targets:
+Security review focus:
 
-- scope DynamoDB actions to the lease table,
-- scope EC2 route operations to selected route tables where practical,
-- scope EIP operations to the configured allocation ID when stable egress IP is enabled,
-- decide whether `iam:SimulatePrincipalPolicy` remains enabled by default or becomes optional diagnostics permission,
-- remove unused permissions after AWS acceptance tests verify the exact call set.
+- confirm Terraform execution is done by an identity appropriate for creating
+  network, IAM, route, EIP, DynamoDB, and ASG resources,
+- confirm the generated runtime role is acceptable for the selected route
+  tables and EIP allocation,
+- decide whether diagnostic permissions such as `iam:SimulatePrincipalPolicy`
+  are acceptable in the runtime role.
+
+The exact actions, current scope, and least-privilege notes live in
+[IAM Policy](IAM_POLICY.md).
 
 ## Network Exposure
 
@@ -69,7 +82,7 @@ Default intended exposure:
 - outbound node traffic allowed for egress, AWS APIs, bootstrap, and LoxiLB image/artifact pulls,
 - Prometheus port reachable only from the monitoring network.
 
-Alpha provider-created node security group allows forwarded traffic from configured private CIDRs and outbound traffic to `0.0.0.0/0`.
+Provider-created node security group allows forwarded traffic from configured private CIDRs and outbound traffic to `0.0.0.0/0`.
 
 Hardening recommendations:
 
@@ -94,7 +107,7 @@ Do not weaken these settings unless you have a specific compatibility reason and
 
 ## Bootstrap And Artifact Integrity
 
-The first alpha bootstraps from an explicit Linux AMI and cloud-init.
+The default path bootstraps from an explicit Linux AMI and cloud-init.
 
 Current protections:
 
@@ -110,7 +123,7 @@ Current gaps:
 - no signed BetterNAT application artifact bundle,
 - no generated SBOM attached to release assets,
 - no pinned OS package repository snapshot,
-- LoxiLB image is pulled at boot in the alpha path,
+- LoxiLB image is pulled at boot in the cloud-init path,
 - `cloud_init` bootstrap may rely on auto-assigned per-node public IPv4
   addresses for package and artifact downloads. `prebaked_ami` stable EIP
   deployments avoid those first-boot downloads and disable per-node
@@ -120,7 +133,7 @@ Current gaps:
   `9109` reachable from those CIDRs unless operators add narrower monitoring
   and peer-control network boundaries.
 
-Recommended alpha usage:
+Recommended usage:
 
 - use official GitHub Release assets,
 - verify `SHA256SUMS`,
@@ -128,11 +141,11 @@ Recommended alpha usage:
 - pin LoxiLB image digests where possible,
 - test bootstrap in a disposable VPC before using existing route tables.
 
-The alpha artifact signing decision is documented in
+The artifact signing decision is documented in
 `docs/release/ARTIFACT_SIGNING_DECISION.md`: BetterNAT application artifacts are
-checksum-verified but not signed in the current alpha.
+checksum-verified but not signed.
 
-Production targets:
+Future hardening targets:
 
 - publish versioned AMIs,
 - bake BetterNAT binaries and LoxiLB into the AMI,
@@ -143,16 +156,13 @@ Production targets:
 - attach SBOM and dependency inventory to releases,
 - sign release metadata or artifacts,
 - record third-party license notices inside the AMI,
-- document AMI refresh and security patch policy.
+- document AMI refresh and security patch policy,
 - split datapath forwarding ingress from metrics and peer-control access where
   topology allows it.
 
-The GA IAM and security posture review is recorded in
-`docs/research/043-ga-iam-security-review.md`.
-
 ## systemd Hardening
 
-The alpha service currently sets:
+The service currently sets:
 
 ```ini
 NoNewPrivileges=true
@@ -174,13 +184,13 @@ RestrictAddressFamilies=AF_INET AF_INET6 AF_NETLINK AF_UNIX
 SystemCallFilter=@system-service @network-io
 ```
 
-Do not blindly apply these to the alpha cloud-init path. Validate them on Linux with LoxiLB, metrics, AWS SDK calls, and graceful shutdown behavior.
+Do not blindly apply these to the cloud-init path. Validate them on Linux with LoxiLB, metrics, AWS SDK calls, and graceful shutdown behavior.
 
 ## Datapath Privilege
 
-BetterNAT uses LoxiLB as the primary datapath in the first alpha.
+BetterNAT uses LoxiLB as the primary datapath.
 
-Alpha bootstrap runs LoxiLB as a privileged host-network container because it needs kernel/network datapath access. This is acceptable for a technical preview, but production packaging should prefer a more controlled AMI-integrated runtime with a reviewed capability set.
+The cloud-init bootstrap runs LoxiLB as a privileged host-network container because it needs kernel/network datapath access. Future packaging should prefer a more controlled AMI-integrated runtime with a reviewed capability set.
 
 Do not remove network administration privileges until LoxiLB datapath behavior has been validated under the proposed hardening profile.
 
@@ -205,6 +215,10 @@ Metrics can reveal:
 - traffic counters.
 
 Treat metrics as internal operational data.
+
+Use [Observability Guide](../operations/OBSERVABILITY_GUIDE.md) for scrape
+target setup, alert rules, and metrics troubleshooting. This section only
+describes the security boundary.
 
 ## Secrets And Sensitive Data
 
@@ -259,13 +273,16 @@ Before using BetterNAT for critical workloads:
 - review runtime IAM against real AWS actions,
 - restrict metrics access,
 - confirm no public SSH is required,
-- verify route rollback commands,
-- verify `rollback_route_targets_json`,
+- prepare the route table IDs and fallback targets required by the
+  [Rollback Guide](../operations/ROLLBACK_GUIDE.md#emergency-route-restore),
+- confirm `rollback_route_targets_json` is populated before moving real route
+  tables,
 - test failover in a disposable VPC,
 - test destroy and cleanup,
 - decide whether Spot is acceptable,
 - pin artifact versions and checksums,
-- enable logs/metrics retention according to your policy,
-- monitor active owner, route target, EIP owner, datapath readiness, and lease renew errors.
+- enable logs and metrics retention according to your policy,
+- monitor active owner, route target, EIP owner, datapath readiness, and lease
+  renew errors.
 
 BetterNAT is not a managed AWS NAT Gateway SLA replacement. Security and operational ownership are part of the tradeoff for lower processing cost and better control.

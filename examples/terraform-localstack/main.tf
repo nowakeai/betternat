@@ -6,7 +6,7 @@ terraform {
     }
     betternat = {
       source  = "nowakeai/betternat"
-      version = "= 0.1.0-alpha.8"
+      version = "= 0.1.0"
     }
   }
 }
@@ -31,6 +31,10 @@ provider "aws" {
 provider "betternat" {
   aws_endpoint_url = "http://localhost:4566"
 }
+
+# This example exercises Terraform/provider control-plane behavior against
+# LocalStack. It does not validate EC2 boot, LoxiLB datapath, SSM, real route
+# convergence, EIP movement, or internet egress.
 
 resource "aws_vpc" "main" {
   cidr_block = "10.99.0.0/16"
@@ -86,6 +90,8 @@ resource "betternat_gateway" "egress" {
   min_size         = 1
   desired_capacity = 2
   max_size         = 3
+
+  betternat_version = "v0.1.0"
 
   public_subnet_ids = {
     us-east-1a = aws_subnet.public.id

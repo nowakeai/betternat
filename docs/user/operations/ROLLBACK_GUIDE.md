@@ -2,9 +2,72 @@
 
 Date: 2026-06-22
 
-This guide explains how to safely remove or roll back a BetterNAT alpha deployment.
+This guide explains how to safely remove or roll back a BetterNAT deployment.
 
 Use this guide before deleting gateway instances, route tables, EIPs, Auto Scaling groups, or DynamoDB tables by hand.
+
+## Emergency Route Restore
+
+Use this section when private workloads have lost egress and you already know
+the previous route target.
+
+Set the route table and fallback target:
+
+```sh
+export AWS_REGION=us-west-2
+export PRIVATE_RTB_ID=rtb-xxxxxxxx
+export FALLBACK_NAT_GW_ID=nat-xxxxxxxx
+```
+
+Restore the private default route to the previous NAT Gateway:
+
+```sh
+aws ec2 replace-route \
+  --profile "$AWS_PROFILE" \
+  --region "$AWS_REGION" \
+  --route-table-id "$PRIVATE_RTB_ID" \
+  --destination-cidr-block 0.0.0.0/0 \
+  --nat-gateway-id "$FALLBACK_NAT_GW_ID"
+```
+
+If the fallback target is an EC2 NAT instance instead:
+
+```sh
+aws ec2 replace-route \
+  --profile "$AWS_PROFILE" \
+  --region "$AWS_REGION" \
+  --route-table-id "$PRIVATE_RTB_ID" \
+  --destination-cidr-block 0.0.0.0/0 \
+  --instance-id i-xxxxxxxx
+```
+
+If the fallback target is an ENI:
+
+```sh
+aws ec2 replace-route \
+  --profile "$AWS_PROFILE" \
+  --region "$AWS_REGION" \
+  --route-table-id "$PRIVATE_RTB_ID" \
+  --destination-cidr-block 0.0.0.0/0 \
+  --network-interface-id eni-xxxxxxxx
+```
+
+Verify the route and egress:
+
+```sh
+aws ec2 describe-route-tables \
+  --profile "$AWS_PROFILE" \
+  --region "$AWS_REGION" \
+  --route-table-ids "$PRIVATE_RTB_ID" \
+  --query 'RouteTables[].Routes[?DestinationCidrBlock==`0.0.0.0/0`]'
+
+curl -fsS https://checkip.amazonaws.com
+curl -fsSI https://example.com
+```
+
+After egress is restored, decide whether to keep BetterNAT running for
+diagnostics or run Terraform destroy. Do not delete BetterNAT instances, route
+tables, EIPs, or the coordination table by hand before route state is safe.
 
 ## What Rollback Means
 
@@ -48,6 +111,16 @@ Defaults:
 | `allow_destroy_without_rollback` | `false` | Refuse destroy if rollback targets are unknown or incomplete. |
 
 Keep these defaults unless you have manually restored the private route table state or you intentionally accept temporary egress loss.
+
+## Choose The Right Path
+
+| Situation | Path |
+| --- | --- |
+| Private egress is down now and the old route target still exists. | Use [Emergency Route Restore](#emergency-route-restore), then investigate. |
+| You are cleaning up a disposable test deployment. | Use [Normal Destroy](#normal-destroy). |
+| `terraform destroy` refuses to continue because rollback metadata is missing. | Use [If Destroy Refuses To Roll Back](#if-destroy-refuses-to-roll-back). |
+| The previous route target was deleted. | Read [Stale Rollback Targets](#stale-rollback-targets) before destroying anything else. |
+| You are migrating production from NAT Gateway to BetterNAT. | Follow [Production Rollback Pattern](#production-rollback-pattern). |
 
 ## Normal Destroy
 
@@ -135,36 +208,17 @@ Then run destroy again.
 
 ## Manual Route Restore
 
-If you need to restore a private route table manually, use the correct AWS route target for your fallback path.
+Manual route restore means replacing the private route table default route with
+a known-good fallback target, usually the previous NAT Gateway, NAT instance, or
+ENI. Use the commands in [Emergency Route Restore](#emergency-route-restore).
 
-Example: restore to a NAT Gateway:
+After manual restore:
 
-```sh
-aws ec2 replace-route \
-  --profile "$AWS_PROFILE" \
-  --region "$AWS_REGION" \
-  --route-table-id rtb-xxxxxxxx \
-  --destination-cidr-block 0.0.0.0/0 \
-  --nat-gateway-id nat-xxxxxxxx
-```
-
-Example: restore to an EC2 NAT instance:
-
-```sh
-aws ec2 replace-route \
-  --profile "$AWS_PROFILE" \
-  --region "$AWS_REGION" \
-  --route-table-id rtb-xxxxxxxx \
-  --destination-cidr-block 0.0.0.0/0 \
-  --instance-id i-xxxxxxxx
-```
-
-After manual restore, verify egress from a private instance:
-
-```sh
-curl -fsS https://checkip.amazonaws.com
-curl -fsSI https://example.com
-```
+1. Verify the AWS route table points to the intended fallback target.
+2. Verify egress from a private workload.
+3. Keep BetterNAT resources intact until Terraform state, route ownership, and
+   rollback metadata are understood.
+4. Run Terraform destroy only after route state is safe.
 
 ## Stale Rollback Targets
 
@@ -197,9 +251,9 @@ For production migration from NAT Gateway to BetterNAT:
 5. Keep a manual `replace-route` command ready for each private route table.
 6. Only remove the old NAT Gateway after the rollback window is over.
 
-## Current Alpha Limitations
+## Current Limitations
 
 - There is no managed BetterNAT control server for one-click rollback.
 - Active flows may reset during route changes.
 - Rollback is route-target based; it does not recreate a deleted previous NAT Gateway.
-- Destroy is not an upgrade mechanism. For upgrades, prefer the upgrade/replacement guide once it is available.
+- Destroy is not an upgrade mechanism. For upgrades, prefer the upgrade/replacement guide.

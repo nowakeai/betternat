@@ -4,7 +4,7 @@ Date: 2026-06-21
 
 ## Terraform Provider Inputs
 
-Use `betternat_gateway` to deploy the alpha AWS gateway stack.
+Use `betternat_gateway` to deploy the AWS gateway stack.
 
 Provider version is specified in Terraform/OpenTofu `required_providers`, not on the resource itself:
 
@@ -13,24 +13,16 @@ terraform {
   required_providers {
     betternat = {
       source  = "nowakeai/betternat"
-      version = "= 0.1.0-alpha.8"
+      version = "= 0.1.0"
     }
   }
 }
 ```
 
 The gateway runtime version is separate from the provider version. Set
-`betternat_version` to a supported BetterNAT release tag, such as
-`v0.1.0-alpha.6`. The provider derives the matching agent and CLI GitHub Release
-artifact URLs and SHA256 checksums from its built-in release manifest.
-
-Terraform Registry install is the default path. If Registry availability is
-temporarily delayed, install the provider from the GitHub release as a
-filesystem mirror:
-
-```sh
-source scripts/setup-provider-github-mirror.sh
-```
+`betternat_version` to a supported BetterNAT release tag from the current Quick
+Start or release notes. The provider derives the matching agent and CLI GitHub
+Release artifact URLs and SHA256 checksums from its built-in release manifest.
 
 OpenTofu can use the same `source = "nowakeai/betternat"` address now that
 the provider is registered in the OpenTofu Registry.
@@ -40,6 +32,7 @@ the provider is registered in the OpenTofu Registry.
 | Name | Description |
 | --- | --- |
 | `name` | Gateway name. Used in resource names and HA group identity. |
+| `cloud` | Optional cloud selector. Defaults to `aws`; BetterNAT currently supports AWS. |
 | `region` | AWS region. |
 | `vpc_id` | Target VPC ID. |
 | `public_subnet_ids` | Map of AZ name to public subnet ID. |
@@ -50,8 +43,8 @@ the provider is registered in the OpenTofu Registry.
 
 | Name | Description |
 | --- | --- |
-| `ami_id` | Explicit Linux AMI ID. Required for the first alpha bootstrap path. |
-| `ami_channel` | Future AMI channel selector. Do not rely on it for the current bootstrap-first alpha path. |
+| `ami_id` | Explicit Linux AMI ID. Required for the `cloud_init` path. |
+| `ami_channel` | Reserved AMI channel selector. Accepted values are `stable`, `candidate`, and `dev`, but BetterNAT does not currently resolve channels into public AMIs. Set `ami_id` directly. |
 | `bootstrap_mode` | `cloud_init` by default. Use `cloud_init` for ordinary Linux AMIs that install BetterNAT at first boot. Use `prebaked_ami` only for BetterNAT AMIs that already contain Docker or the selected LoxiLB runtime, LoxiLB, `betternat`, `betternat-agent`, `loxicmd`, sysctl settings, and systemd units. |
 | `associate_public_ip_address` | Optional advanced override for the launch template network interface public IPv4 setting. Leave unset for provider-derived behavior. |
 | `betternat_version` | BetterNAT runtime release tag. The provider uses it with `instance_type` to derive agent/CLI bootstrap URLs and checksums. |
@@ -89,9 +82,9 @@ it to `true` even for a prebaked stable-EIP AMI.
 | --- | --- | --- |
 | `instance_type` | `t3.small` | Gateway node instance type. The AWS supplemental fixture uses arm64 `t4g.small`. |
 | `use_spot` | `false` | Use Spot instances. Good for disposable tests; be cautious for real egress. |
-| `min_size` | provider default | ASG minimum size. |
-| `desired_capacity` | provider default | ASG desired capacity. Use `2` for active/standby HA. |
-| `max_size` | provider default | ASG maximum size. |
+| `min_size` | `1` | ASG minimum size. |
+| `desired_capacity` | `2` | ASG desired capacity. Use `2` for active/standby HA. |
+| `max_size` | `3` | ASG maximum size. |
 
 Capacity-only updates are intended to be in-place. Other topology or bootstrap changes may require replacement.
 
@@ -100,6 +93,7 @@ Capacity-only updates are intended to be in-place. Other topology or bootstrap c
 | Name | Default | Description |
 | --- | --- | --- |
 | `datapath_engine` | `loxilb` | BetterNAT node datapath. |
+| `fallback_datapath_engine` | `nftables` | Fallback/debug datapath engine value rendered into runtime config. Currently accepts `nftables`. |
 
 LoxiLB has its own eBPF conntrack state. Linux `nf_conntrack_max` is not the primary LoxiLB capacity knob.
 
@@ -135,11 +129,54 @@ http://<gateway-private-ip>:9108/metrics
 
 | Name | Default | Description |
 | --- | --- | --- |
-| `route_mode` | `replace_route` | Current AWS route failover mode. |
+| `route_mode` | `replace_route` | Current AWS route failover mode. Currently supports `replace_route`. |
 | `route_destination_cidr` | `0.0.0.0/0` | Destination route managed by BetterNAT. |
-| `route_target_type` | `instance` | Current route target type. |
+| `route_target_type` | `instance` | Current route target type. Currently supports `instance`. |
 | `rollback_on_destroy` | `true` | Attempt to restore captured route targets during destroy. |
 | `allow_destroy_without_rollback` | `false` | Allow destroy to proceed when rollback cannot be performed. Use carefully. |
+
+Use the [Rollback Guide](../operations/ROLLBACK_GUIDE.md) before changing
+rollback defaults in an existing VPC.
+
+### Tags
+
+| Name | Default | Description |
+| --- | --- | --- |
+| `tags` | none | Additional tags applied to provider-managed AWS resources where supported. |
+
+Tag changes require replacement because only capacity fields are updated in
+place.
+
+### Computed Outputs
+
+These attributes are written by the provider and are useful for runbooks,
+dashboards, and support:
+
+| Name | Description |
+| --- | --- |
+| `lease_table_name` | Legacy lease table name for older environments. |
+| `coordination_table_name` | Coordination table used for HA lease, agent registry, peer discovery, and handover records. |
+| `managed_route_table_ids` | Flattened list of private route table IDs managed by BetterNAT. |
+| `egress_public_ips` | Public egress IPs recorded by the provider. |
+| `active_instance_ids` | Active gateway instance IDs by HA group or AZ. |
+| `standby_instance_ids` | Standby gateway instance IDs by HA group or AZ. |
+| `rollback_route_targets_json` | Captured previous route targets used during destroy rollback. |
+| `control_plane_status_json` | Provider-recorded AWS control-plane status snapshot. |
+| `status` | Provider status summary. |
+
+Internal/sensitive computed values include `agent_config_json`,
+`agent_config_hash`, `user_data`, `install_plan_json`, `peer_api_auth_token`,
+and `provider_infrastructure_revision`. Treat them as provider state, not as
+operator inputs.
+
+## Update Behavior
+
+The provider updates only `min_size`, `desired_capacity`, and `max_size` in
+place. Most other input changes require replacing the `betternat_gateway`
+resource.
+Use the [Upgrade And Replacement Guide](../operations/UPGRADE_REPLACEMENT_GUIDE.md)
+before changing runtime, AMI, subnet, route, datapath, EIP, HA timing, tag, or
+bootstrap fields.
 
 ## Runtime Config
 

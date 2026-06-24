@@ -2,9 +2,9 @@
 
 Self-owned, observable, highly available egress for high-volume AWS private subnet workloads.
 
-**Alpha technical preview.** If you are evaluating BetterNAT as a NAT Gateway
-replacement, start with the [Cost Model](docs/user/reference/COST_MODEL.md),
-then read [Limitations](docs/user/reference/LIMITATIONS.md), run the
+If you are evaluating BetterNAT as a NAT Gateway replacement, start with the
+Terraform shape below, then read the [Cost Model](docs/user/reference/COST_MODEL.md),
+check [Limitations](docs/user/reference/LIMITATIONS.md), run the
 [Quick Start](docs/user/getting-started/QUICK_START.md) in a disposable VPC, and
 use the [Operations Guide](docs/user/operations/OPERATIONS_GUIDE.md) for day-2
 checks.
@@ -54,30 +54,20 @@ terraform {
   required_providers {
     betternat = {
       source  = "nowakeai/betternat"
-      version = "= 0.1.0-alpha.8"
+      version = "= 0.1.0"
     }
   }
 }
 ```
 
-Provider versions and BetterNAT runtime artifact versions are separate. The
-current alpha provider is `0.1.0-alpha.8`; the recommended runtime artifacts
-for the public quick start are `v0.1.0-alpha.6`.
+Provider versions and BetterNAT runtime artifact versions are separate. Use the
+matching provider and runtime versions shown in the current quick start.
 
-Runtime `v0.1.0-alpha.8` exists for GA hardening validation, but the normal
-Terraform alpha install path should keep using `betternat_version =
-"v0.1.0-alpha.6"` until a later provider release intentionally updates the
-built-in artifact manifest.
+Terraform Registry install is the default path. The GitHub release assets are
+kept for direct artifact inspection and emergency filesystem-mirror installs.
 
-Terraform Registry install is the default path. If Registry availability is
-temporarily delayed, install the provider from the GitHub release as a
-filesystem mirror:
-
-```sh
-source scripts/setup-provider-github-mirror.sh
-```
-
-If your Terraform currently uses AWS NAT Gateway:
+If your Terraform currently uses AWS NAT Gateway, your existing route ownership
+may look like this:
 
 ```hcl
 resource "aws_eip" "nat" {
@@ -96,7 +86,8 @@ resource "aws_route" "private_default" {
 }
 ```
 
-Replace it with BetterNAT:
+The BetterNAT target shape looks like this after you have completed the
+disposable VPC test and are ready to plan an existing-VPC migration:
 
 ```hcl
 resource "betternat_gateway" "egress" {
@@ -118,7 +109,7 @@ resource "betternat_gateway" "egress" {
   instance_type       = "t4g.small"
   desired_capacity    = 2
   max_size            = 3
-  betternat_version   = "v0.1.0-alpha.6"
+  betternat_version   = "v0.1.0"
   stable_egress_ip    = true
   prometheus_enabled  = true
   rollback_on_destroy = true
@@ -141,7 +132,7 @@ For a disposable VPC run:
 export AWS_PROFILE="<your-profile>"
 export AWS_REGION="us-west-2"
 export BETTERNAT_AZ="us-west-2a"
-export BETTERNAT_VERSION="v0.1.0-alpha.6"
+export BETTERNAT_VERSION="v0.1.0"
 ```
 
 Then follow:
@@ -194,7 +185,7 @@ Use AWS NAT Gateway instead when:
 
 - you need AWS-managed service semantics and SLA,
 - active connection preservation matters,
-- multi-AZ managed NAT behavior is required immediately,
+- multi-AZ BetterNAT gateway groups are required immediately,
 - you do not want to own EC2, IAM, routes, EIPs, DynamoDB, metrics, and rollback state.
 
 ## Architecture
@@ -237,17 +228,14 @@ Architecture docs:
 - [Architecture Diagram](docs/architecture-diagram.md)
 - [Failure Modes](docs/user/operations/FAILURE_MODES.md)
 
-## Alpha Status
-
-The recommended public alpha install path uses provider `0.1.0-alpha.8` with
-runtime `v0.1.0-alpha.6`.
+## Release Scope
 
 Current scope:
 
 - AWS only.
-- Single-AZ HA group.
+- One AZ per HA group. Multi-AZ gateway groups are planned for a later release.
 - Terraform provider first.
-- No published BetterNAT AMI in the current alpha.
+- No public BetterNAT AMI yet.
 - Default install path is Terraform plus cloud-init bootstrap on an explicit
   Linux AMI. Private prebaked AMIs can opt into `bootstrap_mode = "prebaked_ami"`.
 - LoxiLB/eBPF is the datapath.
@@ -269,7 +257,7 @@ Read before using real route tables:
 - [Operations Guide](docs/user/operations/OPERATIONS_GUIDE.md)
 - [Observability Guide](docs/user/operations/OBSERVABILITY_GUIDE.md)
 - [IAM Policy](docs/user/reference/IAM_POLICY.md)
-- [Release Notes](docs/user/releases/v0.1/v0.1.0-alpha.8.md)
+- [Release Notes](docs/user/releases/v0.1/v0.1.0.md)
 
 ## Development
 

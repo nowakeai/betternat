@@ -8,6 +8,60 @@ BetterNAT is designed for private-subnet workloads where NAT Gateway data proces
 
 It does not make AWS networking free. It replaces the managed NAT Gateway per-GB processing line item with a self-owned EC2 node pool, while normal AWS costs still apply.
 
+## Fast Evaluation
+
+Start with the NAT Gateway traffic already visible in CloudWatch or Cost
+Explorer. Do not try to model every AWS networking line item first.
+
+For a private-subnet workload that initiates internet connections, a practical
+first estimate is:
+
+```text
+monthly_processed_gb =
+  (BytesOutToDestination + BytesInFromDestination) / 1024 / 1024 / 1024
+```
+
+Use one side of the gateway path for this estimate. Do not add all four NAT
+Gateway byte metrics together, or you will double-count packets crossing the
+gateway.
+
+Then run the BetterNAT CLI estimate:
+
+```sh
+betternat cost estimate \
+  --gb <monthly-processed-gb> \
+  --nat-gateway-hourly <nat-gateway-hourly-price> \
+  --nat-gateway-processing-per-gb <nat-gateway-processing-price> \
+  --node-hourly <expected-betternat-node-hourly-price> \
+  --nodes 2
+```
+
+Example for `50 TB/month`:
+
+```sh
+betternat cost estimate \
+  --gb 51200 \
+  --nat-gateway-hourly 0.045 \
+  --nat-gateway-processing-per-gb 0.045 \
+  --node-hourly 0.05 \
+  --nodes 2
+```
+
+Continue the evaluation when:
+
+- NAT Gateway processing is a meaningful bill line,
+- the workload sends small requests and downloads large responses,
+- the remaining non-cost tradeoffs in [Limitations](LIMITATIONS.md) are
+  acceptable.
+
+Stop early when:
+
+- most NAT traffic can move to VPC endpoints,
+- standard internet egress transfer dominates the bill.
+
+For reliability, failover, bootstrap, and ownership go/no-go decisions, use
+[Limitations](LIMITATIONS.md) rather than this cost model.
+
 ## The Bill Line BetterNAT Targets
 
 AWS NAT Gateway pricing has two main NAT Gateway-specific components:
@@ -109,7 +163,8 @@ Pricing varies by region and can change. Always verify current AWS pricing for y
 
 ## CLI NAT-Layer Estimate
 
-The first alpha CLI estimates the NAT-specific bill line only. It does not model standard AWS data transfer by direction yet.
+The CLI estimates the NAT-specific bill line only. It does not model standard
+AWS data transfer by direction yet.
 
 This CLI example uses:
 
@@ -144,6 +199,10 @@ Example output:
 ```
 
 This is not a quote. It is a NAT-layer estimate for deciding whether the workload is worth deeper modeling.
+
+Region-specific prices are not fetched automatically. Override prices
+explicitly with your region's NAT Gateway price, your chosen EC2 instance price,
+and your expected node count.
 
 ## Formula
 
@@ -244,31 +303,16 @@ Before replacing an existing NAT Gateway, collect:
 - concurrent flow estimate,
 - destinations that require stable egress IP allowlisting.
 
-The first alpha does not yet import CloudWatch NAT Gateway metrics automatically. Use AWS CloudWatch, Cost Explorer, VPC Flow Logs, and BetterNAT estimates together.
-
-## How To Use The CLI Estimate
-
-Basic:
-
-```sh
-betternat cost estimate --gb 10240
-```
-
-Region-specific prices are not fetched automatically in the first alpha. Override prices explicitly:
-
-```sh
-betternat cost estimate \
-  --gb 30720 \
-  --nat-gateway-hourly <price-per-hour> \
-  --nat-gateway-processing-per-gb <price-per-gb> \
-  --node-hourly <your-ec2-price> \
-  --nodes 2
-```
-
-Use your own EC2 price, expected node count, and region-specific NAT Gateway price.
+BetterNAT does not yet import CloudWatch NAT Gateway metrics automatically. Use
+AWS CloudWatch, Cost Explorer, VPC Flow Logs, and BetterNAT estimates together.
 
 ## Sources
 
 - AWS NAT Gateway pricing documentation: https://docs.aws.amazon.com/vpc/latest/userguide/nat-gateway-pricing.html
 - AWS VPC pricing page: https://aws.amazon.com/vpc/pricing/
 - AWS NAT Gateway CloudWatch metrics: https://docs.aws.amazon.com/vpc/latest/userguide/metrics-dimensions-nat-gateway.html
+
+## Next Step
+
+If the estimated savings are worth continuing, read
+[Limitations](LIMITATIONS.md) before running a disposable VPC test.

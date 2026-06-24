@@ -6,14 +6,48 @@ Date: 2026-06-21
 
 This guide describes how to operate a BetterNAT gateway after deployment.
 
-The first release is decentralized:
+BetterNAT is decentralized:
 
 - each gateway instance runs `betternat-agent`,
 - each instance exposes Prometheus metrics,
 - local CLI diagnostics run on each gateway node,
 - cloud state is inspected through AWS APIs, Terraform outputs, or AWS CLI.
 
-There is no central BetterNAT server in the first release.
+There is no central BetterNAT server.
+
+## First 10 Minutes After Quick Start
+
+After the disposable [Quick Start](../getting-started/QUICK_START.md), use this
+short loop before reading the rest of this guide:
+
+```sh
+terraform -chdir=examples/terraform-aws-supplemental output
+```
+
+On the active gateway node:
+
+```sh
+sudo betternat status
+sudo betternat doctor --live
+sudo betternat handover history --limit 20
+curl -fsS http://127.0.0.1:9108/metrics | head
+```
+
+From the private test client:
+
+```sh
+curl -fsS https://checkip.amazonaws.com
+curl -fsSI https://example.com
+```
+
+Expected:
+
+- exactly one active gateway node,
+- at least one healthy standby when `desired_capacity >= 2`,
+- route and EIP checks match the active node,
+- datapath is ready,
+- the private client reaches the public internet,
+- no recent failed handover record remains unexplained.
 
 ## Daily Health Checklist
 
@@ -71,126 +105,28 @@ Important:
 - The CLI does not currently connect to a central BetterNAT API.
 - The CLI now has a live doctor path for AWS IAM/DynamoDB/route/EIP/datapath/Prometheus checks, but it is still node-local. Fleet-level visibility comes from the coordination registry and per-agent metrics.
 
-## Metrics Collection
+## Monitoring Entry Point
 
-`betternat-agent` exposes Prometheus metrics:
+Each gateway node exposes Prometheus metrics on:
 
 ```text
 http://<gateway-private-ip>:9108/metrics
 ```
 
-The endpoint is configured by:
+Prometheus should scrape every gateway node, not only the active node. Standby
+metrics show whether failover capacity is actually ready.
 
-```yaml
-observability:
-  prometheus:
-    listen_address: 0.0.0.0
-    listen_port: 9108
-```
+Use [Observability Guide](OBSERVABILITY_GUIDE.md) for metric names, starter
+alerts, dashboard files, attribution scope, and Prometheus queries.
 
-Prometheus should scrape every gateway instance.
-
-Restrict access to the metrics port with security groups. The endpoint should be reachable from the monitoring network, not from the public internet.
-
-## Key Metrics
-
-Agent and HA:
-
-```text
-betternat_agent_up
-betternat_agent_build_info
-betternat_active
-betternat_ha_state
-betternat_ha_status_age_seconds
-betternat_ha_status_stale
-betternat_lease_generation
-betternat_lease_owner_match
-betternat_lease_seconds_until_expiry
-betternat_route_target_match
-betternat_public_identity_match
-betternat_takeover_attempts_total
-betternat_takeover_success_total
-betternat_lease_renew_errors_total
-```
-
-Datapath and traffic:
-
-```text
-betternat_datapath_engine_info
-betternat_datapath_ready
-betternat_conntrack_entries
-betternat_conntrack_udp_entries
-betternat_conntrack_established
-betternat_loxilb_rule_present
-betternat_loxilb_rule_packets_total
-betternat_loxilb_rule_bytes_total
-betternat_owner_packets_total
-betternat_owner_bytes_total
-betternat_processed_packets_total
-betternat_processed_bytes_total
-```
-
-Failover:
-
-```text
-betternat_failover_events_total
-betternat_failover_duration_seconds
-```
-
-## Suggested Alerts
-
-No active gateway node:
-
-```promql
-sum by (gateway, ha_group) (betternat_active) != 1
-```
-
-HA status stale:
-
-```promql
-betternat_ha_status_stale == 1
-```
-
-Route target mismatch:
-
-```promql
-betternat_route_target_match == 0
-```
-
-Stable EIP mismatch:
-
-```promql
-betternat_public_identity_match == 0
-```
-
-Datapath not ready:
-
-```promql
-betternat_datapath_ready == 0
-```
-
-Lease renew errors:
-
-```promql
-increase(betternat_lease_renew_errors_total[5m]) > 0
-```
-
-Repeated takeover attempts:
-
-```promql
-increase(betternat_takeover_attempts_total[15m]) > 1
-```
-
-Recent failed lifecycle handover records:
+For quick incident triage, start with:
 
 ```sh
-betternat handover history --limit 20
+sudo betternat status
+sudo betternat doctor --live
+sudo betternat handover history --limit 20
+curl -fsS http://127.0.0.1:9108/metrics | head
 ```
-
-A failed `termination-*` handover record means the proactive ASG or Spot
-termination path did not complete. Check whether `betternat status`, route
-owner, EIP owner, and lease owner have still converged through normal lease
-takeover before treating it as an active outage.
 
 ## AWS Checks
 
@@ -298,7 +234,7 @@ Expected:
 - stable mode: output matches the configured shared EIP before and after failover,
 - non-stable mode: output may change after failover.
 
-The mode choice affects timing. In current AWS alpha validation, non-stable
+The mode choice affects timing. In AWS validation, non-stable
 route-only handover was much faster than stable EIP handover: the visible source
 IP switch completed within about `435 ms` at client probe granularity with `0`
 failed samples. Stable/no-public-IP handover preserved the shared public IP but
@@ -306,7 +242,7 @@ recorded a short timeout window because it also has to move and verify the EIP.
 
 ## Failover Interpretation
 
-BetterNAT v0 failover semantics:
+BetterNAT failover semantics:
 
 - new connections recover after route/EIP takeover,
 - active connections may reset,
@@ -330,6 +266,10 @@ Do not treat the measured timing as a universal SLA. It depends on:
 - client retry behavior.
 
 ## Troubleshooting
+
+This section is for incident triage from an operator's point of view. For
+metric names, PromQL, dashboard wiring, and Prometheus target debugging, use the
+[Observability Guide](OBSERVABILITY_GUIDE.md).
 
 ### No Egress From Private Client
 
@@ -395,13 +335,10 @@ Check:
 
 ### Metrics Missing
 
-Check:
-
-1. `betternat-agent` service is active.
-2. Security group allows Prometheus to reach port `9108`.
-3. Config has nonzero Prometheus listen port.
-4. `/metrics` returns HTTP 200 locally.
-5. Prometheus target is configured with private IPs.
+Use the metrics endpoint troubleshooting section in the
+[Observability Guide](OBSERVABILITY_GUIDE.md#metrics-endpoint-is-down). The
+operations-side check is whether local CLI state and AWS route/EIP state still
+show a healthy gateway while monitoring is blind.
 
 ## Cleanup
 
@@ -423,8 +360,9 @@ Do not manually delete route tables or EIPs before Terraform destroy unless reco
 
 ## Current Gaps
 
-These are known first-release gaps to track:
+These are known gaps to track:
 
 - `doctor --live` is node-local. Run it on each gateway node or pair it with Prometheus/AWS CLI for fleet-wide review.
 - No central CLI command yet aggregates every HA group across AWS accounts, DynamoDB, ASG, datapath, and metrics.
-- No automated planned failover/drain CLI yet.
+- Proactive `betternat handover start` exists, but there is no complete planned
+  drain or rolling-upgrade workflow yet.
