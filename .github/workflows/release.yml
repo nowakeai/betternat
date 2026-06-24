@@ -68,6 +68,9 @@ jobs:
       - name: Check whitespace
         run: git diff --check
 
+      - name: Dependency and license scan
+        run: scripts/release-dependency-scan.sh
+
       - name: Build release artifacts
         env:
           BETTERNAT_VERSION: ${{ steps.version.outputs.version }}

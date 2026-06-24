@@ -32,7 +32,14 @@ When distributing an AMI, include or reference the license information provided 
 
 BetterNAT uses Go modules listed in `go.mod` and `go.sum`.
 
-Release artifacts should include a generated dependency inventory or SBOM before production release.
+The release workflow runs `scripts/release-dependency-scan.sh` to generate a Go
+module dependency and license-file inventory. The scan fails if a Go module is
+missing a license-like file or if license text contains restricted-license
+keywords such as GPL, AGPL, LGPL, SSPL, Business Source License, Commons Clause,
+or Elastic License.
+
+This scan is a release hygiene gate. It is not a substitute for legal review or
+a full production SBOM.
 
 ## AWS, Terraform, Prometheus, Grafana
 

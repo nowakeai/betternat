@@ -664,7 +664,7 @@ Reliability validation update on 2026-06-23:
 
 - [x] Review runtime IAM least-privilege policy against real AWS actions.
 - [x] Review systemd hardening options.
-- [ ] Add dependency/license scan to release workflow.
+- [x] Add dependency/license scan to release workflow.
 - [ ] Add artifact signing decision:
   - [x] no signing for alpha with checksums only,
   - [ ] or cosign/minisign/GPG for later releases.
@@ -756,6 +756,7 @@ Validation:
   AWS non-stable run id:
   Residual cleanup scan:
   Security scan:
+  Dependency/license scan:
 
 Known limitations:
   -

@@ -214,6 +214,7 @@ Before tagging:
 
 ```sh
 GOCACHE=$PWD/tmp/go-build-cache go test ./...
+scripts/release-dependency-scan.sh
 git diff --check
 BETTERNAT_VERSION=v0.1.0-alpha.1 scripts/release-build.sh
 ```
