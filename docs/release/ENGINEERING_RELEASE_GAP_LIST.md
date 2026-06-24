@@ -1,6 +1,6 @@
 # BetterNAT Engineering Release Gap List
 
-Date: 2026-06-23
+Date: 2026-06-24
 
 ## Purpose
 
@@ -18,7 +18,7 @@ It complements:
 Target:
 
 ```text
-v0.1.0-alpha.1
+v0.1.0-alpha.2
 ```
 
 Positioning:
@@ -71,7 +71,7 @@ Implemented:
   - source/destination check disabled,
   - outbound source-IP probe when configured.
 
-Still needed:
+Deferred polish:
 
 - P1 polish for the static rollback-config warning when running on a gateway node.
 
@@ -163,9 +163,10 @@ Current:
 - Terraform supplemental fixture accepts agent and CLI artifact URLs with SHA256 checksums, plus optional `loxicmd_binary_sha256`.
 - The first public alpha intentionally does not build or publish a BetterNAT AMI.
 
-Still needed for alpha:
+Completed for alpha:
 
-- Release notes and user-facing docs must explicitly describe the bootstrap path and say no BetterNAT AMI is published in the first alpha.
+- Release notes and user-facing docs explicitly describe the bootstrap path and
+  state that no BetterNAT AMI is published in the current alpha.
 
 Acceptance:
 
@@ -202,7 +203,7 @@ returns no release-blocking results.
 
 ### Current P0 Verification Snapshot
 
-Last updated: 2026-06-21.
+Last updated: 2026-06-24.
 
 Completed locally:
 
@@ -214,6 +215,15 @@ Completed locally:
   - `examples/terraform`
   - `examples/terraform-aws-supplemental`
   - `examples/terraform-localstack`
+- [x] Terraform examples validate with provider `0.1.0-alpha.3` installed from
+  the provider GitHub release as a filesystem mirror:
+  - `source scripts/setup-provider-github-mirror.sh`
+  - `terraform -chdir=examples/terraform init -upgrade -input=false`
+  - `terraform -chdir=examples/terraform validate`
+  - `terraform -chdir=examples/terraform-aws-supplemental init -upgrade -input=false`
+  - `terraform -chdir=examples/terraform-aws-supplemental validate`
+  - `terraform -chdir=examples/terraform-localstack init -upgrade -input=false`
+  - `terraform -chdir=examples/terraform-localstack validate`
 - [x] Release build script generates artifacts:
   - `BETTERNAT_VERSION=v0.1.0-alpha.test BETTERNAT_RELEASE_DIR=$PWD/tmp/release-test scripts/release-build.sh`
   - `SHA256SUMS` includes host CLI, provider, Linux arm64/amd64 agent, and Linux arm64/amd64 CLI artifacts.
@@ -232,7 +242,8 @@ Completed locally:
 - [x] `doctor --live` P0 local unit coverage passed:
   - `GOCACHE=$PWD/tmp/go-build-cache go test ./internal/cli ./internal/doctor ./internal/cloud/aws ./internal/iamcheck/aws`
   - includes IAM simulation wiring, ASG fleet health aggregation, and critical-status nonzero return behavior.
-- [ ] Linux VM LoxiLB smoke is not proven in OrbStack:
+- [x] Linux VM LoxiLB smoke is classified as an environment limitation in
+  OrbStack:
   - `scripts/linux-smoke-loxilb.sh` started the container, but LoxiLB aborted or never became ready in this VM kernel/eBPF environment.
   - `scripts/linux-smoke-agent-loxilb.sh` timed out waiting for LoxiLB readiness in the same environment.
   - Treat LoxiLB datapath validation as AWS-required for alpha, not locally proven by this VM.
@@ -269,16 +280,23 @@ Acceptance:
 Required:
 
 ```sh
-go build -o terraform-provider-betternat ./cmd/terraform-provider-betternat
+GOCACHE=$PWD/tmp/go-build go build ./cmd/terraform-provider-betternat
+source scripts/setup-provider-github-mirror.sh
+terraform -chdir=examples/terraform init -upgrade -input=false
 terraform -chdir=examples/terraform validate
+terraform -chdir=examples/terraform-aws-supplemental init -upgrade -input=false
 terraform -chdir=examples/terraform-aws-supplemental validate
+terraform -chdir=examples/terraform-localstack init -upgrade -input=false
 terraform -chdir=examples/terraform-localstack validate
 ```
 
 Notes:
 
-- In the current sandbox, Terraform provider validate may require local dev override and unsandboxed execution.
-- Document exact commands in `TERRAFORM_PROVIDER_LOCAL_TESTING.md`.
+- Provider `0.1.0-alpha.3` is currently installed from the provider GitHub
+  release as a Terraform filesystem mirror because Terraform Registry
+  propagation is not complete.
+- The mirror path is a temporary alpha workaround; once Registry
+  `0.1.0-alpha.3` is available, examples can return to plain Registry install.
 
 ### 3. Linux VM Smoke Tests
 
@@ -288,7 +306,8 @@ Required before alpha:
 - nftables UDP smoke,
 - nftables throughput sanity,
 - agent metrics with nftables fallback,
-- LoxiLB smoke if local Linux environment supports it.
+- LoxiLB smoke if the local Linux environment supports it; otherwise AWS LoxiLB
+  validation is the authoritative alpha datapath proof.
 
 Existing scripts:
 
@@ -485,7 +504,8 @@ Current:
 Remaining:
 
 - add richer daemon endpoints for datapath, failover, doctor, config, refresh, peers, drain, and handover,
-- decide whether alpha read-only socket access remains root-only or uses a `betternat` group.
+- decide whether post-alpha read-only socket access remains root-only or uses a
+  `betternat` group.
 
 Reference:
 
@@ -551,9 +571,7 @@ Remaining:
 
 - add richer `/v1/handover` state reporting and operation listing,
 - add structured phase-duration metrics and logs for handover operations,
-- add AWS validation for:
-  - systemd stop on active,
-  - standby-local CLI request forwarding.
+- add AWS validation for standby-local CLI request forwarding.
 - Spot interruption follows the AWS IMDS `spot/instance-action` path and is
   not required as a manually forced release gate; optional validation can use
   AWS-supported Spot interruption initiation or FIS when available.
@@ -615,7 +633,7 @@ Local implementation follow-up on 2026-06-23:
 - Local validation passed:
   - `GOCACHE=$PWD/tmp/go-build go test ./...`,
   - `GOCACHE=$PWD/tmp/go-build go build ./cmd/betternat ./cmd/betternat-agent ./cmd/terraform-provider-betternat`.
-- AWS publish and automatic-trigger validation are still pending for this follow-up build.
+- Follow-up AWS automatic-trigger validation is recorded below.
 
 AWS automatic-trigger and AMI validation on 2026-06-23:
 
@@ -728,17 +746,16 @@ Still needed:
 - publish arm64 and amd64 AMIs,
 - wire provider `ami_channel` resolution to published AMI metadata,
 - add AMI license bundle validation,
-- publish private AWS API reachability requirements in user docs and provider
-  install behavior.
+- convert the temporary private AWS API reachability requirements into durable
+  provider/user documentation before AMI publication.
 
 When `stable_egress_ip=true`, the provider-derived plan now sets
 `AssociatePublicIpAddress=false`. When `stable_egress_ip=false`, nodes may keep
 per-node public IPv4 addresses because failover is allowed to change the public
-source IP. Still needed: validate the standby bootstrap/control-plane path with
-no per-node public IPs. That can be done with VPC endpoints or with a routing
-topology where standby nodes use the current active gateway without breaking the
-active node's own internet path. The path must cover DynamoDB, EC2, Auto
-Scaling, STS, SSM, EC2 Messages, SSM Messages, and CloudWatch where enabled.
+source IP. The no-public-IP standby bootstrap/control-plane path has been
+validated with temporary VPC endpoints in the retained AWS test environment.
+The durable production path must cover DynamoDB, EC2, Auto Scaling, STS, SSM,
+EC2 Messages, SSM Messages, and CloudWatch where enabled.
 
 AWS no-public-IP validation on 2026-06-23:
 
@@ -853,16 +870,22 @@ Defer until benchmark-backed:
 - Observed owner-termination outage in low-cost AWS test was about 12 seconds under test conditions.
 - `doctor --live` is now implemented for node-local cloud checks; static rollback-config warning needs P1 UX polish.
 - `betternat-agent` handles SIGTERM/SIGINT and releases its currently owned HA lease on graceful shutdown using the fenced lease generation.
-- Provider-created ASG termination lifecycle hooks and agent-side IMDS Spot/ASG termination handling are implemented locally; AWS verification remains required.
-- Current CLI fleet status can use AWS discovery, but the target architecture is DynamoDB-backed agent self-registration through a provider-neutral coordination backend.
+- Provider-created ASG termination lifecycle hooks and agent-side IMDS Spot/ASG termination handling are implemented. ASG lifecycle behavior and standalone active systemd-stop handover have been verified in AWS; forced Spot interruption validation is not a first-alpha release gate.
+- Current CLI fleet status uses the daemon/coordination-registry path by default; the older direct AWS discovery mode remains a debug fallback.
 - Release packaging now has a bootstrap artifact path; AMI packaging remains the biggest production-release workflow gap.
 - The first release should avoid making unproven performance claims.
 
 ## Suggested Implementation Order
 
-1. Re-run final local Go/Terraform/release/hygiene verification after the P0 edits.
-2. Add the agent registry coordination backend if reducing runtime AWS discovery permissions is required before alpha.
-3. Add Prometheus alert rules.
-4. Add support bundle or HA status command if we want a stronger alpha troubleshooting story.
-5. Finish user-facing quick-start documentation.
-6. Rebuild and republish runtime artifacts if post-RC source changes should be included in the alpha tag.
+1. Re-run final local Go/Terraform/release/hygiene verification before tagging
+   the next alpha.
+2. Recheck Terraform Registry availability for provider `0.1.0-alpha.3`; remove
+   the GitHub filesystem-mirror workaround from public docs once Registry
+   propagation catches up.
+3. Decide whether to publish another runtime tag for post-RC source changes or
+   keep `v0.1.0-alpha.2` as the current runtime artifact set.
+4. Clean up stale automatic handover operation records that can remain in
+   intermediate states after paired lifecycle-triggered operations complete.
+5. Keep AMI publication, AMI channel resolution, benchmark harness, and broader
+   retry/backoff hardening as production/P2 work rather than first-alpha
+   blockers.
