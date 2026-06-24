@@ -28,13 +28,13 @@ When failover happens:
 - non-stable mode may change public source IP.
 
 In the current alpha handover path, route and EIP ownership are both verified
-after mutation, but AWS control-plane convergence is not perfectly atomic. A
-2026-06-23 handover timing test observed a short timeout window and one
-successful private-client request leaving through a non-shared instance public
-IP before traffic returned to the shared EIP. Users that require strict egress
-identity during every failover sample should wait for the production hardening
-that gates route cutover on shared-EIP ownership or removes per-node public IPs
-from the production AMI path.
+after mutation, but AWS control-plane convergence is not perfectly atomic.
+Validation on 2026-06-23 and 2026-06-24 showed two different behavior profiles:
+stable EIP mode preserved the shared public IP after per-node public IPv4 was
+disabled, but had a short timeout window during handover; non-stable mode changed
+public source IP as expected and completed the visible route-only switch in
+about 435 ms at the client probe's sampling granularity. Treat these as
+environment-specific measurements, not SLAs.
 
 ## Summary Table
 
@@ -242,7 +242,16 @@ Impact:
 
 - cheaper/simpler,
 - not suitable for destinations that allowlist one egress IP,
-- failover and stable-EIP timing may be similar because both depend on lease and route convergence, but stable mode has additional EIP correctness requirements.
+- route-only handover can be materially faster than stable EIP handover because
+  it does not need EIP reassociation or public-identity verification.
+
+Validation note:
+
+- a 2026-06-24 AWS probe recorded `240` samples, `0` failures, and a public
+  source IP switch from `52.24.117.43` to `52.24.240.255` within about `435 ms`
+  between the last old-IP sample and first new-IP sample.
+- the comparable stable/no-public-IP handover preserved the shared EIP with `0`
+  non-shared public IP samples, but recorded `3` one-second client timeouts.
 
 ## ASG Replacement Failure
 

@@ -768,6 +768,13 @@ AWS non-stable public-IP validation on 2026-06-24:
 - Client egress probe during handover recorded `240` samples, `0` failures,
   and the expected public source IP change from `52.24.117.43` to
   `52.24.240.255`.
+- Timing conclusion: non-stable route-only handover was materially faster than
+  stable EIP handover in this AWS probe. The last old-IP sample was
+  `2026-06-24T02:06:34.767Z`; the first new-IP sample was
+  `2026-06-24T02:06:35.202Z`, so the visible switch window was about `435 ms`
+  at the probe's sampling granularity. This is expected because non-stable mode
+  avoids EIP reassociation and public-identity verification. The tradeoff is
+  that public source IP changes after handover.
 - The environment was restored to stable/no-public-IP launch template version
   `16` with instance refresh `1574c0a3-a7cd-4c8b-a5b7-5077f7ab5a89`, which
   completed successfully from `2026-06-24T02:09:29Z` to

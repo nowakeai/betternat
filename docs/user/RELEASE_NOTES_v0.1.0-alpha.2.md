@@ -58,9 +58,13 @@ Public alpha users should install from GitHub Release assets and verify
 - No high-volume benchmark claim.
 - Boot time still depends on package repositories, container pull, and release
   artifact URL reachability.
-- Stable EIP mode converges back to the shared EIP, but alpha handover testing
-  observed a brief window where one successful request used a non-shared public
-  IP before shared-EIP convergence.
+- Stable EIP mode requires no per-node public IPv4 addresses to avoid
+  non-shared egress identity during handover. With that path enabled, alpha AWS
+  validation preserved the shared public IP but still observed a short timeout
+  window.
+- Non-stable mode changes public source IP after handover and can be faster
+  because it avoids EIP reassociation. A 2026-06-24 AWS probe observed the
+  visible source-IP switch within about `435 ms` with `0` failed samples.
 - Spot interruption handling follows the AWS IMDS interruption-notice path, but
   real Spot interruption is not forced as a release gate.
 - Packer AMI build files exist, but AMIs are not published and

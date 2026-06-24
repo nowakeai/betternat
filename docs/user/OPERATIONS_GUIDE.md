@@ -285,6 +285,12 @@ Expected:
 - stable mode: output matches the configured shared EIP before and after failover,
 - non-stable mode: output may change after failover.
 
+The mode choice affects timing. In current AWS alpha validation, non-stable
+route-only handover was much faster than stable EIP handover: the visible source
+IP switch completed within about `435 ms` at client probe granularity with `0`
+failed samples. Stable/no-public-IP handover preserved the shared public IP but
+recorded a short timeout window because it also has to move and verify the EIP.
+
 ## Failover Interpretation
 
 BetterNAT v0 failover semantics:
@@ -293,6 +299,8 @@ BetterNAT v0 failover semantics:
 - active connections may reset,
 - stable EIP mode preserves public source IP for new connections,
 - non-stable mode may change public source IP,
+- non-stable route-only handover is expected to be faster than stable EIP
+  handover because it avoids EIP reassociation,
 - observed low-cost AWS tests showed about 12 seconds of outage for owner termination under the tested conditions.
 
 Do not treat the measured timing as a universal SLA. It depends on:
