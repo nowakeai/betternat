@@ -718,8 +718,9 @@ Reliability validation update on 2026-06-23:
 - The retained environment was restored to stable/no-public-IP launch template
   version `16` after the non-stable validation.
 - Stale paired `systemd-stop-*` handover records remained in intermediate
-  states after the ASG lifecycle handover completed. Treat this as operation
-  record hygiene to fix before production readiness.
+  states after the ASG lifecycle handover completed. Follow-up code now filters
+  and best-effort deletes expired handover records, and `handover history`
+  hides stale non-terminal records from older lease generations by default.
 - 2026-06-24 low-cost soak evidence:
   `docs/research/040-alpha-low-cost-soak-results.md`.
 

@@ -18,22 +18,25 @@ import (
 	"github.com/nowakeai/betternat/internal/agentapi"
 	"github.com/nowakeai/betternat/internal/config"
 	dynamodbcoord "github.com/nowakeai/betternat/internal/coordination/dynamodb"
+	"github.com/nowakeai/betternat/internal/lease"
 )
 
 type handoverOptions struct {
-	host       string
-	configPath string
-	output     outputFormat
-	timeout    time.Duration
-	target     string
-	reason     string
-	limit      int
-	status     string
+	host         string
+	configPath   string
+	output       outputFormat
+	timeout      time.Duration
+	target       string
+	reason       string
+	limit        int
+	status       string
+	includeStale bool
 }
 
 type handoverStoreReader interface {
 	GetHandover(context.Context, string) (dynamodbcoord.HandoverRecord, error)
 	ListHandovers(context.Context) ([]dynamodbcoord.HandoverRecord, error)
+	Current(context.Context) (lease.Record, error)
 }
 
 type handoverRecordOutput struct {
@@ -96,6 +99,7 @@ func newHandoverCommand(ctx context.Context, out io.Writer) *cobra.Command {
 	history.Flags().VarP((*outputFlag)(&opts.output), "output", "o", "output format: table or json")
 	history.Flags().IntVar(&opts.limit, "limit", opts.limit, "maximum records to show")
 	history.Flags().StringVar(&opts.status, "status", opts.status, "filter by handover status")
+	history.Flags().BoolVar(&opts.includeStale, "include-stale", opts.includeStale, "include stale non-terminal records from older lease generations")
 
 	inspect := &cobra.Command{
 		Use:   "inspect <request-id>",
@@ -156,6 +160,9 @@ func runHandoverHistory(ctx context.Context, opts handoverOptions, out io.Writer
 		return err
 	}
 	records = filterHandoverRecords(records, opts.status)
+	if !opts.includeStale {
+		records = filterCurrentHandoverRecords(ctx, store, records)
+	}
 	sort.Slice(records, func(i, j int) bool {
 		return records[i].UpdatedAt.After(records[j].UpdatedAt)
 	})
@@ -199,6 +206,30 @@ func filterHandoverRecords(records []dynamodbcoord.HandoverRecord, status string
 		}
 	}
 	return filtered
+}
+
+func filterCurrentHandoverRecords(ctx context.Context, store handoverStoreReader, records []dynamodbcoord.HandoverRecord) []dynamodbcoord.HandoverRecord {
+	current, err := store.Current(ctx)
+	if err != nil || current.Generation == 0 {
+		return records
+	}
+	filtered := make([]dynamodbcoord.HandoverRecord, 0, len(records))
+	for _, record := range records {
+		if record.LeaseGeneration < current.Generation && !handoverTerminalStatus(record.Status) {
+			continue
+		}
+		filtered = append(filtered, record)
+	}
+	return filtered
+}
+
+func handoverTerminalStatus(status string) bool {
+	switch status {
+	case "completed", "failed", "rejected", "aborted", "failed_manual_intervention":
+		return true
+	default:
+		return false
+	}
 }
 
 func renderHandoverRecords(out io.Writer, format outputFormat, records []dynamodbcoord.HandoverRecord) error {

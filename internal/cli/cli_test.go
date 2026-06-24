@@ -438,7 +438,7 @@ func TestRunHandoverHistoryUsesCoordinationRecords(t *testing.T) {
 	restore := newHandoverStoreReader
 	defer func() { newHandoverStoreReader = restore }()
 	newHandoverStoreReader = func(context.Context, config.Config) (handoverStoreReader, error) {
-		return fakeHandoverReader{records: []dynamodbcoord.HandoverRecord{
+		return fakeHandoverReader{currentGeneration: 2, records: []dynamodbcoord.HandoverRecord{
 			{
 				RequestID:       "old",
 				Status:          "failed",
@@ -468,6 +468,58 @@ func TestRunHandoverHistoryUsesCoordinationRecords(t *testing.T) {
 	}
 	if !strings.Contains(body, `"source_node_id":"i-active"`) {
 		t.Fatalf("missing source node: %s", body)
+	}
+}
+
+func TestRunHandoverHistoryHidesStaleIntermediateRecords(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "agent.json")
+	raw := strings.Replace(validConfigJSON(), `"observability": {}`, `"coordination":{"backend":"dynamodb","table":"coordination"},"observability": {}`, 1)
+	if err := os.WriteFile(configPath, []byte(raw), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	restore := newHandoverStoreReader
+	defer func() { newHandoverStoreReader = restore }()
+	newHandoverStoreReader = func(context.Context, config.Config) (handoverStoreReader, error) {
+		return fakeHandoverReader{currentGeneration: 3, records: []dynamodbcoord.HandoverRecord{
+			{
+				RequestID:       "stale-preparing",
+				Status:          "preparing",
+				SourceNodeID:    "i-old-active",
+				TargetNodeID:    "i-old-standby",
+				LeaseGeneration: 2,
+				UpdatedAt:       time.Unix(200, 0),
+			},
+			{
+				RequestID:       "completed",
+				Status:          "completed",
+				SourceNodeID:    "i-active",
+				TargetNodeID:    "i-standby",
+				LeaseGeneration: 3,
+				UpdatedAt:       time.Unix(300, 0),
+			},
+		}}, nil
+	}
+
+	var out bytes.Buffer
+	if err := run(context.Background(), []string{"handover", "history", "--config", configPath, "--output", "json"}, &out); err != nil {
+		t.Fatalf("run handover history: %v", err)
+	}
+	body := out.String()
+	if strings.Contains(body, `"request_id":"stale-preparing"`) {
+		t.Fatalf("stale intermediate record should be hidden by default: %s", body)
+	}
+	if !strings.Contains(body, `"request_id":"completed"`) {
+		t.Fatalf("current completed record missing: %s", body)
+	}
+
+	out.Reset()
+	if err := run(context.Background(), []string{"handover", "history", "--config", configPath, "--output", "json", "--include-stale"}, &out); err != nil {
+		t.Fatalf("run handover history include stale: %v", err)
+	}
+	body = out.String()
+	if !strings.Contains(body, `"request_id":"stale-preparing"`) || !strings.Contains(body, `"request_id":"completed"`) {
+		t.Fatalf("include-stale should show both records: %s", body)
 	}
 }
 
@@ -673,7 +725,8 @@ type fakeReadinessEngine struct {
 type fakeStatusRegistry struct{}
 
 type fakeHandoverReader struct {
-	records []dynamodbcoord.HandoverRecord
+	currentGeneration uint64
+	records           []dynamodbcoord.HandoverRecord
 }
 
 func (f fakeHandoverReader) GetHandover(_ context.Context, requestID string) (dynamodbcoord.HandoverRecord, error) {
@@ -687,6 +740,13 @@ func (f fakeHandoverReader) GetHandover(_ context.Context, requestID string) (dy
 
 func (f fakeHandoverReader) ListHandovers(context.Context) ([]dynamodbcoord.HandoverRecord, error) {
 	return append([]dynamodbcoord.HandoverRecord(nil), f.records...), nil
+}
+
+func (f fakeHandoverReader) Current(context.Context) (lease.Record, error) {
+	if f.currentGeneration == 0 {
+		return lease.Record{}, os.ErrNotExist
+	}
+	return lease.Record{HAGroupID: "prod-egress-a", OwnerInstanceID: "i-active", Generation: f.currentGeneration}, nil
 }
 
 func (fakeStatusRegistry) Current(context.Context) (lease.Record, error) {

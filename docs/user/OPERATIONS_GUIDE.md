@@ -59,7 +59,7 @@ Current behavior:
 - `datapath status` prints configured datapath settings.
 - `datapath ready` performs live local datapath checks through LoxiLB.
 - `handover current` shows the local daemon's current handover state.
-- `handover history` and `handover inspect` read durable handover operation records from the coordination table.
+- `handover history` and `handover inspect` read durable handover operation records from the coordination table. History hides stale non-terminal records from older lease generations by default; use `handover history --include-stale` when collecting support evidence.
 - `support bundle` creates a local redacted `.tar.gz` with config, daemon status, handover state, metrics, systemd logs, LoxiLB state, and network snapshots for troubleshooting.
 - `cost estimate` estimates NAT Gateway processing-cost avoidance.
 

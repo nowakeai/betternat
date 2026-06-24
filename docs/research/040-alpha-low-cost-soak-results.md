@@ -181,9 +181,10 @@ systemd-stop-1782270089079184305 rejected ... prepare handover target "i-073ab00
 ```
 
 This did not break egress and the later manual handover completed, but it is a
-record hygiene issue. A standby-local service restart should either avoid
-creating an active-source handover attempt while the target peer API is down or
-record the rejected operation with clearer local-stop semantics.
+record hygiene issue. Follow-up code now filters and best-effort deletes expired
+handover records, and `betternat handover history` hides stale non-terminal
+records from older lease generations by default. Use `--include-stale` when the
+raw intermediate records are needed for support evidence.
 
 ## Conclusion
 

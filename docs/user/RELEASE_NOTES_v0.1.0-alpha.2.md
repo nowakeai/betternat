@@ -18,6 +18,8 @@ It remains AWS-only and single-AZ for the first public evaluation path.
   - `betternat handover current`,
   - `betternat handover history`,
   - `betternat handover inspect`.
+- `betternat handover history` hides stale non-terminal records from older lease
+  generations by default; use `--include-stale` for raw support evidence.
 - Added proactive handover support with idempotent request records.
 - Added peer API authentication for handover prepare requests.
 - Added systemd stop, ASG lifecycle, and Spot interruption trigger paths for

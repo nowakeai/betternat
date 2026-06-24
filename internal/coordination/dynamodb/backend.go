@@ -445,7 +445,12 @@ func (b *Backend) GetHandover(ctx context.Context, requestID string) (HandoverRe
 	if len(output.Item) == 0 {
 		return HandoverRecord{}, fmt.Errorf("handover request %q not found", requestID)
 	}
-	return handoverRecordFromItem(output.Item), nil
+	record := handoverRecordFromItem(output.Item)
+	if b.handoverRecordExpired(record) {
+		_ = b.deleteHandoverRecord(ctx, requestID)
+		return HandoverRecord{}, fmt.Errorf("handover request %q expired", requestID)
+	}
+	return record, nil
 }
 
 func (b *Backend) ListHandovers(ctx context.Context) ([]HandoverRecord, error) {
@@ -465,9 +470,35 @@ func (b *Backend) ListHandovers(ctx context.Context) ([]HandoverRecord, error) {
 	}
 	records := make([]HandoverRecord, 0, len(output.Items))
 	for _, item := range output.Items {
-		records = append(records, handoverRecordFromItem(item))
+		record := handoverRecordFromItem(item)
+		if b.handoverRecordExpired(record) {
+			_ = b.deleteHandoverRecord(ctx, record.RequestID)
+			continue
+		}
+		records = append(records, record)
 	}
 	return records, nil
+}
+
+func (b *Backend) handoverRecordExpired(record HandoverRecord) bool {
+	if record.ExpiresAt.IsZero() || record.ExpiresAt.Unix() <= 0 {
+		return false
+	}
+	return record.ExpiresAt.Before(b.now().Add(time.Duration(defaultNowSlack)))
+}
+
+func (b *Backend) deleteHandoverRecord(ctx context.Context, requestID string) error {
+	if requestID == "" {
+		return nil
+	}
+	_, err := b.db.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+		TableName: &b.table,
+		Key:       b.key(handoverRecordID(requestID)),
+	})
+	if err != nil {
+		return fmt.Errorf("dynamodb delete handover record: %w", err)
+	}
+	return nil
 }
 
 func (b *Backend) validate(owner string) error {

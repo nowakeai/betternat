@@ -663,10 +663,10 @@ AWS automatic-trigger and AMI validation on 2026-06-23:
   exited through non-shared public IPs between `2026-06-23T18:32:39.520Z` and
   `2026-06-23T18:32:46.896Z`. The production AMI path must remove per-node
   public IP assignment or otherwise prevent non-shared egress identity leakage.
-- Follow-up: stale automatic records from the paired `systemd-stop-*` trigger
-  remained in `preparing` or `committing` even though the ASG lifecycle-triggered
-  handover completed. This is a record hygiene issue, not an observed failover
-  outage in this run.
+- Follow-up implemented on 2026-06-24: expired handover records are filtered and
+  best-effort deleted by the DynamoDB coordination backend. `betternat handover
+  history` also hides stale non-terminal records from older lease generations by
+  default while retaining `--include-stale` for support evidence collection.
 
 AWS documentation basis:
 
@@ -884,8 +884,6 @@ Defer until benchmark-backed:
    propagation catches up.
 3. Decide whether to publish another runtime tag for post-RC source changes or
    keep `v0.1.0-alpha.2` as the current runtime artifact set.
-4. Clean up stale automatic handover operation records that can remain in
-   intermediate states after paired lifecycle-triggered operations complete.
-5. Keep AMI publication, AMI channel resolution, benchmark harness, and broader
+4. Keep AMI publication, AMI channel resolution, benchmark harness, and broader
    retry/backoff hardening as production/P2 work rather than first-alpha
    blockers.

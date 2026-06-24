@@ -183,6 +183,7 @@ func TestUpdateHandoverUsesOnlyUpdateExpressionNames(t *testing.T) {
 }
 
 func TestGetHandoverParsesRecord(t *testing.T) {
+	now := time.Unix(100, 0)
 	db := &fakeDynamoDB{getItem: map[string]types.AttributeValue{
 		"ha_group_id":      s("ha-a"),
 		"record_id":        s("handover#req-1"),
@@ -198,7 +199,7 @@ func TestGetHandoverParsesRecord(t *testing.T) {
 		"updated_at":       n(101),
 		"expires_at":       n(200),
 	}}
-	backend := NewFromClient(db, "coordination", "ha-a", 20*time.Second, nil)
+	backend := NewFromClient(db, "coordination", "ha-a", 20*time.Second, func() time.Time { return now })
 
 	record, err := backend.GetHandover(context.Background(), "req-1")
 	if err != nil {
@@ -209,7 +210,32 @@ func TestGetHandoverParsesRecord(t *testing.T) {
 	}
 }
 
+func TestGetHandoverFiltersAndDeletesExpiredRecord(t *testing.T) {
+	now := time.Unix(300, 0)
+	db := &fakeDynamoDB{getItem: map[string]types.AttributeValue{
+		"ha_group_id":      s("ha-a"),
+		"record_id":        s("handover#req-1"),
+		"request_id":       s("req-1"),
+		"status":           s("preparing"),
+		"source_node_id":   s("i-active"),
+		"lease_generation": n(8),
+		"created_at":       n(100),
+		"updated_at":       n(101),
+		"expires_at":       n(200),
+	}}
+	backend := NewFromClient(db, "coordination", "ha-a", 20*time.Second, func() time.Time { return now })
+
+	_, err := backend.GetHandover(context.Background(), "req-1")
+	if err == nil {
+		t.Fatal("expected expired handover record error")
+	}
+	if got := db.deleteInput.Key["record_id"].(*types.AttributeValueMemberS).Value; got != "handover#req-1" {
+		t.Fatalf("unexpected deleted key: %s", got)
+	}
+}
+
 func TestListHandoversParsesRecords(t *testing.T) {
+	now := time.Unix(100, 0)
 	db := &fakeDynamoDB{items: []map[string]types.AttributeValue{
 		{
 			"ha_group_id":      s("ha-a"),
@@ -224,7 +250,7 @@ func TestListHandoversParsesRecords(t *testing.T) {
 			"expires_at":       n(200),
 		},
 	}}
-	backend := NewFromClient(db, "coordination", "ha-a", 20*time.Second, nil)
+	backend := NewFromClient(db, "coordination", "ha-a", 20*time.Second, func() time.Time { return now })
 
 	records, err := backend.ListHandovers(context.Background())
 	if err != nil {
@@ -235,6 +261,47 @@ func TestListHandoversParsesRecords(t *testing.T) {
 	}
 	if got := db.queryInput.ExpressionAttributeValues[":prefix"].(*types.AttributeValueMemberS).Value; got != "handover#" {
 		t.Fatalf("unexpected query prefix: %s", got)
+	}
+}
+
+func TestListHandoversFiltersAndDeletesExpiredRecords(t *testing.T) {
+	now := time.Unix(300, 0)
+	db := &fakeDynamoDB{items: []map[string]types.AttributeValue{
+		{
+			"ha_group_id":      s("ha-a"),
+			"record_id":        s("handover#expired"),
+			"request_id":       s("expired"),
+			"status":           s("preparing"),
+			"source_node_id":   s("i-active"),
+			"lease_generation": n(7),
+			"created_at":       n(100),
+			"updated_at":       n(101),
+			"expires_at":       n(200),
+		},
+		{
+			"ha_group_id":      s("ha-a"),
+			"record_id":        s("handover#fresh"),
+			"request_id":       s("fresh"),
+			"status":           s("completed"),
+			"source_node_id":   s("i-active"),
+			"target_node_id":   s("i-standby"),
+			"lease_generation": n(8),
+			"created_at":       n(290),
+			"updated_at":       n(291),
+			"expires_at":       n(400),
+		},
+	}}
+	backend := NewFromClient(db, "coordination", "ha-a", 20*time.Second, func() time.Time { return now })
+
+	records, err := backend.ListHandovers(context.Background())
+	if err != nil {
+		t.Fatalf("list handovers: %v", err)
+	}
+	if len(records) != 1 || records[0].RequestID != "fresh" {
+		t.Fatalf("unexpected handover records: %#v", records)
+	}
+	if got := db.deleteInput.Key["record_id"].(*types.AttributeValueMemberS).Value; got != "handover#expired" {
+		t.Fatalf("unexpected deleted key: %s", got)
 	}
 }
 
