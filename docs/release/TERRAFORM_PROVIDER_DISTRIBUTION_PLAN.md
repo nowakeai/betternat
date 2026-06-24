@@ -336,6 +336,27 @@ Rechecked on 2026-06-24 with Terraform `v1.14.7`:
   successfully from Terraform Registry and `terraform validate` passed for the
   temporary registry smoke configuration.
 
+Rechecked again on 2026-06-24 with Terraform `v1.14.7`:
+
+- `nowakeai/betternat` `0.1.0-alpha.3`: `terraform init -upgrade` still
+  returned no available releases matching `0.1.0-alpha.3`.
+- `nowakeai/betternat` `0.1.0-alpha.2`: `terraform init -upgrade` installed
+  successfully from Terraform Registry and `terraform validate` passed for the
+  same temporary registry smoke configuration, confirming that the Registry and
+  local Terraform networking were working.
+
+Because Registry `0.1.0-alpha.3` was still unavailable, the 2026-06-24 release
+deploy smoke tested provider `0.1.0-alpha.3` from the GitHub provider release as
+a Terraform filesystem mirror:
+
+- plan-only run `bnat-release-plan-alpha3-20260624034106`: release URL and
+  checksum checks passed, provider release checksum verification passed,
+  Terraform init/validate/plan passed.
+- live disposable AWS run `bnat-release-apply-alpha3-20260624034150`: Terraform
+  created `16` resources and destroyed `16` resources. A post-destroy residual
+  scan found no matching VPC, non-terminated instance, ASG, DynamoDB table, EIP,
+  IAM role, IAM instance profile, or launch template.
+
 Important OpenTofu source-address note:
 
 - Terraform resolves `source = "nowakeai/betternat"` as `registry.terraform.io/nowakeai/betternat`.

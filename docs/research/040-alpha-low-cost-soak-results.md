@@ -146,6 +146,32 @@ Cloud-side verification after the second probe:
   `i-073ab0073edde40ba`,
 - shared EIP `52.24.117.43` was associated to `i-073ab0073edde40ba`.
 
+## Non-Stable Route-Only Handover Comparison
+
+A separate 2026-06-24 validation temporarily switched the retained environment
+to `stable_egress_ip=false`, with per-node public IPv4 enabled and no
+`ha.public_identity` in the agent config. The environment was restored to
+stable/no-public-IP mode after the validation.
+
+The manual proactive handover
+`i-0a89f292e07b04460 -> i-0d08059b2f4708db6` completed at lease generation
+`15`.
+
+Client probe result during that route-only handover:
+
+- samples: `240`
+- failed: `0`
+- public source IP changed from `52.24.117.43` to `52.24.240.255`
+- last old-IP sample: `2026-06-24T02:06:34.767Z`
+- first new-IP sample: `2026-06-24T02:06:35.202Z`
+- visible switch window: about `435 ms` at client probe sampling granularity
+
+Conclusion: non-stable route-only handover was materially faster than stable
+shared-EIP handover in this AWS probe because it avoids EIP reassociation and
+public-identity verification. The tradeoff is explicit: the public source IP
+changes after handover, so this mode is unsuitable for destinations that require
+a fixed allowlisted egress IP.
+
 ## Additional Observation
 
 The standby agent restart created a rejected `systemd-stop-*` operation:
@@ -167,5 +193,7 @@ This pass is sufficient alpha evidence for:
 - stable shared-EIP preservation during controlled events,
 - standalone active systemd-stop graceful handover,
 - live LoxiLB restart recovery in AWS.
+- non-stable route-only handover being faster than stable EIP handover in the
+  measured AWS alpha environment, with the expected source-IP change.
 
 It is not sufficient for production long-soak, throughput, or SLO claims.

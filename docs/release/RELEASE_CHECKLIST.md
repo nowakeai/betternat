@@ -579,8 +579,21 @@ P1 items are not required to publish the first alpha, but they should be priorit
 - [x] Decide whether provider binaries are distributed through GitHub Releases only or later through the Terraform Registry.
 - [x] Add a release artifact smoke test that verifies GitHub Release URLs and
   checksums instead of temporary S3 URLs.
-- [ ] Add a release deploy smoke test that applies Terraform using GitHub
+- [x] Add a release deploy smoke test that applies Terraform using GitHub
   Release URLs instead of temporary S3 URLs.
+  - [x] Repeatable smoke harness added:
+    `scripts/release-deploy-smoke.sh`.
+  - [x] Plan-only smoke passed with `BETTERNAT_VERSION=v0.1.0-alpha.2`,
+    `BETTERNAT_PROVIDER_VERSION=0.1.0-alpha.3`, and
+    `BETTERNAT_PROVIDER_INSTALL=github-mirror` in run
+    `bnat-release-plan-alpha3-20260624034106`.
+  - [x] Live disposable AWS apply/destroy passed in run
+    `bnat-release-apply-alpha3-20260624034150`: Terraform created `16`
+    resources and destroyed `16` resources.
+  - [x] Post-destroy residual scan for run
+    `bnat-release-apply-alpha3-20260624034150` found no matching VPC,
+    non-terminated instance, ASG, DynamoDB table, EIP, IAM role, IAM instance
+    profile, or launch template.
 
 Release artifact smoke validation recorded on 2026-06-24:
 
@@ -589,6 +602,19 @@ Release artifact smoke validation recorded on 2026-06-24:
 - `BETTERNAT_VERSION=v0.1.0-alpha.2 BETTERNAT_SMOKE_ARCH=amd64
   scripts/release-url-smoke.sh`: passed for Linux amd64 agent and CLI checksum
   verification; amd64 CLI `version` executed successfully on the local host.
+- `BETTERNAT_VERSION=v0.1.0-alpha.2
+  BETTERNAT_PROVIDER_VERSION=0.1.0-alpha.3
+  BETTERNAT_PROVIDER_INSTALL=github-mirror
+  scripts/release-deploy-smoke.sh`: plan-only smoke passed through GitHub
+  release artifact checksum verification, provider release checksum
+  verification, Terraform init, validate, and plan.
+- `BETTERNAT_VERSION=v0.1.0-alpha.2
+  BETTERNAT_PROVIDER_VERSION=0.1.0-alpha.3
+  BETTERNAT_PROVIDER_INSTALL=github-mirror
+  BETTERNAT_RELEASE_DEPLOY_APPLY=1
+  scripts/release-deploy-smoke.sh`: disposable AWS apply/destroy passed.
+  Terraform Registry `0.1.0-alpha.3` was still unavailable, so this deploy
+  smoke used the GitHub provider release as a Terraform filesystem mirror.
 - [x] Create `github.com/nowakeai/terraform-provider-betternat` for Registry-compatible provider publishing.
 - [x] Expose a thin main-repo public provider factory for the provider repo.
 - [x] Add provider-specific alpha release workflow for Linux provider zip artifacts.
@@ -713,6 +739,9 @@ Reliability validation update on 2026-06-23:
     Rechecked on 2026-06-24 with Terraform `v1.14.7`: `0.1.0-alpha.3` was
     still unavailable in the Terraform Registry; `0.1.0-alpha.2` Registry
     install and `terraform validate` still passed.
+    Rechecked again later on 2026-06-24 with Terraform `v1.14.7`:
+    `0.1.0-alpha.3` was still unavailable; `0.1.0-alpha.2` still installed and
+    validated from Terraform Registry.
   - [x] Clean clone `examples/terraform-aws-supplemental init` and `validate` passed with `HTTP_PROXY`/`HTTPS_PROXY` set to `http://127.0.0.1:10808`.
 - [x] Add provider installation guide.
 - [x] Add observability guide.
