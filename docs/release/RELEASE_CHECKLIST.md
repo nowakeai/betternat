@@ -556,8 +556,8 @@ Do not mark BetterNAT production-ready until alpha checklist is complete plus:
   - [x] Spot interruption handling follows the documented AWS IMDS path; forced interruption validation is not a first-alpha release gate.
 - [x] transient non-EIP leakage in stable mode is fixed or documented with clear conditions.
 - [ ] IAM least-privilege policy is reviewed.
-- [ ] provider release process is documented.
-- [ ] release artifacts have checksums.
+- [x] provider release process is documented.
+- [x] release artifacts have checksums.
 - [ ] published docs include limitations and SLO language.
 - [ ] benchmark results are reproducible.
 
