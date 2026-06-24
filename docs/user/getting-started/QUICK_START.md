@@ -111,11 +111,11 @@ The module can keep compatibility outputs such as `nat_gateway_ip` by returning 
 
 Before:
 
-![Before BetterNAT: AWS NAT Gateway route path](../assets/betternat-before.svg)
+![Before BetterNAT: AWS NAT Gateway route path](../../assets/betternat-before.svg)
 
 After:
 
-![After BetterNAT: node route, shared EIP, and AWS failover control plane](../assets/betternat-after.svg)
+![After BetterNAT: node route, shared EIP, and AWS failover control plane](../../assets/betternat-after.svg)
 
 For the datapath component BetterNAT uses inside each node, see the upstream [LoxiLB overview image](https://github.com/loxilb-io/loxilb/assets/75648333/87da0183-1a65-493f-b6fe-5bc738ba5468) and [LoxiLB standalone documentation](https://github.com/loxilb-io/loxilbdocs/blob/main/docs/standalone.md). BetterNAT uses LoxiLB as a local egress SNAT datapath; AWS route/EIP failover is handled by `betternat-agent`.
 

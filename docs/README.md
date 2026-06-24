@@ -2,7 +2,8 @@
 
 This directory is split by audience and document lifecycle.
 
-- `user/` is for people installing, operating, or evaluating BetterNAT.
+- `user/` is for people installing, operating, or evaluating BetterNAT. It is
+  split into `getting-started/`, `operations/`, `reference/`, and `releases/`.
 - `release/` is for maintainers preparing releases, AMIs, and publication gates.
 - `testing/` is for repeatable local/AWS test plans and runbooks.
 - `dev/` is for contributor workflow, dependency policy, and development validation.
@@ -17,7 +18,8 @@ Older research may describe nftables-first or custom-eBPF-first thinking. Treat 
 - [architecture.md](architecture.md) — Current architecture: LoxiLB datapath, Terraform install UX, and agent-owned HA.
 - [architecture-diagram.md](architecture-diagram.md) — Mermaid diagrams for AWS route replacement, agent/LoxiLB interaction, runtime reconciliation, and failover.
 - [spec-v0.md](spec-v0.md) — v0 product and implementation spec.
-- [user/QUICK_START.md](user/QUICK_START.md) — Disposable-VPC install, verification, destroy, and cleanup guide for the first alpha.
+- [user/README.md](user/README.md) — User documentation index by task.
+- [user/getting-started/QUICK_START.md](user/getting-started/QUICK_START.md) — Disposable-VPC install, verification, destroy, and cleanup guide for the first alpha.
 - [release/RELEASE_CHECKLIST.md](release/RELEASE_CHECKLIST.md) — Alpha and production release gates.
 
 ## User Docs
@@ -25,22 +27,25 @@ Older research may describe nftables-first or custom-eBPF-first thinking. Treat 
 These are meant to be readable by external users.
 Read them in this order for the first full pass:
 
-- [user/QUICK_START.md](user/QUICK_START.md) — First alpha quick start.
-- [user/EXISTING_VPC_INSTALL.md](user/EXISTING_VPC_INSTALL.md) — Existing-VPC install and route ownership warnings.
-- [user/COST_MODEL.md](user/COST_MODEL.md) — NAT Gateway processing-fee model, BetterNAT cost formula, example savings, endpoint guidance, and CLI estimate usage.
-- [user/CONFIGURATION.md](user/CONFIGURATION.md) — `betternat_gateway` Terraform input reference and runtime configuration notes.
-- [user/IAM_POLICY.md](user/IAM_POLICY.md) — Terraform execution and gateway runtime IAM requirements.
-- [user/SECURITY_HARDENING.md](user/SECURITY_HARDENING.md) — Current alpha security posture, IAM/network/bootstrap hardening, artifact integrity, and production checklist.
-- [user/OPERATIONS_GUIDE.md](user/OPERATIONS_GUIDE.md) — Day-2 operations: CLI, metrics, alerts, AWS checks, SSM access, troubleshooting, and cleanup.
-- [user/OBSERVABILITY_GUIDE.md](user/OBSERVABILITY_GUIDE.md) — Prometheus metrics, CLI checks, AWS cross-checks, alerts, attribution scope, and current observability limits.
-- [user/ROLLBACK_GUIDE.md](user/ROLLBACK_GUIDE.md) — Safe destroy, private route restoration, manual rollback, and residual-resource checks.
-- [user/UPGRADE_REPLACEMENT_GUIDE.md](user/UPGRADE_REPLACEMENT_GUIDE.md) — In-place capacity updates, explicit replacement, blue/green upgrade workflow, and alpha rolling-upgrade limits.
-- [user/FAILURE_MODES.md](user/FAILURE_MODES.md) — Failure-mode behavior and limitations.
-- [user/LIMITATIONS.md](user/LIMITATIONS.md) — Alpha limitations: SLA, failover, cost, performance, bootstrap, and tuning.
-- [user/RELEASE_NOTES_v0.1.0-alpha.7.md](user/RELEASE_NOTES_v0.1.0-alpha.7.md) — Provider-module support release notes for split provider alpha8.
-- [user/RELEASE_NOTES_v0.1.0-alpha.6.md](user/RELEASE_NOTES_v0.1.0-alpha.6.md) — Current recommended runtime alpha release notes for provider alpha8 bootstrap support.
-- [user/RELEASE_NOTES_v0.1.0-alpha.2.md](user/RELEASE_NOTES_v0.1.0-alpha.2.md) — Earlier runtime alpha release notes.
-- [user/RELEASE_NOTES_v0.1.0-alpha.1.md](user/RELEASE_NOTES_v0.1.0-alpha.1.md) — First alpha release notes.
+- [user/README.md](user/README.md) — User documentation index by task.
+- [user/getting-started/QUICK_START.md](user/getting-started/QUICK_START.md) — First alpha quick start.
+- [user/getting-started/EXISTING_VPC_INSTALL.md](user/getting-started/EXISTING_VPC_INSTALL.md) — Existing-VPC install and route ownership warnings.
+- [user/reference/COST_MODEL.md](user/reference/COST_MODEL.md) — NAT Gateway processing-fee model, BetterNAT cost formula, example savings, endpoint guidance, and CLI estimate usage.
+- [user/getting-started/CONFIGURATION.md](user/getting-started/CONFIGURATION.md) — `betternat_gateway` Terraform input reference and runtime configuration notes.
+- [user/reference/IAM_POLICY.md](user/reference/IAM_POLICY.md) — Terraform execution and gateway runtime IAM requirements.
+- [user/reference/SECURITY_HARDENING.md](user/reference/SECURITY_HARDENING.md) — Current alpha security posture, IAM/network/bootstrap hardening, artifact integrity, and production checklist.
+- [user/operations/OPERATIONS_GUIDE.md](user/operations/OPERATIONS_GUIDE.md) — Day-2 operations: CLI, metrics, alerts, AWS checks, SSM access, troubleshooting, and cleanup.
+- [user/operations/OBSERVABILITY_GUIDE.md](user/operations/OBSERVABILITY_GUIDE.md) — Prometheus metrics, CLI checks, AWS cross-checks, alerts, attribution scope, and current observability limits.
+- [user/operations/ROLLBACK_GUIDE.md](user/operations/ROLLBACK_GUIDE.md) — Safe destroy, private route restoration, manual rollback, and residual-resource checks.
+- [user/operations/UPGRADE_REPLACEMENT_GUIDE.md](user/operations/UPGRADE_REPLACEMENT_GUIDE.md) — In-place capacity updates, explicit replacement, blue/green upgrade workflow, and alpha rolling-upgrade limits.
+- [user/operations/FAILURE_MODES.md](user/operations/FAILURE_MODES.md) — Failure-mode behavior and limitations.
+- [user/reference/LIMITATIONS.md](user/reference/LIMITATIONS.md) — Alpha limitations: SLA, failover, cost, performance, bootstrap, and tuning.
+- [user/releases/README.md](user/releases/README.md) — Release notes index and release-note rules.
+- [user/releases/v0.1.0-alpha.8.md](user/releases/v0.1.0-alpha.8.md) — Current runtime alpha release notes and validation caveats.
+- [user/releases/v0.1.0-alpha.7.md](user/releases/v0.1.0-alpha.7.md) — Provider-module support release notes for split provider alpha8.
+- [user/releases/v0.1.0-alpha.6.md](user/releases/v0.1.0-alpha.6.md) — Current recommended runtime alpha release notes for provider alpha8 bootstrap support.
+- [user/releases/v0.1.0-alpha.2.md](user/releases/v0.1.0-alpha.2.md) — Earlier runtime alpha release notes.
+- [user/releases/v0.1.0-alpha.1.md](user/releases/v0.1.0-alpha.1.md) — First alpha release notes.
 
 ## Release And Packaging
 

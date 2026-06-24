@@ -101,8 +101,9 @@ Use the lightest useful validation first, then escalate when the touched area re
 - Release notes must state what changed, who should use the release, validation
   evidence, known limitations, upgrade or compatibility notes, and artifact
   integrity guidance when artifacts are published.
-- BetterNAT runtime/main-repo release notes live under `docs/user/` using the
-  `RELEASE_NOTES_<tag>.md` pattern.
+- BetterNAT runtime/main-repo release notes live under `docs/user/releases/`
+  using the `<tag>.md` pattern, for example
+  `docs/user/releases/v0.1.0-alpha.8.md`.
 - Split Terraform provider release notes live in the provider repository under
   `docs/release-notes/<tag>.md`.
 - Release workflows should prefer an explicit checked-in release note file over

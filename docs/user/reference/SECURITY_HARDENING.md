@@ -223,7 +223,7 @@ The Terraform provider marks generated user data and agent config as sensitive, 
 
 Use private vulnerability reporting. Do not open public GitHub issues for suspected vulnerabilities.
 
-See the top-level [SECURITY.md](../../SECURITY.md).
+See the top-level [SECURITY.md](../../../SECURITY.md).
 
 Include:
 
@@ -243,7 +243,7 @@ BetterNAT integrates with:
 - Terraform Plugin Framework,
 - Prometheus-compatible metrics.
 
-See [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md) for current notices.
+See [THIRD_PARTY_NOTICES.md](../../../THIRD_PARTY_NOTICES.md) for current notices.
 
 Before production:
 

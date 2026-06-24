@@ -49,7 +49,7 @@ Release notes:
 - GitHub Release pages must not be left as empty shells, generated changelog
   only pages, or checksum-only messages.
 - The main release workflow now prefers
-  `docs/user/RELEASE_NOTES_<tag>.md` when present.
+  `docs/user/releases/<tag>.md` when present.
 - The split provider release workflow now prefers
   `docs/release-notes/<tag>.md` when present.
 

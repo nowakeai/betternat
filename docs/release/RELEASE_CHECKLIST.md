@@ -281,7 +281,7 @@ Optional AMI acceleration path:
 Evidence:
 
 - `docs/release/ALPHA_BOOTSTRAP_RELEASE_PATH.md`
-- `docs/user/RELEASE_NOTES_v0.1.0-alpha.2.md`
+- `docs/user/releases/v0.1.0-alpha.2.md`
 - `internal/bootstrap/bootstrap.go`
 - `internal/bootstrap/bootstrap_test.go`
 - `docs/release/AMI_RELEASE_PLAN.md`
@@ -414,7 +414,7 @@ Production requirement:
 Evidence:
 
 - `docs/research/013-security-model.md`
-- `docs/user/SECURITY_HARDENING.md`
+- `docs/user/reference/SECURITY_HARDENING.md`
 - `docs/research/043-ga-iam-security-review.md`
 - `docs/spec-v0.md`
 - release artifact checksums
@@ -558,13 +558,13 @@ Evidence:
 - `README.md`
 - `docs/README.md`
 - `docs/dev/USER_DOCUMENTATION_GUIDE.md`
-- `docs/user/QUICK_START.md`
-- `docs/user/EXISTING_VPC_INSTALL.md`
-- `docs/user/CONFIGURATION.md`
-- `docs/user/IAM_POLICY.md`
-- `docs/user/LIMITATIONS.md`
-- `docs/user/FAILURE_MODES.md`
-- `docs/user/RELEASE_NOTES_v0.1.0-alpha.2.md`
+- `docs/user/getting-started/QUICK_START.md`
+- `docs/user/getting-started/EXISTING_VPC_INSTALL.md`
+- `docs/user/getting-started/CONFIGURATION.md`
+- `docs/user/reference/IAM_POLICY.md`
+- `docs/user/reference/LIMITATIONS.md`
+- `docs/user/operations/FAILURE_MODES.md`
+- `docs/user/releases/v0.1.0-alpha.2.md`
 - `docs/testing/AWS_SUPPLEMENTAL_RUNBOOK.md`
 
 ## CloudFormation Delivery Checklist

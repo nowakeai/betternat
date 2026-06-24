@@ -447,7 +447,7 @@ CLI:
 
 - remove `DescribeAutoScalingGroups` and `DescribeInstances` from normal runtime status requirements,
 - keep them only for `doctor --live` if live cloud verification needs them,
-- update `docs/user/IAM_POLICY.md`,
+- update `docs/user/reference/IAM_POLICY.md`,
 - add negative tests showing `betternat status` works without ASG/EC2 discovery permissions.
 
 ### Phase 3: Agent Discovery Consumers

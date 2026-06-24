@@ -33,7 +33,7 @@ Security-sensitive areas include:
 - AMI/bootstrap supply chain,
 - local datapath rule generation.
 
-For deployment hardening, IAM scope, metrics exposure, bootstrap integrity, and supply-chain notes, see [docs/user/SECURITY_HARDENING.md](docs/user/SECURITY_HARDENING.md).
+For deployment hardening, IAM scope, metrics exposure, bootstrap integrity, and supply-chain notes, see [docs/user/reference/SECURITY_HARDENING.md](docs/user/reference/SECURITY_HARDENING.md).
 
 ## Disclosure
 

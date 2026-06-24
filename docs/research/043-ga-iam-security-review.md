@@ -18,8 +18,8 @@ Sources reviewed:
 - `internal/bootstrap/bootstrap.go`
 - `scripts/ami/provision-betternat-ami.sh`
 - `internal/tfprovider/gateway_resource.go`
-- `docs/user/IAM_POLICY.md`
-- `docs/user/SECURITY_HARDENING.md`
+- `docs/user/reference/IAM_POLICY.md`
+- `docs/user/reference/SECURITY_HARDENING.md`
 
 This is an engineering review, not legal or compliance advice.
 
@@ -218,7 +218,7 @@ Review result:
   path. That is expected for the current LoxiLB datapath model, but it remains a
   packaging hardening item.
 - Additional systemd hardening options are already documented in
-  `docs/user/SECURITY_HARDENING.md` and must be Linux/AWS validated before
+  `docs/user/reference/SECURITY_HARDENING.md` and must be Linux/AWS validated before
   becoming defaults.
 
 ## Release Gate Decision

@@ -10,8 +10,8 @@ It complements:
 
 - `docs/release/RELEASE_CHECKLIST.md`
 - `docs/release/OPEN_SOURCE_RELEASE_PLAN.md`
-- `docs/user/OPERATIONS_GUIDE.md`
-- `docs/user/FAILURE_MODES.md`
+- `docs/user/operations/OPERATIONS_GUIDE.md`
+- `docs/user/operations/FAILURE_MODES.md`
 
 ## Release Target
 

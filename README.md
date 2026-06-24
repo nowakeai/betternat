@@ -2,7 +2,7 @@
 
 Self-owned, observable, highly available egress for high-volume AWS private subnet workloads.
 
-**Alpha technical preview.** Start with the [documentation index](docs/README.md), then follow the [Quick Start](docs/user/QUICK_START.md), [Cost Model](docs/user/COST_MODEL.md), [Operations Guide](docs/user/OPERATIONS_GUIDE.md), and [Limitations](docs/user/LIMITATIONS.md).
+**Alpha technical preview.** Start with the [documentation index](docs/README.md), then follow the [Quick Start](docs/user/getting-started/QUICK_START.md), [Cost Model](docs/user/reference/COST_MODEL.md), [Operations Guide](docs/user/operations/OPERATIONS_GUIDE.md), and [Limitations](docs/user/reference/LIMITATIONS.md).
 
 BetterNAT targets the NAT Gateway bill line that hurts at scale: per-GB data processing. It is built for crawler fleets, blockchain/RPC nodes syncing from public peers, Kubernetes nodes pulling large public images, and other private workloads that download tens of TB per month from the public internet.
 
@@ -29,7 +29,7 @@ Example: `50 TB/month` through the NAT layer, `80%` ingress/download into the pr
 | Example total | about `$3,258/month` | about `$995/month` |
 | Example savings |  | about `$2,264/month` (`69%`) |
 
-Assumptions: `$0.045/GB` NAT Gateway processing, `$0.045/hour` for one NAT Gateway, two `$0.05/hour` BetterNAT nodes, `730` hours/month, and illustrative `$0.09/GB` standard internet egress transfer. The example excludes EBS, EIP/public IPv4, DynamoDB, monitoring, and operational cost. See [Cost Model](docs/user/COST_MODEL.md) for direction examples, formulas, caveats, and CLI usage.
+Assumptions: `$0.045/GB` NAT Gateway processing, `$0.045/hour` for one NAT Gateway, two `$0.05/hour` BetterNAT nodes, `730` hours/month, and illustrative `$0.09/GB` standard internet egress transfer. The example excludes EBS, EIP/public IPv4, DynamoDB, monitoring, and operational cost. See [Cost Model](docs/user/reference/COST_MODEL.md) for direction examples, formulas, caveats, and CLI usage.
 
 ## What You Get
 
@@ -138,9 +138,9 @@ export BETTERNAT_VERSION="v0.1.0-alpha.6"
 
 Then follow:
 
-- [Quick Start](docs/user/QUICK_START.md) for release artifact setup, disposable VPC apply, verification, and destroy.
-- [Existing VPC Install](docs/user/EXISTING_VPC_INSTALL.md) when you are ready to test against real route tables.
-- [Configuration](docs/user/CONFIGURATION.md) for all `betternat_gateway` fields.
+- [Quick Start](docs/user/getting-started/QUICK_START.md) for release artifact setup, disposable VPC apply, verification, and destroy.
+- [Existing VPC Install](docs/user/getting-started/EXISTING_VPC_INSTALL.md) when you are ready to test against real route tables.
+- [Configuration](docs/user/getting-started/CONFIGURATION.md) for all `betternat_gateway` fields.
 
 BetterNAT uses LoxiLB as the local datapath inside each node; see the [LoxiLB overview](https://github.com/loxilb-io/loxilb/assets/75648333/87da0183-1a65-493f-b6fe-5bc738ba5468) and [standalone mode docs](https://github.com/loxilb-io/loxilbdocs/blob/main/docs/standalone.md).
 
@@ -226,7 +226,7 @@ Architecture docs:
 
 - [Architecture](docs/architecture.md)
 - [Architecture Diagram](docs/architecture-diagram.md)
-- [Failure Modes](docs/user/FAILURE_MODES.md)
+- [Failure Modes](docs/user/operations/FAILURE_MODES.md)
 
 ## Alpha Status
 
@@ -248,19 +248,19 @@ Current scope:
 
 Read before using real route tables:
 
-- [Limitations](docs/user/LIMITATIONS.md)
-- [Rollback Guide](docs/user/ROLLBACK_GUIDE.md)
-- [Upgrade And Replacement Guide](docs/user/UPGRADE_REPLACEMENT_GUIDE.md)
-- [Security And Supply Chain Guide](docs/user/SECURITY_HARDENING.md)
+- [Limitations](docs/user/reference/LIMITATIONS.md)
+- [Rollback Guide](docs/user/operations/ROLLBACK_GUIDE.md)
+- [Upgrade And Replacement Guide](docs/user/operations/UPGRADE_REPLACEMENT_GUIDE.md)
+- [Security And Supply Chain Guide](docs/user/reference/SECURITY_HARDENING.md)
 
 ## Documentation
 
 - [Documentation Index](docs/README.md)
-- [Cost Model](docs/user/COST_MODEL.md)
-- [Operations Guide](docs/user/OPERATIONS_GUIDE.md)
-- [Observability Guide](docs/user/OBSERVABILITY_GUIDE.md)
-- [IAM Policy](docs/user/IAM_POLICY.md)
-- [Release Notes](docs/user/RELEASE_NOTES_v0.1.0-alpha.6.md)
+- [Cost Model](docs/user/reference/COST_MODEL.md)
+- [Operations Guide](docs/user/operations/OPERATIONS_GUIDE.md)
+- [Observability Guide](docs/user/operations/OBSERVABILITY_GUIDE.md)
+- [IAM Policy](docs/user/reference/IAM_POLICY.md)
+- [Release Notes](docs/user/releases/v0.1.0-alpha.8.md)
 
 ## Development
 
