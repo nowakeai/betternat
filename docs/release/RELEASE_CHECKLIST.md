@@ -636,7 +636,13 @@ Provider Registry validation recorded on 2026-06-22:
 - [x] Add graceful shutdown lease release on systemd stop.
 - [x] Add ASG termination lifecycle hook and IMDS Spot/ASG termination watcher.
 - [x] Verify ASG lifecycle hook behavior in AWS. Spot interruption follows the documented IMDS path but is not practical to force on demand as a release gate.
-- [ ] Add LoxiLB restart reconciliation test.
+- [x] Add LoxiLB restart reconciliation test.
+  - [x] Unit coverage:
+    `TestReconcileReplaysRulesAfterLoxiLBRestartRuleLoss` verifies that
+    BetterNAT recreates desired LoxiLB SNAT rules when the firewall rule list
+    becomes empty after a simulated LoxiLB restart/rule-loss event.
+  - [ ] Live LoxiLB restart validation remains environment-dependent because
+    local OrbStack LoxiLB API/eBPF startup is not reliable in the current VM.
 - [ ] Run a low-cost soak test with periodic egress probes and agent restarts.
 - [x] Document transient public-IP leakage conditions in non-stable and stable modes, or fix them if observed.
 
