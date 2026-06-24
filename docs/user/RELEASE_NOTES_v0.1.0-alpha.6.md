@@ -7,12 +7,11 @@ Date: 2026-06-24
 `v0.1.0-alpha.6` is a BetterNAT main-repository alpha release used to support
 the current Terraform provider and production-preview bootstrap path.
 
-For Terraform users, the recommended provider release is
-`nowakeai/betternat` `0.1.0-alpha.7`. The recommended runtime version for the
-current alpha install path remains:
+For Terraform users, use provider `nowakeai/betternat` `0.1.0-alpha.8` or
+newer. The recommended runtime version for the current alpha install path is:
 
 ```hcl
-betternat_version = "v0.1.0-alpha.2"
+betternat_version = "v0.1.0-alpha.6"
 ```
 
 ## What Changed
@@ -29,11 +28,12 @@ betternat_version = "v0.1.0-alpha.2"
   per-node auto-assigned public IPv4 because runtime dependencies are already
   present.
 - Added release evidence for the provider alpha7 clean AWS validation.
+- Added release artifact support needed by provider `0.1.0-alpha.8`.
 
 ## Validation
 
-Provider `0.1.0-alpha.7` was validated against this main-repository release
-line in a clean AWS disposable VPC run:
+Provider `0.1.0-alpha.7` was validated with runtime `v0.1.0-alpha.2` in a
+clean AWS disposable VPC run:
 
 - Terraform installed provider `0.1.0-alpha.7` from the public Terraform
   Registry with no local provider override.
@@ -76,8 +76,8 @@ Detailed evidence:
 
 - Existing alpha users should treat this as an evaluation release and test in a
   disposable VPC first.
-- For Terraform installs, pin provider `0.1.0-alpha.7` and runtime
-  `v0.1.0-alpha.2` unless intentionally testing newer main-repository assets.
+- For Terraform installs that should use this runtime release, pin provider
+  `0.1.0-alpha.8` or newer and set `betternat_version = "v0.1.0-alpha.6"`.
 - If using an ordinary Linux AMI with `cloud_init`, leave
   `associate_public_ip_address` unset unless you have a specific network design
   that provides first-boot package and artifact reachability another way.

@@ -10,7 +10,7 @@ Use this first. Do not start by replacing a production NAT Gateway.
 
 ## Scope
 
-This guide is for `v0.1.0-alpha.2`.
+This guide is for `v0.1.0-alpha.6`.
 
 Important:
 
@@ -63,7 +63,7 @@ resource "betternat_gateway" "egress" {
   instance_type       = "t4g.small"
   desired_capacity    = 2
   max_size            = 3
-  betternat_version   = "v0.1.0-alpha.2"
+  betternat_version   = "v0.1.0-alpha.6"
   stable_egress_ip    = true
   prometheus_enabled  = true
   rollback_on_destroy = true
@@ -133,7 +133,7 @@ Choose:
 export AWS_PROFILE="<your-profile>"
 export AWS_REGION="us-west-2"
 export BETTERNAT_AZ="us-west-2a"
-export BETTERNAT_VERSION="v0.1.0-alpha.2"
+export BETTERNAT_VERSION="v0.1.0-alpha.6"
 export BETTERNAT_RUN_ID="betternat-alpha-test-$(date -u +%Y%m%d%H%M%S)"
 ```
 

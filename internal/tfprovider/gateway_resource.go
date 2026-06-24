@@ -186,7 +186,7 @@ func (r *GatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			},
 			"betternat_version": schema.StringAttribute{
 				Optional:            true,
-				MarkdownDescription: "BetterNAT runtime release tag used to derive agent/CLI GitHub Release artifact URLs and checksums for bootstrap installs. Example: v0.1.0-alpha.2. Explicit agent_binary_url, agent_binary_sha256, cli_binary_url, and cli_binary_sha256 values override derived values.",
+				MarkdownDescription: "BetterNAT runtime release tag used to derive agent/CLI GitHub Release artifact URLs and checksums for bootstrap installs. Example: v0.1.0-alpha.6. Explicit agent_binary_url, agent_binary_sha256, cli_binary_url, and cli_binary_sha256 values override derived values.",
 			},
 			"agent_binary_url": schema.StringAttribute{
 				Optional:            true,
@@ -806,6 +806,16 @@ var supportedRuntimeArtifacts = map[string]map[string]runtimeArtifactSet{
 		"amd64": {
 			AgentSHA256: "5c49231100870243f0f31af0703d765f79af5dc8f7248e59f7df36afd48ef5a7",
 			CLISHA256:   "0e671ebeb1b2a93fd88a1e2bcdb5c93de01d35313b10ce776ef6dcc49885d200",
+		},
+	},
+	"v0.1.0-alpha.6": {
+		"arm64": {
+			AgentSHA256: "e5ed963c523a84fb5e496b8a13358662cb80afaf228182cc8e3379741cc8b8c5",
+			CLISHA256:   "ff4663fa49daeb42113f015c886c77680472a4c32ad3f29122dd95a703bb4f59",
+		},
+		"amd64": {
+			AgentSHA256: "93ff333bb50d52aca6536eadc8abe8e6f9bf1ec02c56155195f40129525dde56",
+			CLISHA256:   "5d5c5cf6a216cab0f12eef3c3c8163c3673f794a427b30fcfb024acd2a87fe66",
 		},
 	},
 }

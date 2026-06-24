@@ -489,6 +489,60 @@ func TestDeriveGatewayStateBetterNATVersionDerivesAMD64Artifacts(t *testing.T) {
 	}
 }
 
+func TestDeriveGatewayStateBetterNATVersionDerivesAlpha6Artifacts(t *testing.T) {
+	tests := []struct {
+		name         string
+		instanceType string
+		arch         string
+		agentSHA     string
+		cliSHA       string
+	}{
+		{
+			name:         "arm64",
+			instanceType: "t4g.small",
+			arch:         "arm64",
+			agentSHA:     "e5ed963c523a84fb5e496b8a13358662cb80afaf228182cc8e3379741cc8b8c5",
+			cliSHA:       "ff4663fa49daeb42113f015c886c77680472a4c32ad3f29122dd95a703bb4f59",
+		},
+		{
+			name:         "amd64",
+			instanceType: "t3.small",
+			arch:         "amd64",
+			agentSHA:     "93ff333bb50d52aca6536eadc8abe8e6f9bf1ec02c56155195f40129525dde56",
+			cliSHA:       "5d5c5cf6a216cab0f12eef3c3c8163c3673f794a427b30fcfb024acd2a87fe66",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plan := validGatewayPlan()
+			plan.BetterNATVersion = types.StringValue("v0.1.0-alpha.6")
+			plan.InstanceType = types.StringValue(tt.instanceType)
+			derived, err := DeriveGatewayState(context.Background(), &plan)
+			if err != nil {
+				t.Fatalf("derive gateway state: %v", err)
+			}
+			wantAgentURL := "https://github.com/nowakeai/betternat/releases/download/v0.1.0-alpha.6/betternat-agent_v0.1.0-alpha.6_linux_" + tt.arch
+			if got := derived.AgentBinaryURL.ValueString(); got != wantAgentURL {
+				t.Fatalf("unexpected agent url: %s", got)
+			}
+			if got := derived.AgentBinarySHA256.ValueString(); got != tt.agentSHA {
+				t.Fatalf("unexpected agent checksum: %s", got)
+			}
+			wantCLIURL := "https://github.com/nowakeai/betternat/releases/download/v0.1.0-alpha.6/betternat_v0.1.0-alpha.6_linux_" + tt.arch
+			if got := derived.CLIBinaryURL.ValueString(); got != wantCLIURL {
+				t.Fatalf("unexpected cli url: %s", got)
+			}
+			if got := derived.CLIBinarySHA256.ValueString(); got != tt.cliSHA {
+				t.Fatalf("unexpected cli checksum: %s", got)
+			}
+			if !strings.Contains(derived.UserData.ValueString(), "betternat-agent_v0.1.0-alpha.6_linux_"+tt.arch) {
+				t.Fatalf("missing derived alpha6 artifact in user data: %s", derived.UserData.ValueString())
+			}
+		})
+	}
+}
+
 func TestDeriveGatewayStateBetterNATVersionAllowsExplicitArtifactOverrides(t *testing.T) {
 	plan := validGatewayPlan()
 	plan.BetterNATVersion = types.StringValue("v0.1.0-alpha.2")

@@ -13,7 +13,7 @@ terraform {
   required_providers {
     betternat = {
       source  = "nowakeai/betternat"
-      version = "= 0.1.0-alpha.6"
+      version = "= 0.1.0-alpha.8"
     }
   }
 }
@@ -21,7 +21,7 @@ terraform {
 
 The gateway runtime version is separate from the provider version. Set
 `betternat_version` to a supported BetterNAT release tag, such as
-`v0.1.0-alpha.2`. The provider derives the matching agent and CLI GitHub Release
+`v0.1.0-alpha.6`. The provider derives the matching agent and CLI GitHub Release
 artifact URLs and SHA256 checksums from its built-in release manifest.
 
 Terraform Registry install is the default path. If Registry availability is
@@ -51,7 +51,7 @@ the provider is registered in the OpenTofu Registry.
 | Name | Description |
 | --- | --- |
 | `ami_id` | Explicit Linux AMI ID. Required for the first alpha bootstrap path. |
-| `ami_channel` | Future AMI channel selector. Do not rely on it for `v0.1.0-alpha.2`. |
+| `ami_channel` | Future AMI channel selector. Do not rely on it for the current bootstrap-first alpha path. |
 | `bootstrap_mode` | `cloud_init` by default. Use `cloud_init` for ordinary Linux AMIs that install BetterNAT at first boot. Use `prebaked_ami` only for BetterNAT AMIs that already contain Docker or the selected LoxiLB runtime, LoxiLB, `betternat`, `betternat-agent`, `loxicmd`, sysctl settings, and systemd units. |
 | `associate_public_ip_address` | Optional advanced override for the launch template network interface public IPv4 setting. Leave unset for provider-derived behavior. |
 | `betternat_version` | BetterNAT runtime release tag. The provider uses it with `instance_type` to derive agent/CLI bootstrap URLs and checksums. |

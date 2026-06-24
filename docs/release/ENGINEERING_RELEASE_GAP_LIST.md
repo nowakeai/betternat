@@ -995,12 +995,13 @@ Defer until benchmark-backed:
 ## Suggested Implementation Order
 
 1. Run the alpha6 bootstrap Quick Start in a disposable AWS environment using
-   Terraform Registry install and `betternat_version = "v0.1.0-alpha.2"` with no
+   Terraform Registry install and `betternat_version = "v0.1.0-alpha.6"` with no
    explicit agent/CLI artifact URLs.
 2. Record apply, private-client egress, `betternat status`, graceful handover,
    destroy rollback, and residual cleanup evidence.
-3. Decide whether to publish another runtime tag for post-RC source changes or
-   keep `v0.1.0-alpha.2` as the current runtime artifact set.
+3. Keep `v0.1.0-alpha.6` as the current runtime artifact set until another
+   runtime tag is intentionally validated and added to the provider support
+   matrix.
 4. Keep public AMI publication, `ami_channel` resolution, runtime artifact
    signing, benchmark harness work, and broader retry/backoff hardening as
    follow-up production hardening rather than release blockers.

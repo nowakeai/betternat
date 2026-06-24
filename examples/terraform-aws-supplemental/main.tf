@@ -57,7 +57,7 @@ variable "ha_profile" {
 
 variable "betternat_version" {
   type    = string
-  default = "v0.1.0-alpha.2"
+  default = "v0.1.0-alpha.6"
 }
 
 variable "agent_binary_url" {

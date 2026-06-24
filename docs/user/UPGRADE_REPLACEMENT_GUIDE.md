@@ -40,7 +40,7 @@ the provider is registered in the OpenTofu Registry.
 The gateway runtime version is controlled separately:
 
 ```hcl
-betternat_version = "v0.1.0-alpha.2"
+betternat_version = "v0.1.0-alpha.6"
 ```
 
 The provider derives the agent and CLI release artifact URLs and SHA256
@@ -89,6 +89,8 @@ install.
 
 | Provider version | Supported `betternat_version` values | Notes |
 | --- | --- | --- |
+| `0.1.0-alpha.8` | `v0.1.0-alpha.2`, `v0.1.0-alpha.6` | Adds support for the current runtime release artifacts while keeping alpha2 compatibility. |
+| `0.1.0-alpha.7` | `v0.1.0-alpha.2` | Adds `bootstrap_mode` and `associate_public_ip_address` provider UX. |
 | `0.1.0-alpha.6` | `v0.1.0-alpha.2` | First provider with built-in runtime artifact URL/checksum derivation. |
 
 If you set an unsupported `betternat_version`, Terraform should fail with a

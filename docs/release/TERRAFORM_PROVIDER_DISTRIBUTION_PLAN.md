@@ -82,7 +82,7 @@ Current production-preview bootstrap shape:
 resource "betternat_gateway" "egress" {
   # ...
 
-  betternat_version = "v0.1.0-alpha.2"
+  betternat_version = "v0.1.0-alpha.6"
 }
 ```
 
@@ -94,7 +94,7 @@ for air-gapped, mirrored, or development builds:
 resource "betternat_gateway" "egress" {
   # ...
 
-  betternat_version   = "v0.1.0-alpha.2"
+  betternat_version   = "v0.1.0-alpha.6"
   agent_binary_url    = "https://mirror.example/betternat-agent"
   agent_binary_sha256 = "..."
 }
@@ -127,6 +127,7 @@ install through its built-in artifact manifest.
 | --- | --- | --- | --- |
 | `0.1.0-alpha.6` | `v0.1.0-alpha.2` | GitHub Release assets, Linux `arm64` and `amd64` | First provider with built-in runtime artifact URL/checksum derivation. |
 | `0.1.0-alpha.7` | `v0.1.0-alpha.2` | GitHub Release assets, Linux `arm64` and `amd64` | Adds bootstrap mode and gateway public IPv4 association controls while keeping runtime compatibility. |
+| `0.1.0-alpha.8` | `v0.1.0-alpha.2`, `v0.1.0-alpha.6` | GitHub Release assets, Linux `arm64` and `amd64` | Adds support for the current BetterNAT runtime release while keeping alpha2 compatibility. |
 
 Rules:
 
