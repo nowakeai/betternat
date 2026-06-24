@@ -97,6 +97,7 @@ Read these first when revisiting product or architecture direction:
 - [research/037-v0.1.0-alpha-aws-release-candidate-results.md](research/037-v0.1.0-alpha-aws-release-candidate-results.md) — v0.1.0-alpha AWS release-candidate result.
 - [research/038-agent-registry-control-plane-plan.md](research/038-agent-registry-control-plane-plan.md) — Coordination backend, agent registry, service discovery, and permission-reduction plan.
 - [research/039-agent-daemon-api-and-handover-plan.md](research/039-agent-daemon-api-and-handover-plan.md) — Agent daemon API, fast CLI path, cached peer state, and proactive handover plan.
+- [research/040-alpha-low-cost-soak-results.md](research/040-alpha-low-cost-soak-results.md) — Alpha low-cost soak smoke with client probes, active systemd-stop handover, and live LoxiLB restart recovery.
 
 ## Supporting Research
 

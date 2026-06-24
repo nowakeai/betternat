@@ -574,7 +574,7 @@ Acceptance:
 - [x] duplicate handover request IDs are idempotent.
 - [x] standby peer prepare rejects non-active requesters.
 - [x] AWS ASG lifecycle handover validation completed.
-- [ ] Standalone systemd-stop automatic handover validation completed.
+- [x] Standalone systemd-stop automatic handover validation completed.
 - [x] Spot interruption handling follows the documented AWS IMDS path; forced
       AWS interruption validation is not a first-alpha release gate.
 
@@ -793,6 +793,28 @@ AWS non-stable public-IP validation on 2026-06-24:
   - active `i-048fd34e26867122f`, private `10.88.1.135`, shared EIP
     `52.24.117.43`,
   - standby `i-073ab0073edde40ba`, private `10.88.1.85`, no public IP.
+
+AWS low-cost soak and systemd-stop validation on 2026-06-24:
+
+- Used retained stable/no-public-IP environment with ASG
+  `betternat-bnat-lifecycle-20260623023753-us-west-2a`, launch template
+  version `16`, shared EIP `52.24.117.43`, and private client
+  `i-0ec999731bb6cb25b`.
+- Ran `2400` private-client egress probe samples while restarting the standby
+  agent, running a manual proactive handover, and restarting LoxiLB on the
+  active node. Result: `2396` ok, `4` failed, `0` unexpected public IP samples,
+  longest consecutive failure run `1`, and no public IP switches.
+- Directly restarted active `betternat-agent` on `i-048fd34e26867122f`.
+  Durable handover record `systemd-stop-1782271270264168584` completed from
+  `i-048fd34e26867122f` to `i-073ab0073edde40ba` at generation `20`.
+- A short client probe during active systemd restart recorded `360` samples,
+  `359` ok, `1` failed, `0` unexpected public IP samples, and no public IP
+  switches.
+- Final state: daemon status from both gateway nodes agreed that
+  `i-073ab0073edde40ba` was active, route and shared EIP both pointed at
+  `i-073ab0073edde40ba`, and both nodes were healthy.
+- Detailed evidence:
+  `docs/research/040-alpha-low-cost-soak-results.md`
 
 ### 9. Advanced Kernel/NIC Tuning Profile
 

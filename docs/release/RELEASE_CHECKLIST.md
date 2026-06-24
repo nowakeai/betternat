@@ -641,14 +641,23 @@ Provider Registry validation recorded on 2026-06-22:
     `TestReconcileReplaysRulesAfterLoxiLBRestartRuleLoss` verifies that
     BetterNAT recreates desired LoxiLB SNAT rules when the firewall rule list
     becomes empty after a simulated LoxiLB restart/rule-loss event.
-  - [ ] Live LoxiLB restart validation remains environment-dependent because
-    local OrbStack LoxiLB API/eBPF startup is not reliable in the current VM.
-- [ ] Run a low-cost soak test with periodic egress probes and agent restarts.
+  - [x] Live AWS validation:
+    restarting LoxiLB on the active node during the 2026-06-24 low-cost soak
+    recovered through automatic handover and ended with healthy route/EIP owner
+    convergence.
+- [x] Run a low-cost soak test with periodic egress probes and agent restarts.
   - [x] Reusable egress probe monitor added:
     `scripts/egress-probe-monitor.sh`.
   - [x] Low-cost soak runbook added:
     `docs/testing/LOW_COST_SOAK_RUNBOOK.md`.
-  - [ ] Actual AWS soak execution remains pending.
+  - [x] Actual AWS soak smoke executed on 2026-06-24:
+    `2400` private-client samples, `2396` ok, `4` failed, `0` unexpected
+    public IP samples, longest consecutive failure run `1`, with standby agent
+    restart, manual handover, and active LoxiLB restart during the probe.
+  - [x] Active systemd-stop handover validated on 2026-06-24:
+    `systemd-stop-1782271270264168584` completed
+    `i-048fd34e26867122f -> i-073ab0073edde40ba`; client probe recorded
+    `360` samples, `359` ok, `1` failed, and `0` unexpected public IP samples.
 - [x] Document transient public-IP leakage conditions in non-stable and stable modes, or fix them if observed.
 
 Reliability validation update on 2026-06-23:
@@ -681,6 +690,8 @@ Reliability validation update on 2026-06-23:
 - Stale paired `systemd-stop-*` handover records remained in intermediate
   states after the ASG lifecycle handover completed. Treat this as operation
   record hygiene to fix before production readiness.
+- 2026-06-24 low-cost soak evidence:
+  `docs/research/040-alpha-low-cost-soak-results.md`.
 
 ### Security And Supply Chain
 
