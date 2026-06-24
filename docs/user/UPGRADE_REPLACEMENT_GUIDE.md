@@ -94,8 +94,9 @@ install.
 If you set an unsupported `betternat_version`, Terraform should fail with a
 clear provider error instead of guessing an artifact URL.
 
-Until provider `0.1.0-alpha.6` is available through the Terraform Registry,
-install it from the provider GitHub release as a Terraform filesystem mirror:
+Terraform Registry install is the default path. If Registry availability is
+temporarily delayed, install the provider from the GitHub release as a
+filesystem mirror:
 
 ```sh
 source scripts/setup-provider-github-mirror.sh

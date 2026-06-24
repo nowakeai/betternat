@@ -926,17 +926,13 @@ Defer until benchmark-backed:
 
 ## Suggested Implementation Order
 
-1. Re-run final local Go/Terraform/release/hygiene verification before tagging
-   the next alpha.
-2. Recheck Terraform Registry availability for the current provider release; remove
-   the GitHub filesystem-mirror workaround from public docs once Registry
-   propagation catches up.
+1. Run the alpha6 bootstrap Quick Start in a disposable AWS environment using
+   Terraform Registry install and `betternat_version = "v0.1.0-alpha.2"` with no
+   explicit agent/CLI artifact URLs.
+2. Record apply, private-client egress, `betternat status`, graceful handover,
+   destroy rollback, and residual cleanup evidence.
 3. Decide whether to publish another runtime tag for post-RC source changes or
    keep `v0.1.0-alpha.2` as the current runtime artifact set.
-4. Bootstrap-first install UX polish is now implemented in the provider through
-   `betternat_version` runtime artifact derivation. The remaining closure work is
-   to release a provider version that contains this schema, refresh public docs
-   to that version, and validate the examples. Keep public AMI publication,
-   `ami_channel` resolution, runtime artifact signing, benchmark harness work,
-   and broader retry/backoff hardening as follow-up production hardening rather
-   than release blockers.
+4. Keep public AMI publication, `ami_channel` resolution, runtime artifact
+   signing, benchmark harness work, and broader retry/backoff hardening as
+   follow-up production hardening rather than release blockers.

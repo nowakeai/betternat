@@ -61,8 +61,9 @@ Provider versions and BetterNAT runtime artifact versions are separate. The
 current alpha provider is `0.1.0-alpha.6`; the current runtime release assets
 referenced by the quick start are `v0.1.0-alpha.2`.
 
-Until `0.1.0-alpha.6` is available through the Terraform Registry, install it
-from the provider GitHub release as a Terraform filesystem mirror:
+Terraform Registry install is the default path. If Registry availability is
+temporarily delayed, install the provider from the GitHub release as a
+filesystem mirror:
 
 ```sh
 source scripts/setup-provider-github-mirror.sh

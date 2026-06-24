@@ -26,8 +26,8 @@ Current evidence satisfies that alpha promise:
 
 - release artifacts and checksums exist for `v0.1.0-alpha.2`,
 - public examples use GitHub Release URLs, not maintainer-only S3 URLs,
-- provider `0.1.0-alpha.6` is usable through the provider GitHub release as a
-  Terraform filesystem mirror,
+- provider `0.1.0-alpha.6` is usable through the Terraform Registry, with the
+  provider GitHub release filesystem mirror retained as a fallback,
 - disposable AWS apply/destroy smoke passed with no residual resources,
 - stable and non-stable egress modes have AWS validation evidence,
 - daemon-backed `betternat status`, `doctor --live`, handover commands, and
@@ -79,9 +79,8 @@ in user-facing docs:
 - no published BetterNAT AMI,
 - bootstrap depends on package repositories, Docker/image pull, and GitHub
   release artifact reachability,
-- Terraform Registry provider releases newer than `0.1.0-alpha.2` have not
-  propagated yet; public
-  examples use `scripts/setup-provider-github-mirror.sh`,
+- Terraform Registry now resolves provider `0.1.0-alpha.6`; public examples use
+  Registry install by default,
 - Spot interruption handling follows AWS IMDS documentation, but forced Spot
   interruption was not required as a first-alpha release gate,
 - high-volume savings are modeled, not proven by multi-TB benchmark runs,
@@ -91,10 +90,9 @@ in user-facing docs:
 
 Post-alpha / production work:
 
-- Terraform Registry propagation beyond `0.1.0-alpha.2` and removal of the GitHub
-  filesystem-mirror workaround,
-- bootstrap-first production-preview UX polish, including easier runtime
-  artifact URL/checksum selection,
+- disposable AWS validation of the alpha6 bootstrap path using Terraform
+  Registry install and `betternat_version` artifact derivation,
+- bootstrap-first production-preview UX polish discovered during that validation,
 - optional arm64 and amd64 AMIs only if ongoing snapshot-retention cost is
   accepted,
 - optional `ami_channel` resolver only if public AMIs become supported,

@@ -167,16 +167,22 @@ source  = "nowakeai/betternat"
 version = "= 0.1.0-alpha.6"
 ```
 
-Until `0.1.0-alpha.6` is available through the Terraform Registry, install it
-from the provider GitHub release as a Terraform filesystem mirror:
+Terraform Registry install is the default path:
+
+```sh
+terraform -chdir=examples/terraform-aws-supplemental init
+```
+
+If Registry availability is temporarily delayed, install the provider from the
+GitHub release as a filesystem mirror:
 
 ```sh
 source scripts/setup-provider-github-mirror.sh
 ```
 
-Keep the `TF_CLI_CONFIG_FILE` environment variable exported in the same shell
-for `terraform init`, `terraform plan`, `terraform apply`, and
-`terraform destroy`.
+When using the mirror fallback, keep the `TF_CLI_CONFIG_FILE` environment
+variable exported in the same shell for `terraform init`, `terraform plan`,
+`terraform apply`, and `terraform destroy`.
 
 ## Deploy Disposable VPC
 

@@ -830,7 +830,7 @@ Reliability validation update on 2026-06-23:
   - [x] Provider `0.1.0-alpha.4` GitHub release artifact checksum verification passed for Linux amd64.
   - [x] Provider `0.1.0-alpha.5` GitHub release artifact checksum verification passed for Linux amd64.
   - [x] Provider `0.1.0-alpha.6` GitHub release artifact checksum verification passed for Linux amd64.
-  - [ ] Current provider release Terraform Registry install validation after Registry propagation.
+  - [x] Current provider release Terraform Registry install validation after Registry propagation.
     Rechecked on 2026-06-24 with Terraform `v1.14.7`: `0.1.0-alpha.3` was
     still unavailable in the Terraform Registry; `0.1.0-alpha.2` Registry
     install and `terraform validate` still passed.
@@ -852,9 +852,12 @@ Reliability validation update on 2026-06-23:
     Terraform `v1.14.7`: Registry install failed with no available releases
     matching `0.1.0-alpha.6`; release-zip filesystem mirror install and
     validate passed.
-  - [x] Public examples use provider `0.1.0-alpha.6` plus
-    `scripts/setup-provider-github-mirror.sh` until Terraform Registry
-    propagation catches up.
+    Rechecked after manual Terraform Registry resync on 2026-06-24: Registry API
+    reported `0.1.0-alpha.6` with overview and gateway docs; Terraform `v1.14.7`
+    installed `nowakeai/betternat` `0.1.0-alpha.6` from Registry and validate
+    passed for a temporary smoke configuration and `examples/terraform`.
+  - [x] Public examples use provider `0.1.0-alpha.6` from Terraform Registry by
+    default; `scripts/setup-provider-github-mirror.sh` remains a fallback.
   - [x] Clean clone `examples/terraform-aws-supplemental init` and `validate` passed with `HTTP_PROXY`/`HTTPS_PROXY` set to `http://127.0.0.1:10808`.
 - [x] Add provider installation guide.
 - [x] Add observability guide.
@@ -956,14 +959,14 @@ As of 2026-06-24:
 - Terraform provider exposes `ha_profile = "default"` plus advanced lease timing overrides.
 - ASG repair and replacement standby behavior have passed.
 - GitHub Release assets and checksums have been published and verified for the first alpha path.
-- Public examples use provider `0.1.0-alpha.6` from the provider GitHub release
-  via a Terraform filesystem mirror until Terraform Registry propagation catches
-  up.
+- Public examples use provider `0.1.0-alpha.6` from Terraform Registry by
+  default; the provider GitHub release filesystem mirror remains documented as a
+  fallback.
 - User-facing install docs use `betternat_version` so the provider derives
   GitHub Release asset URLs and checksums; internal AWS test runbooks may still
   use temporary S3 URLs for unreleased binaries.
 - The agent handles SIGTERM/SIGINT and releases the locally owned HA lease on graceful shutdown using the fenced lease generation.
 - The provider creates ASG termination lifecycle hooks, and the agent watches IMDS Spot/ASG termination notices to release lease and complete the lifecycle action.
-- The main remaining blocker for the first production-preview release is
-  publishing and validating a provider version that contains the
-  `betternat_version` bootstrap artifact manifest.
+- The main remaining blocker for the first production-preview release is running
+  the alpha6 bootstrap Quick Start in a disposable AWS environment with
+  Terraform Registry install and `betternat_version` artifact derivation.

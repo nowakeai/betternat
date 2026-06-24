@@ -66,9 +66,9 @@ This controls:
 - state migration behavior,
 - Terraform/OpenTofu plugin protocol implementation.
 
-For the current alpha, provider `0.1.0-alpha.6` is published as a GitHub
-provider release and used by public examples through a Terraform filesystem
-mirror until Registry propagation is confirmed for that exact version.
+For the current alpha, provider `0.1.0-alpha.6` is available through the
+Terraform Registry. The GitHub release filesystem mirror remains a fallback for
+temporary Registry availability issues.
 
 ### BetterNAT Runtime Version
 
@@ -248,9 +248,9 @@ Mirroring current files into a provider repo without addressing `internal` impor
 Status: complete for the current alpha.
 
 - Keep the provider binary in the main BetterNAT GitHub Release for alpha tests.
-- Clearly document that the current alpha public examples use the provider
-  GitHub release as a Terraform filesystem mirror until Registry propagation
-  catches up.
+- Clearly document that the current alpha public examples use Terraform
+  Registry install by default and the provider GitHub release filesystem mirror
+  only as a fallback.
 - Use GitHub Release assets for public binaries, not user-provided S3 buckets.
 - Keep local provider dev override only as a developer/debugging path, not as
   the public alpha install path.
@@ -450,13 +450,14 @@ Provider `0.1.0-alpha.6` was published to GitHub on 2026-06-24 to add
 agent/CLI release artifact URLs and checksums from its built-in runtime
 manifest. GitHub release artifact checksum verification passed for the Linux
 amd64 zip. At publication time, Terraform Registry had not yet ingested
-`0.1.0-alpha.6`.
+`0.1.0-alpha.6`. After a manual Registry resync, Terraform Registry reported
+`0.1.0-alpha.6` with overview and gateway docs, and Terraform `v1.14.7`
+installed the provider directly from Registry with the self-signed release key.
 
-The public examples and Quick Start now use provider `0.1.0-alpha.6` plus
-`scripts/setup-provider-github-mirror.sh` until Registry propagation catches up.
-That path was validated with the release zip as a Terraform filesystem mirror.
-The main repository examples were also validated with a local provider dev
-override for `examples/terraform` and `examples/terraform-aws-supplemental`.
+The public examples and Quick Start now use provider `0.1.0-alpha.6` through the
+Terraform Registry by default. The release zip filesystem mirror path remains
+documented as a fallback. Registry install and `terraform validate` passed for a
+temporary smoke configuration and for `examples/terraform`.
 
 Important OpenTofu source-address note:
 
