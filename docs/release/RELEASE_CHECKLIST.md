@@ -764,6 +764,10 @@ Reliability validation update on 2026-06-23:
     Rechecked again later on 2026-06-24 with Terraform `v1.14.7`:
     `0.1.0-alpha.3` was still unavailable; `0.1.0-alpha.2` still installed and
     validated from Terraform Registry.
+    Rechecked with release deploy smoke run
+    `bnat-registry-alpha3-recheck-20260624`: release URL checksum checks
+    passed, but Terraform Registry install still failed with no available
+    releases matching `0.1.0-alpha.3`.
   - [x] Public examples use provider `0.1.0-alpha.3` plus
     `scripts/setup-provider-github-mirror.sh` until Terraform Registry
     propagation catches up.

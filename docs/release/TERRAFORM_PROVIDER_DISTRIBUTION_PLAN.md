@@ -354,6 +354,13 @@ Rechecked again on 2026-06-24 with Terraform `v1.14.7`:
   same temporary registry smoke configuration, confirming that the Registry and
   local Terraform networking were working.
 
+Rechecked with release deploy smoke run `bnat-registry-alpha3-recheck-20260624`:
+
+- release URL smoke passed for `v0.1.0-alpha.2` Linux arm64 agent and CLI
+  artifacts,
+- Terraform Registry install for provider `0.1.0-alpha.3` still failed with no
+  available releases matching `0.1.0-alpha.3`.
+
 Because Registry `0.1.0-alpha.3` was still unavailable, the 2026-06-24 release
 deploy smoke tested provider `0.1.0-alpha.3` from the GitHub provider release as
 a Terraform filesystem mirror:
