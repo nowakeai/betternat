@@ -94,14 +94,22 @@ jobs:
           if [[ "$PRERELEASE" == "true" ]]; then
             args+=(--prerelease)
           fi
+          notes_file="docs/user/RELEASE_NOTES_${VERSION}.md"
+          if [[ -f "$notes_file" ]]; then
+            args+=(--notes-file "$notes_file")
+          fi
 
           if gh release view "$VERSION" >/dev/null 2>&1; then
             gh release edit "$VERSION" "${args[@]}"
           else
-            gh release create "$VERSION" \
-              --generate-notes \
-              --notes "Release assets are attached below. Verify downloads with SHA256SUMS." \
-              "${args[@]}"
+            if [[ -f "$notes_file" ]]; then
+              gh release create "$VERSION" "${args[@]}"
+            else
+              gh release create "$VERSION" \
+                --generate-notes \
+                --notes "Release assets are attached below. Verify downloads with SHA256SUMS." \
+                "${args[@]}"
+            fi
           fi
 
       - name: Upload release assets
