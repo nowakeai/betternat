@@ -30,7 +30,7 @@ Important alpha limitations:
 - LoxiLB runs in a privileged container in the alpha bootstrap path,
 - release binaries use checksums, but BetterNAT application artifacts are not yet signed,
 - no generated SBOM is attached to releases yet,
-- no bundled Grafana dashboard or central security/audit server exists.
+- no hosted BetterNAT dashboard or central security/audit server exists.
 
 ## IAM Surfaces
 

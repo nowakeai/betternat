@@ -88,6 +88,22 @@ scrape_configs:
 
 In production, prefer EC2 service discovery filtered by BetterNAT tags or generate scrape targets from Terraform outputs and ASG membership.
 
+Starter Prometheus alert rules are available at:
+
+```text
+examples/prometheus/betternat-alerts.yaml
+```
+
+Starter Grafana dashboard JSON is available at:
+
+```text
+examples/grafana/betternat-starter-dashboard.json
+```
+
+Treat both files as starting points. Tune alert durations, severity labels,
+dashboard variables, and routing labels to match your monitoring stack and
+incident policy.
+
 ### AWS Control Plane
 
 Use AWS APIs or AWS CLI to cross-check what the agent reports:
@@ -318,10 +334,10 @@ Check:
 The first alpha intentionally keeps observability local and simple:
 
 - no central BetterNAT API server,
-- no bundled Grafana dashboard,
-- no support-bundle command,
+- no hosted BetterNAT dashboard or managed metric retention,
 - no automatic fleet-wide CLI aggregation across accounts and regions,
 - no built-in pod-level attribution,
 - no long-term metric retention.
 
-Use Prometheus, AWS APIs, and node-local CLI checks as the supported first-release workflow.
+Use Prometheus, the starter dashboard, AWS APIs, and node-local CLI checks as
+the supported first-release workflow.

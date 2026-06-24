@@ -664,7 +664,7 @@ AWS documentation basis:
 
 ### 6. Prometheus Alert Rules
 
-Add:
+Implemented:
 
 ```text
 examples/prometheus/betternat-alerts.yaml
@@ -683,11 +683,15 @@ Rules:
 Acceptance:
 
 - syntax checked with `promtool` if available,
-- documented in operations guide.
+- documented in observability guide.
 
 ### 7. Grafana Starter Dashboard
 
-Add a starter dashboard or documented queries.
+Implemented:
+
+```text
+examples/grafana/betternat-starter-dashboard.json
+```
 
 Minimum panels:
 

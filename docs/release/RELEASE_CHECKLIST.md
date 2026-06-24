@@ -615,8 +615,8 @@ Provider Registry validation recorded on 2026-06-22:
   - [x] LoxiLB state,
   - [x] daemon status and handover summaries,
   - [x] metrics snapshot.
-- [ ] Ship Prometheus alert rule examples.
-- [ ] Ship Grafana starter dashboard or starter queries.
+- [x] Ship Prometheus alert rule examples.
+- [x] Ship Grafana starter dashboard or starter queries.
 - [ ] Clarify top-N source/destination attribution scope and limitations.
 
 ### Reliability

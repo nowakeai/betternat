@@ -390,6 +390,4 @@ These are known first-release gaps to track:
 
 - `doctor --live` is node-local. Run it on each gateway node or pair it with Prometheus/AWS CLI for fleet-wide review.
 - No central CLI command yet aggregates every HA group across AWS accounts, DynamoDB, ASG, datapath, and metrics.
-- No bundled Grafana dashboard yet.
-- No support bundle command yet.
 - No automated planned failover/drain CLI yet.

@@ -1,0 +1,74 @@
+groups:
+  - name: betternat.gateway
+    rules:
+      - alert: BetterNATNoActiveNode
+        expr: sum by (gateway, ha_group) (betternat_active) != 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: BetterNAT HA group does not have exactly one active node
+          description: 'gateway={{ $labels.gateway }} ha_group={{ $labels.ha_group }} active_count={{ $value }}'
+
+      - alert: BetterNATHAStatusStale
+        expr: betternat_ha_status_stale == 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: BetterNAT node HA status is stale
+          description: 'gateway={{ $labels.gateway }} ha_group={{ $labels.ha_group }} node={{ $labels.node }} has stale HA status'
+
+      - alert: BetterNATRouteTargetMismatch
+        expr: betternat_route_target_match == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: BetterNAT route target does not match expected active owner
+          description: 'gateway={{ $labels.gateway }} ha_group={{ $labels.ha_group }} node={{ $labels.node }} reports route target mismatch'
+
+      - alert: BetterNATPublicIdentityMismatch
+        expr: betternat_public_identity_match == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: BetterNAT stable public identity does not match expected owner
+          description: 'gateway={{ $labels.gateway }} ha_group={{ $labels.ha_group }} node={{ $labels.node }} reports public identity mismatch'
+
+      - alert: BetterNATDatapathNotReady
+        expr: betternat_datapath_ready == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: BetterNAT datapath is not ready
+          description: 'gateway={{ $labels.gateway }} ha_group={{ $labels.ha_group }} engine={{ $labels.engine }} datapath is not ready'
+
+      - alert: BetterNATLeaseRenewErrors
+        expr: increase(betternat_lease_renew_errors_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: BetterNAT lease renew errors detected
+          description: 'gateway={{ $labels.gateway }} ha_group={{ $labels.ha_group }} node={{ $labels.node }} renew_errors_5m={{ $value }}'
+
+      - alert: BetterNATRepeatedTakeoverAttempts
+        expr: increase(betternat_takeover_attempts_total[15m]) > 1
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: BetterNAT repeated takeover attempts detected
+          description: 'gateway={{ $labels.gateway }} ha_group={{ $labels.ha_group }} node={{ $labels.node }} takeover_attempts_15m={{ $value }}'
+
+      - alert: BetterNATTakeoverFailures
+        expr: increase(betternat_takeover_attempts_total[15m]) - increase(betternat_takeover_success_total[15m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: BetterNAT takeover attempt did not succeed
+          description: 'gateway={{ $labels.gateway }} ha_group={{ $labels.ha_group }} node={{ $labels.node }} failed_takeovers_15m={{ $value }}'
