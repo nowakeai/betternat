@@ -196,15 +196,16 @@ Completed for alpha:
 - Disposable AWS validation with the provider default public IPv4 change passed
   in run `bnat-ga-clean-20260624123001`.
 
-Needed before GA:
+Current GA decision:
 
-- Decide whether GA requires strict stable public identity preservation during
-  handover. Provider alpha7 validation recorded `1` curl timeout and `2`
-  transient samples from the standby node's ordinary public IPv4 before traffic
-  returned to the stable EIP. If the GA contract requires every successful
-  sample to return only the shared EIP, implement a secondary private IP or
-  secondary ENI egress identity and configure LoxiLB SNAT to that private IP.
-- Keep broader AWS/DynamoDB retry/backoff hardening open. The earlier provider
+- GA accepts the documented stable-mode caveat: default `cloud_init` gateway
+  nodes keep ordinary public IPv4 for bootstrap and management reachability, so
+  successful samples can briefly egress through a node's ordinary public IPv4
+  during transition before converging back to the shared EIP. Secondary private
+  IP/ENI egress identity is future strict-identity hardening, not required for
+  the current GA boundary.
+- Broader AWS/DynamoDB retry/backoff hardening is future hardening, not a
+  current GA blocker. The earlier provider
   alpha8 GA soak converged through fenced lease takeover after ASG active
   termination, but the durable lifecycle-triggered handover operation failed
   while `ec2:ReplaceRoute` hit a context deadline. The later runtime alpha8
@@ -351,10 +352,12 @@ Completed in disposable AWS:
     IPv4 before returning to the stable EIP
   - Terraform destroy completed with `16` resources destroyed
   - residual scan found only terminated EC2 records
-- [ ] GA stable-identity decision:
-  - if stable mode must guarantee that every successful handover sample returns
-    only the shared EIP, implement secondary private IP/ENI based egress
-    identity and configure LoxiLB SNAT to that private IP.
+- [x] GA stable-identity decision:
+  - current GA accepts the documented caveat that default `cloud_init` stable
+    mode converges back to the shared EIP but may briefly emit successful
+    samples through ordinary node public IPv4 during transition.
+  - strict stable identity for every successful sample is future hardening via
+    secondary private IP/ENI based egress identity.
 
 ### 1. Full Go Test Suite
 
@@ -1049,11 +1052,9 @@ Defer until benchmark-backed:
    the next intentionally useful provider release. Runtime `v0.1.0-alpha.8`
    has ASG lifecycle evidence through explicit artifact overrides; do not
    publish more alpha versions solely to maintain a formal support matrix.
-2. Decide whether GA accepts the documented transient ordinary public-IP caveat
-   in stable mode or requires secondary private IP/ENI egress identity before
-   GA.
-3. Add IAM negative tests for denied `ec2:ReplaceRoute`,
-   `ec2:AssociateAddress`, and DynamoDB write paths.
+2. Start documentation walkthrough from a fresh-user perspective.
+3. Keep IAM negative tests for denied `ec2:ReplaceRoute`,
+   `ec2:AssociateAddress`, and DynamoDB write paths as future hardening.
 4. Keep public AMI publication, `ami_channel` resolution, runtime artifact
    signing, benchmark harness work, and broader performance testing as follow-up
    production hardening rather than release blockers.

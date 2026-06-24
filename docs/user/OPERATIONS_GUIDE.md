@@ -312,6 +312,10 @@ BetterNAT v0 failover semantics:
 - non-stable mode may change public source IP,
 - non-stable route-only handover is expected to be faster than stable EIP
   handover because it avoids EIP reassociation,
+- in the default `cloud_init` path, gateway nodes keep ordinary public IPv4 for
+  bootstrap and management reachability; stable mode converges back to the
+  shared EIP, but a successful new-flow sample may briefly use a node's
+  ordinary public IPv4 during transition,
 - observed low-cost AWS tests showed about 12 seconds of outage for owner termination under the tested conditions.
 
 Do not treat the measured timing as a universal SLA. It depends on:

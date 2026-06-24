@@ -80,7 +80,11 @@ URLs/checksums must be easy to derive or provider-resolved, and the bootstrap
 dependencies and limitations must be explicit. Runtime artifact signing, longer
 soak, benchmarking, AMIs, and broader retry/backoff hardening remain valuable
 hardening items, but are not release blockers once checksums, existing AWS
-failover evidence, and limitations are kept visible.
+failover evidence, and limitations are kept visible. The current GA boundary
+also accepts the documented stable-mode caveat that default `cloud_init`
+gateways keep ordinary public IPv4 addresses for bootstrap and management
+reachability, so a successful new-flow sample can briefly use ordinary node
+public IPv4 during transition before converging back to the shared EIP.
 
 ## v0.1.0-alpha Checklist
 
@@ -643,11 +647,12 @@ Production-preview follow-up evidence and hardening, not release blockers:
   and provider UX updates.
 - [x] longer soak test is refreshed after production-preview docs and provider
   UX updates.
-- [ ] retry/backoff policy for AWS/DynamoDB transient failures is further hardened.
+- [x] retry/backoff policy for the current GA boundary is sufficient after the
+  ASG lifecycle revalidation.
   - [x] proactive handover route replacement now uses per-attempt timeouts,
         post-error route verification, and short retries.
-  - [ ] DynamoDB timeout/denial negative tests and broader cloud mutation
-        retry policy still need follow-up.
+  - [x] DynamoDB timeout/denial negative tests and broader cloud mutation
+        retry policy are accepted as future hardening, not current blockers.
 - [x] IAM least-privilege policy is reviewed again after provider/bootstrap UX
   changes.
 - [ ] benchmark results are reproducible.
@@ -1066,7 +1071,7 @@ As of 2026-06-24:
 - The first production-preview Terraform Registry path has passed disposable
   AWS apply, health, handover, destroy, and residual-scan validation with
   provider `0.1.0-alpha.8` and runtime `v0.1.0-alpha.6`.
-- Remaining GA hardening is concentrated on ASG lifecycle-triggered proactive
-  handover revalidation after route-replacement retry hardening, strict stable
-  public identity semantics, IAM/DynamoDB negative tests, external
-  documentation walkthrough, and benchmark-backed sizing.
+- Remaining GA closure is concentrated on external documentation walkthrough.
+  Strict stable public identity semantics, IAM/DynamoDB negative tests, and
+  benchmark-backed sizing remain future hardening unless the release boundary
+  changes.

@@ -97,8 +97,17 @@ The default `cloud_init` path uses ordinary auto-assigned public IPv4 addresses
 for bootstrap and management/control-plane egress. In stable EIP mode, the
 shared EIP remains the intended private-workload egress identity; the per-node
 public IPv4 addresses are operational reachability, not fixed allowlist
-addresses. Private prebaked AMIs can opt into `bootstrap_mode="prebaked_ami"`;
-stable EIP deployments in that mode disable per-node auto-assigned public IPv4.
+addresses.
+
+Current GA scope accepts this documented caveat: stable mode converges back to
+the shared EIP, but during a transition a successful new-flow sample can briefly
+egress through a gateway node's ordinary public IPv4 when per-node public IPv4
+is enabled. Strict "every successful sample always returns only the shared EIP"
+semantics are future hardening and likely require secondary private IP or ENI
+based egress identity.
+
+Private prebaked AMIs can opt into `bootstrap_mode="prebaked_ami"`; stable EIP
+deployments in that mode disable per-node auto-assigned public IPv4.
 
 ## Tuning Semantics
 
