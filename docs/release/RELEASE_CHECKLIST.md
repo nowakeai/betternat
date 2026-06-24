@@ -577,7 +577,18 @@ P1 items are not required to publish the first alpha, but they should be priorit
   - [x] verify checksum file against uploaded assets.
 - [x] Document Terraform provider installation for users who are not building from source.
 - [x] Decide whether provider binaries are distributed through GitHub Releases only or later through the Terraform Registry.
-- [ ] Add a release smoke test that deploys using GitHub Release URLs instead of temporary S3 URLs.
+- [x] Add a release artifact smoke test that verifies GitHub Release URLs and
+  checksums instead of temporary S3 URLs.
+- [ ] Add a release deploy smoke test that applies Terraform using GitHub
+  Release URLs instead of temporary S3 URLs.
+
+Release artifact smoke validation recorded on 2026-06-24:
+
+- `BETTERNAT_VERSION=v0.1.0-alpha.2 scripts/release-url-smoke.sh`: passed for
+  Linux arm64 agent and CLI checksum verification.
+- `BETTERNAT_VERSION=v0.1.0-alpha.2 BETTERNAT_SMOKE_ARCH=amd64
+  scripts/release-url-smoke.sh`: passed for Linux amd64 agent and CLI checksum
+  verification; amd64 CLI `version` executed successfully on the local host.
 - [x] Create `github.com/nowakeai/terraform-provider-betternat` for Registry-compatible provider publishing.
 - [x] Expose a thin main-repo public provider factory for the provider repo.
 - [x] Add provider-specific alpha release workflow for Linux provider zip artifacts.
