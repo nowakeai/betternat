@@ -94,7 +94,11 @@ jobs:
           if [[ "$PRERELEASE" == "true" ]]; then
             args+=(--prerelease)
           fi
-          notes_file="docs/user/RELEASE_NOTES_${VERSION}.md"
+          base_version="${VERSION#v}"
+          major="${base_version%%.*}"
+          rest="${base_version#*.}"
+          minor="${rest%%.*}"
+          notes_file="docs/user/releases/v${major}.${minor}/${VERSION}.md"
           if [[ -f "$notes_file" ]]; then
             args+=(--notes-file "$notes_file")
           fi
