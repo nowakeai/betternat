@@ -52,6 +52,10 @@ Purpose:
 - verify counters and cleanup behavior,
 - exercise a local network namespace topology without cloud dependencies.
 
+This layer exists only to avoid blind spots while legacy code is still present.
+It must not be added to a release checklist as a fallback gate, and it must not
+be used to pass a deployment where LoxiLB is missing, unsupported, or unhealthy.
+
 Minimum tools:
 
 ```sh

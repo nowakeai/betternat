@@ -12,7 +12,12 @@ architecture decision. It must not be bypassed by passing the release with
 nftables.
 
 This applies to all clouds, all installation modes, and all release gates. It
-is not a GCP-only decision.
+is not a GCP-only decision, AWS-only decision, or temporary provider-surface
+decision.
+
+Do not re-open nftables fallback planning in ordinary AWS, GCP, Terraform,
+release, or operations work. Reconsidering this requires an explicit new
+architecture decision record that supersedes this document.
 
 ## Current Codebase Treatment
 
@@ -33,6 +38,8 @@ Not allowed:
 - adding new Terraform or runtime UX around nftables fallback,
 - using nftables to pass AWS, GCP, or future-cloud datapath readiness, HA,
   smoke, soak, or release validation when LoxiLB is not ready.
+- treating `fallback_datapath_engine`, legacy smoke scripts, or old research
+  documents as evidence that a fallback product path still exists.
 
 ## Superseded History
 

@@ -17,6 +17,9 @@ current architecture and spec. Current BetterNAT has no product fallback
 datapath on AWS, GCP, or future clouds; LoxiLB readiness is a release gate.
 Do not reintroduce nftables fallback UX, tests, or release acceptance paths
 without a new architecture decision record.
+Existing nftables/nf_conntrack code and smoke scripts may remain temporarily
+for legacy diagnostics and cleanup only; their existence is not evidence of a
+supported fallback path.
 
 ## Start Here
 

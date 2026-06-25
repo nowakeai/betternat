@@ -739,3 +739,9 @@ Append dated notes here during implementation.
   `internal/cloud/gcp` now attempts to restore the previous route snapshot.
   Local tests cover restore after delete-operation, insert, and insert-operation
   failures; live GCE route-operation failure injection remains open.
+- Re-locked the global no-nftables-fallback decision across architecture,
+  development, testing, and historical research docs. This is a BetterNAT-wide
+  product rule, not a GCP exception: LoxiLB is the supported datapath, existing
+  nftables/nf_conntrack code may remain temporarily as legacy diagnostics only,
+  and legacy scripts or `fallback_datapath_engine` must not be used as release,
+  recovery, or cloud-acceptance fallback evidence.

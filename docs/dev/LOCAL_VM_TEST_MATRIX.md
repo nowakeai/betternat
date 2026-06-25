@@ -69,6 +69,10 @@ This still does not replace real AWS route/EIP testing.
 
 ## Test Matrix
 
+nftables rows in this matrix are legacy diagnostics only while the code remains.
+They are not product fallback tests, release gates, or substitutes for LoxiLB
+validation on AWS, GCP, or future clouds.
+
 | ID | Test Area | VM Count | Requires Root | Current Status | What It Proves | What It Does Not Prove |
 |----|-----------|----------|---------------|----------------|----------------|------------------------|
 | VM-001 | Linux build and unit tests | 1 | No | Ready | Code compiles and tests pass on Linux/arm64 or Linux/amd64 | Real datapath behavior |

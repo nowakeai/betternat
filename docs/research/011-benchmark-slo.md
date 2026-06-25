@@ -361,9 +361,13 @@ baseline:
 metrics:
   LoxiLB NAT + BetterNAT Prometheus exporter
 
-fallback:
+legacy diagnostic comparison, only if that code is being touched:
   nftables NAT + BetterNAT Prometheus exporter
 ```
+
+BetterNAT has no product fallback datapath. Do not use the nftables comparison
+as a release acceptance substitute or as a reason to ship when LoxiLB is not
+ready.
 
 Metrics:
 

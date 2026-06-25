@@ -17,6 +17,10 @@ Use these files in order:
 5. `docs/architecture.md` and `docs/spec-v0.md` for current product architecture.
 
 Research docs are important evidence, but older research does not override the current architecture/spec pair.
+Any older research that recommends nftables-first or nftables-fallback behavior
+is design history only. The standing rule is global: no product fallback
+datapath, and no nftables fallback work unless a new ADR explicitly supersedes
+`docs/research/055-no-nftables-fallback-decision.md`.
 
 ## Default Working Pattern
 

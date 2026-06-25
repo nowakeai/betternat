@@ -407,7 +407,7 @@ Goal:
 - Prove basic HA.
 - Prove LoxiLB rule reconciliation and observability export.
 
-### v0 fallback: Conservative Linux NAT
+### Superseded v0 fallback: Conservative Linux NAT
 
 ```text
 datapath: nftables + nf_conntrack
@@ -415,7 +415,10 @@ use: LoxiLB unavailable, unsupported, or explicitly disabled
 scope: simple SNAT/masquerade, conntrack metrics, doctor support
 ```
 
-Goal:
+This section is design history only. Current BetterNAT has no product fallback
+datapath, and LoxiLB readiness is a release gate.
+
+Original goal:
 
 - Keep BetterNAT usable when LoxiLB cannot run.
 - Provide a simple debugging and rollback path.
@@ -505,9 +508,12 @@ Use these labels:
 
 ## Decision
 
-Default to `nftables` + `nf_conntrack`.
+Default to LoxiLB standalone egress SNAT.
 
 Add eBPF first for observability, not packet rewriting.
+
+Do not build a product nftables fallback. Existing nftables/nf_conntrack code
+is legacy diagnostic code only while retained.
 
 Keep VPP and eBPF NAT as measured, optional future paths.
 
