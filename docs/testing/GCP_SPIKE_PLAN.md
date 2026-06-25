@@ -67,7 +67,9 @@ resources.
   blocker, not a reason to pass with nftables. This follows the global
   BetterNAT rule: no nftables product fallback on any cloud.
 - Firestore transaction or GCS generation-precondition lease backend candidate.
-- Optional reserved static external IP handover test.
+- Stable public identity is not in the GCP alpha contract. Reserved static
+  external IP handover requires a separate access-config handover design and
+  live validation before it can become a GA promise.
 
 ## Validation Steps
 
@@ -96,7 +98,8 @@ loxicmd get nat
 8. Add a standby gateway VM.
 9. Replace the private default route to the standby gateway and measure
    new-flow recovery time.
-10. Test reserved external IP handover only after basic route failover works.
+10. Do not count reserved external IP handover as part of route-only alpha.
+    If pursued for GA, test it as a separate access-config handover design.
 
 ### BetterNAT HA
 
@@ -178,6 +181,7 @@ Accept GCP alpha implementation only if the spike proves:
 - route mutation is lease-fenced and verified,
 - cleanup is deterministic,
 - LoxiLB-on-GCE is validated or explicitly rejected with evidence,
-- stable public identity behavior is either validated or explicitly deferred,
+- stable public identity is explicitly deferred from GCP alpha, with
+  access-config handover left as a GA design choice,
 - destroy after agent-owned handover does not leave residual routes, instances,
   IAM bindings, or Firestore records.

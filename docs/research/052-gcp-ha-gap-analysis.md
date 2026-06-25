@@ -740,7 +740,8 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
   rule replay.
 - Raw LoxiLB GCP HA behavior compared against BetterNAT-owned route fencing.
 - nftables is excluded from BetterNAT product acceptance.
-- Stable public IP is validated or explicitly not supported in GCP alpha.
+- Stable public IP is explicitly deferred from GCP alpha; see
+  `docs/research/061-gcp-stable-public-identity-decision.md`.
 - TCP, HTTPS, UDP DNS, and download new-flow behavior across route-only
   handover passed in `docs/research/059-gcp-protocol-failover-results.md`;
   existing connections remain documented as not preserved.
@@ -782,7 +783,9 @@ baseline and failure-injection validation:
    injection before promoting the GCP provider resource beyond route-only alpha.
 2. Decide and document the GCP capacity-repair model: unmanaged provider-owned
    instances for alpha only, or MIG-backed replacement before GA.
-3. Run raw LoxiLB-on-GCE protocol behavior comparisons where they materially
+3. Decide whether GCP GA will implement access-config based stable public
+   identity or explicitly remain route-only/non-stable.
+4. Run raw LoxiLB-on-GCE protocol behavior comparisons where they materially
    differ from BetterNAT-owned route-only failover.
 
 Until then, GCP should remain explicitly marked as route-only alpha work, not a

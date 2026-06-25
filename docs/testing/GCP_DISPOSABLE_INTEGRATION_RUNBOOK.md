@@ -17,6 +17,10 @@ Use LoxiLB for datapath evidence. BetterNAT has no nftables product fallback on
 GCP, AWS, or future clouds. Legacy nftables code may remain in the repository,
 but this runbook must not use it to pass a failed LoxiLB datapath or HA gate.
 
+GCP alpha is route-only and non-stable for public identity. Do not interpret a
+reserved static external IP experiment as supported alpha behavior unless the
+access-config handover design has been implemented and live-validated.
+
 Do not run this against a production VPC, existing Cloud NAT migration, or
 production GKE route table.
 

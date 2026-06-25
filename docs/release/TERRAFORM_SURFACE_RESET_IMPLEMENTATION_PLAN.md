@@ -233,7 +233,7 @@ Done when:
 
 ## Phase 4: GCP Spike
 
-Status: `route-only live HA and LoxiLB datapath proof complete; raw baseline and failure injection pending`
+Status: `route-only live HA, protocol, failure-injection, and LoxiLB datapath proof complete; raw baseline and deeper split-brain injection pending`
 
 Goal: validate whether GCP can support the BetterNAT product model before
 committing to a production resource.
@@ -253,7 +253,9 @@ Scope:
   GA gate using nftables. This is the global BetterNAT product rule, not a
   GCP-specific exception.
 - Firestore transaction lease backend.
-- Optional reserved static external IP test.
+- Stable public identity is deferred from GCP alpha. Reserved static external
+  IP handover requires a separate access-config handover design and live
+  validation before it can become a GA promise.
 
 Tasks:
 
@@ -265,7 +267,8 @@ Tasks:
 - [x] Validate LoxiLB counters.
 - [x] Validate route replacement to standby.
 - [x] Measure new-flow recovery time for startup-script client probes.
-- [ ] Validate or reject reserved external IP handover.
+- [x] Reject reserved external IP handover from GCP alpha scope; GA support
+  requires a separate access-config handover design and live validation.
 - [x] Validate coordination backend choice.
 - [x] Run live Firestore contention spike.
 - [x] Render experimental GCP agent HA config and checksum-verified bootstrap
@@ -282,7 +285,7 @@ Tasks:
   record which upstream primitives BetterNAT should reuse versus wrap.
 - [ ] Validate GCP split-brain failure injections: stale lease generation,
   delayed route operation, restarted old active, and stale standby registry.
-- [ ] Validate TCP, UDP, DNS, and long-download behavior across route-only
+- [x] Validate TCP, UDP, DNS, and long-download behavior across route-only
   failover; do not rely only on short HTTP source-IP probes.
 - [x] Validate destroy/rollback after an agent-owned route movement.
 - [ ] Decide GCP capacity repair model: unmanaged instances for alpha only or
@@ -294,7 +297,7 @@ Validation evidence:
 - [x] Route mutation behavior.
 - [x] Handover behavior.
 - [x] Public IP behavior for non-stable per-gateway public IPs.
-- [ ] Datapath counters.
+- [x] Datapath counters.
 - [x] Agent-owned lease and route behavior.
 - [x] Cleanup evidence.
 
@@ -461,7 +464,8 @@ Done when:
   or a bounded set of versions.
 - [ ] Whether AWS module default should use AL2023, Ubuntu, or user-supplied
   AMI until BetterNAT AMIs exist.
-- [ ] Whether GCP stable public identity is in the first alpha.
+- [x] Whether GCP stable public identity is in the first alpha: no; GCP alpha
+  remains route-only/non-stable.
 - [ ] Whether GCP lease backend is Firestore or GCS generation preconditions.
 - [ ] Provider version number for the surface reset.
 - [ ] Module versioning policy while provider and modules are released from
@@ -708,3 +712,8 @@ Append dated notes here during implementation.
   `DEGRADED` instead of `ACTIVE`, standby acquired generation `2`, route target
   moved to `gw-b`, final doctor checks passed, and residual scan passed.
   Evidence is recorded in `docs/research/060-gcp-failure-injection-results.md`.
+- Documented the GCP stable-public-identity boundary: alpha remains
+  route-only/non-stable, and shared static external IP support requires a
+  separate access-config handover design plus live validation before it can be
+  claimed for GA. See
+  `docs/research/061-gcp-stable-public-identity-decision.md`.
