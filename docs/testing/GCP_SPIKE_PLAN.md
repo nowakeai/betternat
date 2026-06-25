@@ -4,8 +4,13 @@ Date: 2026-06-25
 
 ## Purpose
 
-Validate whether GCP can support the BetterNAT product model before adding a
-working `betternat_gcp_gateway` resource or Google module.
+Validate whether GCP can support the BetterNAT product model before promoting a
+working `betternat_gcp_gateway` resource or Google module beyond alpha.
+
+BetterNAT's core product value over a raw LoxiLB appliance is HA ownership:
+lease fencing, route/public-identity mutation safety, proactive handover,
+passive failover, observability, and rollback. A single forwarding GCE VM or a
+manual route replacement test is only substrate evidence.
 
 This is a disposable-environment spike. It must not replace existing Cloud NAT
 or mutate production GKE routes.
@@ -34,6 +39,8 @@ gcloud --project shared-resources-alt ...
 
 ## Validation Steps
 
+### Substrate
+
 1. Create the disposable VPC, subnets, firewall rules, and service account.
 2. Launch a gateway VM with IP forwarding enabled.
 3. Install BetterNAT runtime artifacts and LoxiLB on the gateway VM.
@@ -59,6 +66,37 @@ loxicmd get nat
    new-flow recovery time.
 10. Test reserved external IP handover only after basic route failover works.
 
+### BetterNAT HA
+
+1. Create or select a Firestore Native database and grant the gateway runtime
+   service account only the documented runtime permissions.
+2. Start `betternat-agent` on both gateway VMs with `cloud=gcp`,
+   Firestore coordination, route-only public identity, and `local.node_id=auto`.
+3. Verify one active owner and at least one standby in agent status and
+   Firestore registry records.
+4. Prove lease contention by starting or restarting both agents at the same
+   time; only the lease winner may mutate the route.
+5. Trigger passive failover by stopping or powering off the active VM without a
+   clean handover. The standby must acquire the next lease generation, replace
+   the route, verify the route target, and report active.
+6. Trigger proactive handover through the BetterNAT control path. The handover
+   record must reach a terminal success state, the route target must move to
+   the selected standby, and the old active must not keep mutating the route.
+7. Restart LoxiLB on the active node and verify the agent reconciles datapath
+   state without changing cloud ownership.
+8. Destroy the Terraform resource after an agent-owned handover and verify
+   route cleanup plus residual scans.
+
+### Failure Injection
+
+Inject at least one failure in each dangerous phase before promotion:
+
+- Compute route mutation fails before route target changes.
+- Route target changes but Firestore lease transfer fails.
+- Firestore is unavailable to the active while Compute remains reachable.
+- Compute operation polling fails after route insert/delete request.
+- Standby registry record is stale or reports unhealthy datapath.
+
 ## Required Evidence
 
 - Route mutation timing.
@@ -66,6 +104,11 @@ loxicmd get nat
 - Public IP behavior before and after route replacement.
 - LoxiLB or nftables datapath counters.
 - Lease backend transaction behavior.
+- Firestore lease generation before and after passive failover.
+- Firestore handover records for proactive handover.
+- Agent metrics for active/standby state, route target match, datapath
+  readiness, and stale status.
+- Compute route object and operation IDs for every route mutation.
 - Cleanup command output.
 
 ## Cleanup
@@ -95,7 +138,13 @@ gcloud --project shared-resources-alt compute addresses list --filter='name~bett
 Accept GCP alpha implementation only if the spike proves:
 
 - private client egress works through a forwarding gateway VM,
-- route replacement moves new flows to a standby gateway,
-- the selected lease backend supports safe conditional ownership,
+- agent-owned route replacement moves new flows to a standby gateway,
+- Firestore supports safe conditional ownership under live contention,
+- passive failover after active loss works,
+- proactive handover works,
+- route mutation is lease-fenced and verified,
 - cleanup is deterministic,
-- stable public identity behavior is either validated or explicitly deferred.
+- LoxiLB-on-GCE is validated or explicitly rejected with evidence,
+- stable public identity behavior is either validated or explicitly deferred,
+- destroy after agent-owned handover does not leave residual routes, instances,
+  IAM bindings, or Firestore records.

@@ -233,10 +233,15 @@ Done when:
 
 ## Phase 4: GCP Spike
 
-Status: `forwarding, route replacement, Firestore lease implementation, local agent GCP backend wiring, and experimental provider-rendered agent bootstrap complete; live agent-owned HA, LoxiLB, and public identity decisions pending`
+Status: `substrate forwarding and experimental HA bootstrap complete; BetterNAT-value HA proof still pending`
 
 Goal: validate whether GCP can support the BetterNAT product model before
 committing to a production resource.
+
+BetterNAT's product value over a raw LoxiLB node is HA ownership: lease-fenced
+route and public-identity mutation, passive failover, proactive handover,
+operator-visible status, and safe rollback. GCP forwarding, provider-created
+VMs, and manual route replacement are substrate evidence only.
 
 Scope:
 
@@ -267,6 +272,9 @@ Tasks:
 - [ ] Run two-agent GCE HA smoke where route mutation is lease-fenced.
 - [ ] Validate passive failover after active crash.
 - [ ] Validate proactive handover during graceful shutdown or upgrade.
+- [ ] Validate destroy/rollback after an agent-owned handover.
+- [ ] Decide GCP capacity repair model: unmanaged instances for alpha only or
+  MIG-backed replacement before GA.
 - [x] Destroy all resources and scan residuals.
 
 Validation evidence:
@@ -280,12 +288,15 @@ Validation evidence:
 
 Done when:
 
-- GCP alpha scope is either accepted with measured limits or deferred with a
-  concrete blocker.
+- GCP remains explicitly marked as substrate alpha unless live agent-owned
+  route fencing, passive failover, and proactive handover all have evidence.
+- GCP product alpha scope is accepted only with measured limits for public
+  identity, LoxiLB-on-GCE, cleanup after handover, and capacity repair, or is
+  deferred with concrete blockers.
 
 ## Phase 5: GCP Provider Alpha
 
-Status: `narrow forwarding alpha implemented; Firestore/runtime backend code, explicit runtime service-account attachment, and GCP runtime IAM permission contract exist; live runtime HA, provider-owned IAM, packaging, and LoxiLB validation pending`
+Status: `narrow forwarding alpha implemented; Firestore/runtime backend code, explicit runtime service-account attachment, and GCP runtime IAM permission contract exist; live runtime HA, provider-owned IAM wiring, packaging, and LoxiLB validation pending`
 
 Goal: expose a GCP alpha resource only after the spike proves the minimum
 control-plane behavior.
@@ -293,11 +304,11 @@ control-plane behavior.
 Tasks:
 
 - [x] Add `internal/install/gcp`.
-- [ ] Add GCP cloud/runtime interfaces.
-- [ ] Add GCP lease/coordination backend.
+- [x] Add GCP cloud/runtime interfaces.
+- [x] Add GCP lease/coordination backend.
 - [x] Add `betternat_gcp_gateway`.
 - [x] Add `betternat_gcp_gateway_status`.
-- [ ] Add provider docs for GCP alpha.
+- [x] Add provider docs for GCP alpha.
 - [x] Add GCP IAM docs.
 - [x] Allow explicit runtime service account attachment for GCP gateway VMs.
 - [x] Expose GCP runtime IAM permission contract from the provider.
@@ -316,11 +327,18 @@ GCP validation:
 - [ ] Disposable GCP apply.
 - [ ] Private client egress.
 - [ ] Route replacement.
+- [ ] Live Firestore contention.
+- [ ] Two-agent lease-fenced route mutation.
+- [ ] Passive failover after active crash.
+- [ ] Proactive handover.
+- [ ] LoxiLB-on-GCE datapath counters and restart reconciliation.
 - [ ] Cleanup.
 
 Done when:
 
-- GCP alpha works in a disposable environment.
+- GCP forwarding alpha works in a disposable environment.
+- GCP HA is not marketed as BetterNAT-equivalent until live agent-owned HA
+  evidence exists.
 - Docs clearly state alpha limitations and unsupported production guarantees.
 
 ## Phase 6: GCP Module Repository

@@ -43,6 +43,11 @@ GCE forwarding VMs, nftables masquerade, tagged route replacement, provider
 status reads, and provider cleanup. It is not yet a BetterNAT-equivalent GCP HA
 implementation.
 
+Important correction from the 2026-06-25 review: because BetterNAT's main value
+over a raw LoxiLB appliance is the HA product layer, GCP must not be framed as
+"mostly done" after forwarding, route replacement, or provider bootstrap. Those
+items are substrate. The product milestone is live agent-owned HA.
+
 ## Current GCP Alpha State
 
 Validated:
@@ -91,6 +96,60 @@ Therefore the GCP gate is not "can a GCE VM forward packets with LoxiLB or
 nftables?" That only proves a datapath substrate. The gate is "can the
 BetterNAT agent safely own and move the cloud egress role under failure,
 upgrade, and cleanup conditions?"
+
+## HA Product Boundary Audit
+
+The GCP work should be judged against the feature delta that BetterNAT adds on
+top of a raw LoxiLB node. The following items are the core product boundary, not
+nice-to-have polish:
+
+| Capability | Why raw LoxiLB is not enough for BetterNAT | Current GCP state | Required proof |
+| --- | --- | --- | --- |
+| Fenced active owner | Cloud route and public identity mutation must be guarded by a cloud-independent lease generation | Firestore backend exists and agent can construct it | Live two-agent contention where only the lease winner mutates the route |
+| Passive failover | A hard-crashed active must be replaced without an operator running route commands | HA controller supports acquire-after-expiry in code | Kill or stop active GCE VM and prove standby acquires, routes, verifies, and reports active |
+| Proactive handover | Upgrades, shutdown, Spot/MIG lifecycle, and manual maintenance should move ownership before the old active exits | Generic handover path exists; GCP live path unvalidated | Manual handover and systemd stop on active GCE node produce completed handover records and no route split-brain |
+| Route verification | GCP static route delete/insert is not an atomic AWS `ReplaceRoute` equivalent | GCP provider describes and replaces route | Every mutation verifies target and degrades on Compute API or propagation failure |
+| Stable public identity | Many egress users care about allowlists and source-IP continuity | GCP route-only mode intentionally has non-stable public identity | Either validate an address handover design or state that GCP alpha is non-stable only |
+| Datapath reconciliation | LoxiLB state can be lost after restart; BetterNAT owns desired-state replay | AWS path has this design; GCP tests so far used nftables substrate | LoxiLB on GCE install, counters, restart replay, and nftables fallback evidence |
+| Peer readiness | A standby must be selected only if it is healthy enough to receive traffic | Registry and peer prepare APIs exist | Handover refuses stale, unhealthy, or wrong-generation standby records in live GCE smoke |
+| Observability | Operators need to see whether HA is working before failure | Metrics/status are provider-neutral, but GCP support bundle not proven | GCP status includes lease, route, datapath, handover, Firestore errors, and Compute operation IDs |
+| Rollback and destroy | Terraform cleanup must not fight or orphan agent-owned route changes | Provider cleanup passed substrate spike | Destroy after agent-owned handover restores/removes provider-owned routes and leaves no residual resources |
+
+This audit means the GCP acceptance bar is not lower because LoxiLB can provide
+its own HA patterns. BetterNAT can reuse LoxiLB as the local datapath, but the
+product still owns cloud route safety, lease fencing, lifecycle handover,
+operator status, and rollback.
+
+## Additional Underweighted Areas
+
+The review also found several areas that were not weighted strongly enough in
+the first GCP spike plan:
+
+- MIG or equivalent capacity repair. AWS uses ASG repair as a separate loop
+  after fast failover. GCP needs an explicit decision on unmanaged instances
+  versus MIGs, and tests must prove replacement nodes join standby without
+  disrupting the active owner.
+- Zone failure semantics. GCP routes are VPC-global, while next-hop instances
+  are zonal. Same-zone active/standby is not enough to understand cross-zone
+  behavior, route propagation, and cost.
+- GKE/private-node integration. The target users include private Kubernetes
+  nodes. Network tags, route priority, subnet scope, and coexistence with
+  Cloud NAT must be tested with a private-node shape, not only a standalone VM.
+- Bootstrap dependency risk. Startup-script installs are acceptable for spikes,
+  but production HA should not depend on first-boot package repositories and
+  GitHub downloads during replacement after a failure. Prebaked image or
+  private artifact mirror behavior needs a gate before GA.
+- Failure injection coverage. Tests need forced failures at the dangerous
+  points: after route delete, after route insert before lease transfer, after
+  Firestore transfer, during Compute operation polling, and during LoxiLB
+  restart.
+- IAM lifecycle. A permission list is useful, but GCP HA smoke needs a service
+  account with the custom role actually applied and verified by the agent. Broad
+  project roles must not count as product evidence.
+- Supportability without project-owner access. A support bundle should be able
+  to explain a failed failover from local logs, Firestore records, route state,
+  and operation IDs without requiring an engineer to have owner access to the
+  customer's project.
 
 ## DynamoDB Equivalent
 
@@ -524,12 +583,13 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
 
 ## Immediate Recommendation
 
-Reframe the current `betternat_gcp_gateway` as a forwarding substrate spike, not
-the GCP product alpha. BetterNAT's GCP bar is agent-owned HA around the datapath,
-not raw packet forwarding.
+Reframe the current `betternat_gcp_gateway` as a forwarding substrate plus
+experimental HA bootstrap path, not the GCP product alpha. BetterNAT's GCP bar
+is agent-owned HA around the datapath, not raw packet forwarding or manually
+driven route replacement.
 
 The next implementation step after the Firestore lease backend and local agent
-wiring is live coordination validation:
+wiring is live coordination and HA validation:
 
 1. Run a live `shared-resources-alt` Firestore contention spike with two or
    more contenders.
@@ -538,5 +598,9 @@ wiring is live coordination validation:
 3. Run the agent on two GCE gateways and prove route mutation is lease-fenced.
 4. Validate passive failover, proactive handover, and LoxiLB-on-GCE before
    promoting the GCP provider resource beyond substrate alpha.
+5. Decide and document the GCP capacity-repair model: unmanaged provider-owned
+   instances for alpha only, or MIG-backed replacement before GA.
+6. Test destroy/rollback after an agent-owned handover, not only after provider
+   initial route creation.
 
 Until then, GCP should remain explicitly marked as non-HA alpha substrate work.

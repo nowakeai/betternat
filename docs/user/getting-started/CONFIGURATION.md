@@ -212,6 +212,9 @@ data "betternat_gcp_gateway_status" "egress" {
 `betternat_gcp_gateway` is an alpha resource for disposable GCP validation.
 It manages provider-owned GCE gateway VMs with `canIpForward=true`, an nftables
 masquerade startup script, and one tagged default route to the active gateway.
+It is not yet a GCP product-parity HA release. BetterNAT's HA value over a raw
+LoxiLB appliance requires live agent-owned lease fencing, route mutation,
+passive failover, proactive handover, observability, and rollback evidence.
 
 The runtime now has an implementation path for Firestore-backed lease
 coordination and GCP tagged-route mutation, but it has not yet passed live GCE
