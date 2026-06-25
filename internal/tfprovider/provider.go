@@ -78,6 +78,7 @@ func (p *Provider) Resources(context.Context) []func() resource.Resource {
 		func() resource.Resource {
 			return NewAWSGatewayResourceWithFactories(p.installerFactory, p.rollbackerFactory, p.cleanerFactory, p.readerFactory)
 		},
+		NewGCPGatewayResource,
 	}
 }
 

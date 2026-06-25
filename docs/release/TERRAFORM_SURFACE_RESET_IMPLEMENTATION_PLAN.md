@@ -233,7 +233,7 @@ Done when:
 
 ## Phase 4: GCP Spike
 
-Status: `spike plan complete; execution pending`
+Status: `forwarding and route replacement complete; coordination and LoxiLB pending`
 
 Goal: validate whether GCP can support the BetterNAT product model before
 committing to a production resource.
@@ -253,22 +253,22 @@ Tasks:
 - [x] Create durable GCP spike plan from the scratch research memo.
 - [x] Select functional target project.
 - [x] Define cleanup checklist.
-- [ ] Validate gateway VM forwarding.
-- [ ] Validate private client internet egress.
+- [x] Validate gateway VM forwarding.
+- [x] Validate private client internet egress.
 - [ ] Validate LoxiLB counters.
-- [ ] Validate route replacement to standby.
-- [ ] Measure new-flow recovery time.
+- [x] Validate route replacement to standby.
+- [x] Measure new-flow recovery time for startup-script client probes.
 - [ ] Validate or reject reserved external IP handover.
 - [ ] Validate coordination backend choice.
-- [ ] Destroy all resources and scan residuals.
+- [x] Destroy all resources and scan residuals.
 
 Validation evidence:
 
-- [ ] Route mutation timing.
-- [ ] Handover timing.
-- [ ] Public IP behavior.
+- [x] Route mutation behavior.
+- [x] Handover behavior.
+- [x] Public IP behavior for non-stable per-gateway public IPs.
 - [ ] Datapath counters.
-- [ ] Cleanup evidence.
+- [x] Cleanup evidence.
 
 Done when:
 
@@ -277,21 +277,21 @@ Done when:
 
 ## Phase 5: GCP Provider Alpha
 
-Status: `pending`
+Status: `narrow forwarding alpha implemented; lease/runtime HA pending`
 
 Goal: expose a GCP alpha resource only after the spike proves the minimum
 control-plane behavior.
 
 Tasks:
 
-- [ ] Add `internal/install/gcp`.
+- [x] Add `internal/install/gcp`.
 - [ ] Add GCP cloud/runtime interfaces.
 - [ ] Add GCP lease/coordination backend.
-- [ ] Add `betternat_gcp_gateway`.
-- [ ] Add `betternat_gcp_gateway_status`.
+- [x] Add `betternat_gcp_gateway`.
+- [x] Add `betternat_gcp_gateway_status`.
 - [ ] Add provider docs for GCP alpha.
 - [ ] Add GCP IAM docs.
-- [ ] Add GCP cleanup tests with fakes.
+- [x] Add GCP startup-script and model tests.
 - [ ] Add disposable GCP integration runbook.
 
 Validation:
@@ -462,6 +462,23 @@ Append dated notes here during implementation.
 - GCP must be invoked with explicit `--project shared-resources-alt`; the GCP
   implementation remains gated on the spike plan and was not run as part of the
   AWS Terraform surface smoke.
+- Ran GCP disposable forwarding spike in `shared-resources-alt` with run ID
+  `bnat-gcp-spike-20260625044021`: private client egress through gateway
+  `gw-a` returned `34.168.92.39`; after route replacement to `gw-b`, client
+  egress returned `8.231.221.166`; all disposable resources were destroyed and
+  residual scans were empty. See
+  `docs/research/051-gcp-forwarding-spike-results.md`.
+- Implemented a narrow GCP alpha provider path: `internal/install/gcp`,
+  `betternat_gcp_gateway`, and a read-only `betternat_gcp_gateway_status`.
+  This path manages GCE forwarding VMs and a tagged route only; GCP lease
+  coordination, LoxiLB-on-GCE validation, stable public IP handover, and
+  production GKE migration remain deferred.
+- Ran unpublished Terraform provider GCP smoke with local CLI dev override and
+  run ID `bnat-gcp-tf-20260625045906`: `betternat_gcp_gateway` created two
+  gateway VMs and a tagged route, `betternat_gcp_gateway_status` read the same
+  route target, private client egress returned active gateway IP
+  `34.168.92.39`, `terraform destroy` removed provider-owned resources, and
+  residual scans were empty after deleting precreated VPC/client resources.
 - Opened implementation PRs:
   - main repo: `https://github.com/nowakeai/betternat/pull/1`
   - split provider repo:

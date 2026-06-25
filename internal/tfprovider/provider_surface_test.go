@@ -18,11 +18,17 @@ func TestProviderExposesCloudSpecificSurface(t *testing.T) {
 	provider := &Provider{readerFactory: defaultReaderFactory}
 
 	resources := provider.Resources(context.Background())
-	if len(resources) != 1 {
+	if len(resources) != 2 {
 		t.Fatalf("unexpected resource count: %d", len(resources))
 	}
-	if got := resourceTypeName(t, resources[0]()); got != "betternat_aws_gateway" {
-		t.Fatalf("unexpected resource type name: %s", got)
+	resourceNames := map[string]bool{}
+	for _, newResource := range resources {
+		resourceNames[resourceTypeName(t, newResource())] = true
+	}
+	for _, want := range []string{"betternat_aws_gateway", "betternat_gcp_gateway"} {
+		if !resourceNames[want] {
+			t.Fatalf("missing resource %s in %#v", want, resourceNames)
+		}
 	}
 
 	dataSources := provider.DataSources(context.Background())
@@ -38,7 +44,7 @@ func TestProviderExposesCloudSpecificSurface(t *testing.T) {
 			t.Fatalf("missing data source %s in %#v", want, names)
 		}
 	}
-	if names["betternat_gateway"] {
+	if resourceNames["betternat_gateway"] {
 		t.Fatal("old betternat_gateway resource must not be exposed")
 	}
 }

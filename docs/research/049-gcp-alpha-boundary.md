@@ -4,14 +4,14 @@ Date: 2026-06-25
 
 ## Summary
 
-GCP support is feasible but not a provider-schema-only change. BetterNAT should
-not expose a working `betternat_gcp_gateway` resource until a disposable GCP
-spike validates forwarding, static route replacement, coordination semantics,
-and cleanup.
+GCP support is feasible but not a provider-schema-only change. A disposable GCP
+spike has validated forwarding, nftables masquerade, tagged static route
+replacement, and cleanup. It has not validated LoxiLB on GCE, BetterNAT agent
+coordination, stable public IP handover, or production GKE route migration.
 
-The provider may reserve `betternat_gcp_gateway_status` as a clear
-not-implemented stub during the Terraform surface reset, but product docs must
-not present GCP as supported.
+The provider may expose a narrow alpha `betternat_gcp_gateway` resource for the
+validated topology, but product docs must not present GCP as production
+supported.
 
 ## Current Business Signal
 
@@ -44,15 +44,24 @@ in the first alpha.
 
 ## Deferred Until Spike Evidence
 
-- `internal/install/gcp`
-- working `betternat_gcp_gateway`
-- working `betternat_gcp_gateway_status`
+## Accepted After Forwarding Spike
+
+- `internal/install/gcp` for the verified GCE forwarding topology.
+- Alpha `betternat_gcp_gateway` managing provider-owned gateway VMs and a
+  tagged default route.
+- Alpha `betternat_gcp_gateway_status` reading Compute route and instance
+  state.
+
+## Still Deferred
+
 - GCP module repository
 - GCP IAM least-privilege guide
 - GCP stable public identity guarantees
+- GCP lease backend and agent fencing
+- LoxiLB as the primary GCP datapath
 
 ## Decision
 
-Keep AWS as the implemented provider surface for this reset. Reserve GCP names
-only where they prevent future naming churn, and gate real GCP implementation
-on `docs/testing/GCP_SPIKE_PLAN.md`.
+Keep AWS as the production-oriented provider surface for this reset. Add GCP
+only as a clearly documented alpha path backed by
+`docs/research/051-gcp-forwarding-spike-results.md`.

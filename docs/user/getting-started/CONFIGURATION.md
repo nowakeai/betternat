@@ -192,8 +192,50 @@ data "betternat_aws_gateway_status" "egress" {
 }
 ```
 
-`betternat_gcp_gateway_status` is reserved for the GCP alpha and currently
-returns a clear not-implemented diagnostic.
+Use `betternat_gcp_gateway_status` for read-only GCP alpha Compute status:
+
+```hcl
+data "betternat_gcp_gateway_status" "egress" {
+  name       = betternat_gcp_gateway.egress.name
+  project_id = betternat_gcp_gateway.egress.project_id
+  region     = betternat_gcp_gateway.egress.region
+  zone       = betternat_gcp_gateway.egress.zone
+  network    = betternat_gcp_gateway.egress.network
+  subnetwork = betternat_gcp_gateway.egress.subnetwork
+  client_tag = betternat_gcp_gateway.egress.client_tag
+  route_name = betternat_gcp_gateway.egress.route_name
+}
+```
+
+## GCP Alpha Resource
+
+`betternat_gcp_gateway` is an alpha resource for disposable GCP validation.
+It manages provider-owned GCE gateway VMs with `canIpForward=true`, an nftables
+masquerade startup script, and one tagged default route to the active gateway.
+
+It does not yet provide BetterNAT agent lease coordination, LoxiLB-on-GCE
+validation, stable public IP handover, GKE migration safety, or production HA
+guarantees.
+
+Minimal shape:
+
+```hcl
+resource "betternat_gcp_gateway" "egress" {
+  name       = "lab-egress"
+  project_id = "shared-resources-alt"
+  region     = "us-west1"
+  zone       = "us-west1-a"
+
+  network    = google_compute_network.lab.name
+  subnetwork = google_compute_subnetwork.lab.name
+  client_tag = "lab-private-client"
+
+  private_cidrs = ["10.91.0.0/24"]
+}
+```
+
+Private client VMs must have the configured `client_tag` and no broader route
+with a higher priority that bypasses the BetterNAT route.
 
 ## Update Behavior
 
@@ -203,6 +245,9 @@ resource.
 Use the [Upgrade And Replacement Guide](../operations/UPGRADE_REPLACEMENT_GUIDE.md)
 before changing runtime, AMI, subnet, route, datapath, EIP, HA timing, tag, or
 bootstrap fields.
+
+`betternat_gcp_gateway` updates are intentionally not implemented in the first
+alpha. Replace the resource to change GCP gateway topology.
 
 ## Runtime Config
 
