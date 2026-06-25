@@ -587,6 +587,10 @@ Append dated notes here during implementation.
   route describes alongside the existing redacted config, daemon status,
   handover, metrics, systemd, datapath, and local network snapshots. Live GCE
   support-bundle evidence is still pending.
+- Added `scripts/gcp-residual-scan.sh` as a read-only post-destroy cleanup gate
+  for disposable GCP validation. It scans Compute instances, routes, firewall
+  rules, addresses, service accounts, and BetterNAT Firestore records for a run
+  name. Live post-destroy evidence is still pending.
 - Opened implementation PRs:
   - main repo: `https://github.com/nowakeai/betternat/pull/1`
   - split provider repo:

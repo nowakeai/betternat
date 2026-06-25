@@ -354,20 +354,20 @@ terraform destroy
 Then scan:
 
 ```sh
-gcloud --project "$BETTERNAT_GCP_PROJECT" compute instances list \
-  --filter="name~${BETTERNAT_GCP_NAME}"
-gcloud --project "$BETTERNAT_GCP_PROJECT" compute routes list \
-  --filter="name~${BETTERNAT_GCP_NAME}"
-gcloud --project "$BETTERNAT_GCP_PROJECT" compute firewall-rules list \
-  --filter="name~${BETTERNAT_GCP_NAME}"
-gcloud --project "$BETTERNAT_GCP_PROJECT" iam service-accounts list \
-  --filter="email~${BETTERNAT_GCP_NAME}"
-gcloud --project "$BETTERNAT_GCP_PROJECT" firestore databases list
+scripts/gcp-residual-scan.sh \
+  --project "$BETTERNAT_GCP_PROJECT" \
+  --name "$BETTERNAT_GCP_NAME" \
+  --database "$BETTERNAT_GCP_DATABASE"
 ```
 
 If `manage_firestore_database = false`, delete only BetterNAT records in the
 existing database. Do not delete shared Firestore databases owned by another
 stack.
+
+The residual scan is read-only. It checks Compute instances, routes, firewall
+rules, addresses, service accounts, and BetterNAT Firestore coordination
+records under the selected gateway name. It exits nonzero when residual items
+are found.
 
 Pass condition:
 

@@ -605,6 +605,10 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
   and configured route describe attempts; live GCE bundle evidence is still
   pending.
 - Cleanup and residual scans include Firestore records and service accounts.
+  `scripts/gcp-residual-scan.sh` now provides a read-only residual gate for
+  Compute instances, routes, firewall rules, addresses, service accounts, and
+  BetterNAT Firestore coordination records; live post-destroy evidence is still
+  pending.
 - Cloud NAT migration and rollback route ownership are documented and tested.
 
 ## Immediate Recommendation
