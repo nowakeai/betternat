@@ -508,6 +508,87 @@ func TestCleanup(t *testing.T) {
 	}
 }
 
+func TestCleanupWaitsForSecurityGroupNetworkInterfaces(t *testing.T) {
+	oldAttempts := securityGroupDependencyWaitAttempts
+	oldInterval := securityGroupDependencyWaitInterval
+	securityGroupDependencyWaitAttempts = 3
+	securityGroupDependencyWaitInterval = 0
+	t.Cleanup(func() {
+		securityGroupDependencyWaitAttempts = oldAttempts
+		securityGroupDependencyWaitInterval = oldInterval
+	})
+
+	ec2Client := &fakeEC2{
+		securityGroupID:  "sg-123",
+		describeGroupIDs: []string{"sg-123"},
+		describeNetworkInterfaceOutputs: []*ec2.DescribeNetworkInterfacesOutput{
+			{
+				NetworkInterfaces: []ec2types.NetworkInterface{
+					{
+						NetworkInterfaceId: awssdk.String("eni-123"),
+						Status:             ec2types.NetworkInterfaceStatusInUse,
+						Description:        awssdk.String("ELB app/betternat"),
+						Attachment:         &ec2types.NetworkInterfaceAttachment{InstanceId: awssdk.String("i-123")},
+					},
+				},
+			},
+			{},
+		},
+	}
+	applier := Applier{EC2: ec2Client, DynamoDB: &fakeDynamoDB{}, IAM: &fakeIAM{}}
+	plan := installplan.Plan{
+		VPCID:             "vpc-123",
+		SecurityGroupName: "betternat-prod-egress-appliance",
+	}
+
+	err := applier.Cleanup(context.Background(), plan, CleanupInputs{})
+	if err != nil {
+		t.Fatalf("cleanup: %v", err)
+	}
+	if ec2Client.describeNetworkInterfacesCalls != 2 {
+		t.Fatalf("expected two dependency checks, got %d", ec2Client.describeNetworkInterfacesCalls)
+	}
+	if ec2Client.deleteSecurityGroupCalls != 1 {
+		t.Fatalf("expected one security group delete, got %d", ec2Client.deleteSecurityGroupCalls)
+	}
+	if awssdk.ToString(ec2Client.describeNetworkInterfacesInputs[0].Filters[0].Name) != "group-id" {
+		t.Fatalf("expected group-id dependency filter: %#v", ec2Client.describeNetworkInterfacesInputs[0])
+	}
+}
+
+func TestCleanupRetriesSecurityGroupDeleteDependencyViolation(t *testing.T) {
+	oldAttempts := securityGroupDependencyWaitAttempts
+	oldInterval := securityGroupDependencyWaitInterval
+	securityGroupDependencyWaitAttempts = 3
+	securityGroupDependencyWaitInterval = 0
+	t.Cleanup(func() {
+		securityGroupDependencyWaitAttempts = oldAttempts
+		securityGroupDependencyWaitInterval = oldInterval
+	})
+
+	ec2Client := &fakeEC2{
+		securityGroupID:           "sg-123",
+		describeGroupIDs:          []string{"sg-123"},
+		deleteSecurityGroupErrors: []error{&smithy.GenericAPIError{Code: "DependencyViolation", Message: "resource has a dependent object"}},
+	}
+	applier := Applier{EC2: ec2Client, DynamoDB: &fakeDynamoDB{}, IAM: &fakeIAM{}}
+	plan := installplan.Plan{
+		VPCID:             "vpc-123",
+		SecurityGroupName: "betternat-prod-egress-appliance",
+	}
+
+	err := applier.Cleanup(context.Background(), plan, CleanupInputs{})
+	if err != nil {
+		t.Fatalf("cleanup: %v", err)
+	}
+	if ec2Client.deleteSecurityGroupCalls != 2 {
+		t.Fatalf("expected retry after DependencyViolation, got %d delete attempts", ec2Client.deleteSecurityGroupCalls)
+	}
+	if ec2Client.describeNetworkInterfacesCalls != 2 {
+		t.Fatalf("expected dependency inspection before each delete, got %d", ec2Client.describeNetworkInterfacesCalls)
+	}
+}
+
 func TestRead(t *testing.T) {
 	ec2Client := &fakeEC2{
 		addresses: []ec2types.Address{
@@ -698,34 +779,39 @@ func (f *fakeIAM) DeleteRole(_ context.Context, params *iam.DeleteRoleInput, _ .
 }
 
 type fakeEC2 struct {
-	allocationID              string
-	launchTemplateID          string
-	publicIP                  string
-	securityGroupID           string
-	authorizeEgressInput      *ec2.AuthorizeSecurityGroupEgressInput
-	authorizeIngressInputs    []*ec2.AuthorizeSecurityGroupIngressInput
-	describeGroupIDs          []string
-	runInstanceIDs            []string
-	addresses                 []ec2types.Address
-	createSecurityGroupError  error
-	allocateInput             *ec2.AllocateAddressInput
-	associateAddressInput     *ec2.AssociateAddressInput
-	createLaunchTemplateInput *ec2.CreateLaunchTemplateInput
-	createSecurityGroupInput  *ec2.CreateSecurityGroupInput
-	deleteLaunchTemplateInput *ec2.DeleteLaunchTemplateInput
-	deleteSecurityGroupInput  *ec2.DeleteSecurityGroupInput
-	describeInstancesInput    *ec2.DescribeInstancesInput
-	createTagsInputs          []*ec2.CreateTagsInput
-	describeAddressesInput    *ec2.DescribeAddressesInput
-	disassociateInput         *ec2.DisassociateAddressInput
-	modifyInputs              []*ec2.ModifyInstanceAttributeInput
-	replaceRouteInput         *ec2.ReplaceRouteInput
-	replaceRouteError         error
-	releaseAddressInput       *ec2.ReleaseAddressInput
-	describeSecurityInput     *ec2.DescribeSecurityGroupsInput
-	describeRouteTablesInput  *ec2.DescribeRouteTablesInput
-	runInputs                 []*ec2.RunInstancesInput
-	terminateInputs           []*ec2.TerminateInstancesInput
+	allocationID                    string
+	launchTemplateID                string
+	publicIP                        string
+	securityGroupID                 string
+	authorizeEgressInput            *ec2.AuthorizeSecurityGroupEgressInput
+	authorizeIngressInputs          []*ec2.AuthorizeSecurityGroupIngressInput
+	describeGroupIDs                []string
+	runInstanceIDs                  []string
+	addresses                       []ec2types.Address
+	createSecurityGroupError        error
+	allocateInput                   *ec2.AllocateAddressInput
+	associateAddressInput           *ec2.AssociateAddressInput
+	createLaunchTemplateInput       *ec2.CreateLaunchTemplateInput
+	createSecurityGroupInput        *ec2.CreateSecurityGroupInput
+	deleteLaunchTemplateInput       *ec2.DeleteLaunchTemplateInput
+	deleteSecurityGroupInput        *ec2.DeleteSecurityGroupInput
+	deleteSecurityGroupCalls        int
+	deleteSecurityGroupErrors       []error
+	describeInstancesInput          *ec2.DescribeInstancesInput
+	describeNetworkInterfaceOutputs []*ec2.DescribeNetworkInterfacesOutput
+	describeNetworkInterfacesCalls  int
+	describeNetworkInterfacesInputs []*ec2.DescribeNetworkInterfacesInput
+	createTagsInputs                []*ec2.CreateTagsInput
+	describeAddressesInput          *ec2.DescribeAddressesInput
+	disassociateInput               *ec2.DisassociateAddressInput
+	modifyInputs                    []*ec2.ModifyInstanceAttributeInput
+	replaceRouteInput               *ec2.ReplaceRouteInput
+	replaceRouteError               error
+	releaseAddressInput             *ec2.ReleaseAddressInput
+	describeSecurityInput           *ec2.DescribeSecurityGroupsInput
+	describeRouteTablesInput        *ec2.DescribeRouteTablesInput
+	runInputs                       []*ec2.RunInstancesInput
+	terminateInputs                 []*ec2.TerminateInstancesInput
 }
 
 func (f *fakeEC2) AuthorizeSecurityGroupEgress(_ context.Context, params *ec2.AuthorizeSecurityGroupEgressInput, _ ...func(*ec2.Options)) (*ec2.AuthorizeSecurityGroupEgressOutput, error) {
@@ -769,6 +855,12 @@ func (f *fakeEC2) CreateTags(_ context.Context, params *ec2.CreateTagsInput, _ .
 
 func (f *fakeEC2) DeleteSecurityGroup(_ context.Context, params *ec2.DeleteSecurityGroupInput, _ ...func(*ec2.Options)) (*ec2.DeleteSecurityGroupOutput, error) {
 	f.deleteSecurityGroupInput = params
+	f.deleteSecurityGroupCalls++
+	if len(f.deleteSecurityGroupErrors) > 0 {
+		err := f.deleteSecurityGroupErrors[0]
+		f.deleteSecurityGroupErrors = f.deleteSecurityGroupErrors[1:]
+		return nil, err
+	}
 	return &ec2.DeleteSecurityGroupOutput{}, nil
 }
 
@@ -785,6 +877,20 @@ func (f *fakeEC2) DescribeAddresses(_ context.Context, params *ec2.DescribeAddre
 func (f *fakeEC2) DescribeInstances(_ context.Context, params *ec2.DescribeInstancesInput, _ ...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error) {
 	f.describeInstancesInput = params
 	return &ec2.DescribeInstancesOutput{}, nil
+}
+
+func (f *fakeEC2) DescribeNetworkInterfaces(_ context.Context, params *ec2.DescribeNetworkInterfacesInput, _ ...func(*ec2.Options)) (*ec2.DescribeNetworkInterfacesOutput, error) {
+	f.describeNetworkInterfacesCalls++
+	f.describeNetworkInterfacesInputs = append(f.describeNetworkInterfacesInputs, params)
+	if len(f.describeNetworkInterfaceOutputs) == 0 {
+		return &ec2.DescribeNetworkInterfacesOutput{}, nil
+	}
+	output := f.describeNetworkInterfaceOutputs[0]
+	f.describeNetworkInterfaceOutputs = f.describeNetworkInterfaceOutputs[1:]
+	if output == nil {
+		return &ec2.DescribeNetworkInterfacesOutput{}, nil
+	}
+	return output, nil
 }
 
 func (f *fakeEC2) DescribeSecurityGroups(_ context.Context, params *ec2.DescribeSecurityGroupsInput, _ ...func(*ec2.Options)) (*ec2.DescribeSecurityGroupsOutput, error) {

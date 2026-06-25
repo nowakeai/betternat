@@ -35,6 +35,7 @@ type EC2API interface {
 	DeleteSecurityGroup(ctx context.Context, params *ec2.DeleteSecurityGroupInput, optFns ...func(*ec2.Options)) (*ec2.DeleteSecurityGroupOutput, error)
 	DescribeAddresses(ctx context.Context, params *ec2.DescribeAddressesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeAddressesOutput, error)
 	DescribeInstances(ctx context.Context, params *ec2.DescribeInstancesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error)
+	DescribeNetworkInterfaces(ctx context.Context, params *ec2.DescribeNetworkInterfacesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeNetworkInterfacesOutput, error)
 	DescribeRouteTables(ctx context.Context, params *ec2.DescribeRouteTablesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error)
 	DescribeSecurityGroups(ctx context.Context, params *ec2.DescribeSecurityGroupsInput, optFns ...func(*ec2.Options)) (*ec2.DescribeSecurityGroupsOutput, error)
 	DisassociateAddress(ctx context.Context, params *ec2.DisassociateAddressInput, optFns ...func(*ec2.Options)) (*ec2.DisassociateAddressOutput, error)
@@ -78,6 +79,11 @@ type Applier struct {
 	DynamoDB    DynamoDBAPI
 	IAM         IAMAPI
 }
+
+var (
+	securityGroupDependencyWaitAttempts = 60
+	securityGroupDependencyWaitInterval = 5 * time.Second
+)
 
 type Inputs struct {
 	ApplianceInstanceIDs map[string]string
@@ -557,28 +563,86 @@ func (a Applier) deleteSecurityGroup(ctx context.Context, plan installplan.Plan)
 	}
 	input := &ec2.DeleteSecurityGroupInput{GroupId: awssdk.String(groupID)}
 	var lastErr error
-	for attempt := 0; attempt < 12; attempt++ {
+	var lastDependencies []string
+	for attempt := 0; attempt < securityGroupDependencyWaitAttempts; attempt++ {
+		dependencies, err := a.securityGroupNetworkInterfaceDependencies(ctx, groupID)
+		if err != nil {
+			return err
+		}
+		if len(dependencies) > 0 {
+			lastDependencies = dependencies
+			lastErr = fmt.Errorf("security group still has network interfaces: %s", strings.Join(dependencies, "; "))
+			if err := waitForSecurityGroupDependency(ctx); err != nil {
+				return err
+			}
+			continue
+		}
+
 		if _, err := a.EC2.DeleteSecurityGroup(ctx, input); err != nil {
 			if isAPIError(err, "InvalidGroup.NotFound") {
 				return nil
 			}
 			if isAPIError(err, "DependencyViolation") {
 				lastErr = err
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-time.After(5 * time.Second):
-					continue
+				if err := waitForSecurityGroupDependency(ctx); err != nil {
+					return err
 				}
+				continue
 			}
 			return fmt.Errorf("delete security group %s: %w", groupID, err)
 		}
 		return nil
 	}
 	if lastErr != nil {
+		if len(lastDependencies) > 0 {
+			return fmt.Errorf("delete security group %s after dependency wait; still attached network interfaces: %s: %w", groupID, strings.Join(lastDependencies, "; "), lastErr)
+		}
 		return fmt.Errorf("delete security group %s after dependency wait: %w", groupID, lastErr)
 	}
 	return nil
+}
+
+func (a Applier) securityGroupNetworkInterfaceDependencies(ctx context.Context, groupID string) ([]string, error) {
+	output, err := a.EC2.DescribeNetworkInterfaces(ctx, &ec2.DescribeNetworkInterfacesInput{
+		Filters: []ec2types.Filter{{Name: awssdk.String("group-id"), Values: []string{groupID}}},
+	})
+	if err != nil {
+		if isAPIError(err, "InvalidGroup.NotFound") {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("describe network interfaces for security group %s: %w", groupID, err)
+	}
+	dependencies := make([]string, 0, len(output.NetworkInterfaces))
+	for _, networkInterface := range output.NetworkInterfaces {
+		parts := []string{awssdk.ToString(networkInterface.NetworkInterfaceId)}
+		if networkInterface.Status != "" {
+			parts = append(parts, string(networkInterface.Status))
+		}
+		if networkInterface.Attachment != nil {
+			if instanceID := awssdk.ToString(networkInterface.Attachment.InstanceId); instanceID != "" {
+				parts = append(parts, "instance="+instanceID)
+			}
+		}
+		if description := awssdk.ToString(networkInterface.Description); description != "" {
+			parts = append(parts, "description="+description)
+		}
+		dependencies = append(dependencies, strings.Join(parts, " "))
+	}
+	return dependencies, nil
+}
+
+func waitForSecurityGroupDependency(ctx context.Context) error {
+	if securityGroupDependencyWaitInterval <= 0 {
+		return ctx.Err()
+	}
+	timer := time.NewTimer(securityGroupDependencyWaitInterval)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func replaceRouteInput(routeTableID string, destinationCIDR string, target string) (*ec2.ReplaceRouteInput, error) {
