@@ -5,6 +5,7 @@ package gcp
 func RuntimeIAMPermissions() []string {
 	return []string{
 		"compute.addresses.get",
+		"compute.addresses.use",
 		"compute.globalOperations.get",
 		"compute.instances.addAccessConfig",
 		"compute.instances.deleteAccessConfig",
@@ -15,6 +16,7 @@ func RuntimeIAMPermissions() []string {
 		"compute.routes.create",
 		"compute.routes.delete",
 		"compute.routes.get",
+		"compute.subnetworks.useExternalIp",
 		"compute.zoneOperations.get",
 		"datastore.databases.get",
 		"datastore.databases.getMetadata",

@@ -341,7 +341,10 @@ For GCP, `route_table_ids` currently means GCP static route names. Existing
 regional static external IPv4 address handover can be rendered with
 `stable_public_identity_address_name` when `enable_agent_ha = true`, but live
 GCE stable-IP handover validation and provider-owned static-address lifecycle
-management remain GA gates.
+management remain GA gates. The gateway subnet must provide Private Google
+Access or an equivalent private path to Google APIs before testing this mode;
+the agent may need to call Compute and Firestore after its temporary external
+access config is removed.
 
 ## Update Behavior
 

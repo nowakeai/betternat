@@ -170,12 +170,19 @@ project custom role scoped to the validation project:
 | Permission | Why |
 | --- | --- |
 | `compute.globalOperations.get` | Wait for route delete/create operations. |
+| `compute.addresses.get` | Resolve the configured regional static external IPv4 address for shared public identity validation. |
+| `compute.addresses.use` | Attach the configured regional static external IPv4 address to the active gateway access config. |
 | `compute.instances.get` | Read gateway instance metadata during route validation and diagnostics. |
+| `compute.instances.addAccessConfig` | Attach a GCP external access config during shared public identity handover. |
+| `compute.instances.deleteAccessConfig` | Detach an old or conflicting GCP external access config during shared public identity handover. |
 | `compute.instances.use` | Use a gateway instance as a static route `nextHopInstance`. |
 | `compute.networks.get` | Read the configured VPC network referenced by route creation. |
+| `compute.networks.updatePolicy` | Validate or repair network policy state required by the GCP HA preflight path. |
 | `compute.routes.create` | Move route ownership to the active gateway by creating the replacement static route. |
 | `compute.routes.delete` | Delete the old static route before recreating it for the new owner. |
 | `compute.routes.get` | Verify the current route target. |
+| `compute.subnetworks.useExternalIp` | Permit the runtime service account to add an external access config on the gateway subnet. |
+| `compute.zoneOperations.get` | Wait for instance access-config attach/detach operations. |
 | `datastore.databases.get` | Open the configured Firestore Native database. |
 | `datastore.entities.create` | Create lease, registry, and handover documents. |
 | `datastore.entities.delete` | Release leases and clean local registry/handover documents. |
@@ -241,4 +248,7 @@ recorded.
 Current GCP limitation: stable public egress IP handover has an implementation
 slice for existing regional static external IPv4 addresses, but live GCE
 handover validation and provider-owned static-address lifecycle management are
-still GA gates.
+still GA gates. The gateway subnet also needs Private Google Access or an
+equivalent private path to Google APIs; otherwise a gateway can lose API access
+after deleting its temporary external access config and before attaching the
+shared static address.

@@ -123,6 +123,7 @@ func TestRuntimeIAMPermissions(t *testing.T) {
 	got := RuntimeIAMPermissions()
 	want := []string{
 		"compute.addresses.get",
+		"compute.addresses.use",
 		"compute.globalOperations.get",
 		"compute.instances.addAccessConfig",
 		"compute.instances.deleteAccessConfig",
@@ -133,6 +134,7 @@ func TestRuntimeIAMPermissions(t *testing.T) {
 		"compute.routes.create",
 		"compute.routes.delete",
 		"compute.routes.get",
+		"compute.subnetworks.useExternalIp",
 		"compute.zoneOperations.get",
 		"datastore.databases.get",
 		"datastore.databases.getMetadata",

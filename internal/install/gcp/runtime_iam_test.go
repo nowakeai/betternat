@@ -30,7 +30,9 @@ func TestRuntimeIAMPermissionsIncludeFirestoreNativeCoordination(t *testing.T) {
 		"datastore.schemas.list",
 		"datastore.statistics.get",
 		"datastore.statistics.list",
+		"compute.addresses.use",
 		"compute.networks.updatePolicy",
+		"compute.subnetworks.useExternalIp",
 		"resourcemanager.projects.get",
 	}
 	for _, permission := range required {
