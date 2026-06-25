@@ -42,12 +42,13 @@ Assumptions: `$0.045/GB` NAT Gateway processing, `$0.045/hour` for one NAT Gatew
 - LoxiLB/eBPF datapath for node-local SNAT.
 - DynamoDB lease/fencing for route and EIP ownership.
 - Prometheus metrics for HA, datapath, traffic counters, and failover state.
-- Terraform provider install UX through `nowakeai/betternat`.
+- AWS Terraform module install UX through `nowakeai/betternat/aws`.
+- Advanced provider resource surface through `nowakeai/betternat`.
 - Rollback-oriented route ownership model for existing VPC adoption.
 
 ## Quick Start
 
-Use the BetterNAT Terraform provider:
+Use the BetterNAT AWS Terraform module:
 
 ```hcl
 terraform {
@@ -58,10 +59,28 @@ terraform {
     }
   }
 }
+
+module "betternat" {
+  source  = "nowakeai/betternat/aws"
+  version = "~> 0.2"
+
+  name   = "prod-egress"
+  vpc_id = module.vpc.vpc_id
+
+  azs                     = module.vpc.azs
+  public_subnet_ids       = module.vpc.public_subnets
+  private_route_table_ids = module.vpc.private_route_table_ids
+
+  private_cidrs = [module.vpc.vpc_cidr_block]
+}
 ```
 
 Provider versions and BetterNAT runtime artifact versions are separate. Use the
 matching provider and runtime versions shown in the current quick start.
+
+The cloud-specific provider resource `betternat_aws_gateway` remains available
+for module authors and advanced users who need the lower-level lifecycle
+primitive directly.
 
 Terraform Registry install is the default path. The GitHub release assets are
 kept for direct artifact inspection and emergency filesystem-mirror installs.

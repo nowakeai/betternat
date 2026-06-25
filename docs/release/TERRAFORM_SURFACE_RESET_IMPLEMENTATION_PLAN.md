@@ -460,3 +460,9 @@ Append dated notes here during implementation.
   `601427795217_AdministratorAccess` is usable, and GCP must be invoked with
   explicit `--project shared-resources-alt`; perform disposable AWS/GCP smoke
   only after PR review and before any release.
+- Opened implementation PRs:
+  - main repo: `https://github.com/nowakeai/betternat/pull/1`
+  - split provider repo:
+    `https://github.com/nowakeai/terraform-provider-betternat/pull/1`
+  - AWS module repo:
+    `https://github.com/nowakeai/terraform-aws-betternat/pull/1`
