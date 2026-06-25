@@ -6,6 +6,11 @@ Last updated: 2026-06-20
 
 BetterNAT can run most unit tests and static CLI smoke checks on macOS, but real datapath behavior requires Linux.
 
+Current product rule: LoxiLB is the supported datapath and BetterNAT has no
+product fallback datapath. The nftables/nf_conntrack layer below is retained
+only to keep legacy diagnostics and parsers healthy while the code is phased
+out; it is not a release acceptance path for AWS, GCP, or future clouds.
+
 This document defines the portable Linux validation target. It should work on any suitable Linux host:
 
 - a local VM such as OrbStack, Lima, Multipass, UTM, or VMware,

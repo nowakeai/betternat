@@ -19,9 +19,12 @@ Provisional product decision:
 
 ```text
 Use LoxiLB as the primary v0 datapath candidate.
-Keep nftables as a mandatory fallback.
+No product fallback datapath. LoxiLB readiness is a release gate.
 Make betternat-agent own rule reconciliation, metrics re-export, and HA.
 ```
+
+Current note as of 2026-06-25: the earlier fallback language in this spike has
+been superseded by `docs/research/055-no-nftables-fallback-decision.md`.
 
 ## Test Environment
 
@@ -271,7 +274,9 @@ Verified:
 
 ## Updated Recommendation
 
-LoxiLB should be the default datapath target for v0 development, with nftables retained as fallback.
+LoxiLB should be the supported datapath target for v0 development, with no
+product fallback datapath. nftables may remain only as legacy diagnostics while
+it is phased out.
 
 Recommended v0 architecture:
 
@@ -287,7 +292,7 @@ LoxiLB
   owns packet datapath and conntrack on the active appliance
 
 nftables
-  remains fallback datapath engine
+  legacy diagnostics only while retained
 ```
 
 Do not claim yet:

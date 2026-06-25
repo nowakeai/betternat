@@ -13,7 +13,7 @@ fck-nat is most useful as a reference for product packaging, AMI operations, doc
 It is less useful as a direct datapath or HA blueprint for BetterNAT because BetterNAT's current direction is:
 
 - LoxiLB-first datapath,
-- nftables fallback,
+- no product fallback datapath; legacy nftables diagnostics only while retained,
 - Terraform provider-owned AWS lifecycle,
 - route/EIP failover,
 - richer observability and rollback.
@@ -179,7 +179,7 @@ fck-nat uses iptables MASQUERADE. BetterNAT should not move backward from LoxiLB
 BetterNAT should keep:
 
 - LoxiLB as primary datapath candidate,
-- nftables as fallback and debug baseline,
+- no product fallback datapath; legacy nftables diagnostics only while retained,
 - no custom eBPF in v0.
 
 ### 3. Shell As The Main Control Plane

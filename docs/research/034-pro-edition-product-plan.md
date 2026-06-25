@@ -30,7 +30,7 @@ Included:
 
 - AMI-based BetterNAT gateway appliance.
 - `betternat-agent`.
-- LoxiLB-first datapath with nftables fallback.
+- LoxiLB datapath with no product fallback datapath.
 - ASG-based self-healing gateway pool.
 - DynamoDB lease/fencing.
 - AWS route replacement.

@@ -11,7 +11,8 @@ The spike proved:
 
 - a private GCE client without a public IP can reach the internet through a
   `canIpForward=true` gateway VM,
-- nftables masquerade is sufficient as the GCP fallback datapath,
+- nftables masquerade worked as historical forwarding substrate evidence, but
+  it is not a GCP fallback datapath or acceptance path,
 - a tagged `0.0.0.0/0` route can be moved from one gateway VM to another for
   new-flow recovery,
 - cleanup is deterministic in a disposable VPC.

@@ -225,7 +225,7 @@ The spike validated this mode with:
 ## nftables Legacy Scope
 
 BetterNAT does not have a product fallback datapath. LoxiLB is the supported
-datapath for AWS and future clouds. If LoxiLB fails a cloud, kernel, or
+datapath for AWS, GCP, and future clouds. If LoxiLB fails a cloud, kernel, or
 packaging acceptance test, that is a product blocker or an explicit architecture
 decision, not a reason to pass the release through nftables.
 
@@ -235,7 +235,7 @@ It must not be expanded as a fallback mode, required by release acceptance, or
 used to down-scope LoxiLB and HA validation. Future cleanup can remove it
 opportunistically.
 
-Scope is intentionally small:
+Legacy scope is intentionally small while the code remains:
 
 - enable IP forwarding,
 - configure `nftables` SNAT or masquerade,

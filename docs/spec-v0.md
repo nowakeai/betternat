@@ -594,8 +594,9 @@ v0 HA acceptance:
 - Active connection preservation is not required.
 
 v0 has no fallback acceptance gate. Users must not be asked to select nftables
-to pass a release, support a cloud, or recover from an unready LoxiLB datapath.
-Existing nftables code is legacy and can be removed gradually.
+to pass a release, support AWS, support GCP, support a future cloud, or recover
+from an unready LoxiLB datapath. Existing nftables code is legacy and can be
+removed gradually.
 
 ## Open Questions
 

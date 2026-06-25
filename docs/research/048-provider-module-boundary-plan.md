@@ -701,7 +701,7 @@ Use the GCP research result as the implementation spike boundary:
 - one private client VM without public IP,
 - one or two BetterNAT gateway VMs with `canIpForward=true`,
 - a route from private subnet egress to the active gateway VM,
-- LoxiLB first, nftables fallback if needed,
+- LoxiLB datapath only; no nftables fallback acceptance path,
 - Firestore transaction or GCS generation-precondition lease backend,
 - optional reserved static external IP test for stable public identity,
 - complete cleanup verification.
@@ -768,63 +768,22 @@ Do not move these into modules:
 Modules can expose inputs for these behaviors, but the provider should own the
 implementation.
 
-## Multi-Cloud Naming
+## Multi-Cloud Naming And Recommendation
 
-The provider is currently named `nowakeai/betternat`, not `nowakeai/betternat-aws`.
-That is the better long-term name if BetterNAT will support more clouds.
+Keep the provider source address as `nowakeai/betternat`; do not rename it to
+`betternat-aws`. Terraform providers can expose multiple cloud-specific
+resources, and BetterNAT should use explicit resources rather than a single
+`betternat_gateway` with `cloud = "aws"` or `cloud = "gcp"`:
 
-Terraform providers can contain multiple resources and multiple cloud-specific
-implementations. Add cloud-specific resources:
+- `betternat_aws_gateway`
+- `betternat_gcp_gateway`
 
-```hcl
-resource "betternat_aws_gateway" "this" {
-  # AWS-specific fields
-}
+Use cloud-specific Registry modules for the product install surface:
 
-resource "betternat_gcp_gateway" "this" {
-  # GCP-specific fields
-}
-```
+- `nowakeai/betternat/aws`
+- `nowakeai/betternat/google`
 
-Do not use one product-level `betternat_gateway` resource with
-`cloud = "aws"` or `cloud = "gcp"`. That approach keeps a single name but makes
-the schema awkward once AWS and GCP require different inputs.
-
-For the next version, choose the clean cloud-specific resource path:
-
-- Add `betternat_aws_gateway`.
-- Add `betternat_gcp_gateway`.
-- Remove or hide `betternat_gateway` before public promotion.
-
-Do not rename the provider. `nowakeai/betternat` can remain the cross-cloud
-BetterNAT provider even if the first resource was AWS-focused.
-
-For modules, use cloud-specific Registry modules:
-
-```text
-nowakeai/betternat/aws
-nowakeai/betternat/google
-```
-
-That split matches Terraform Registry conventions: one product provider can
-back multiple cloud-specific modules.
-
-## Current Recommendation
-
-- Keep the provider source address as `nowakeai/betternat`.
-- Do not rename the provider to `betternat-aws`.
-- Break the unpromoted `v0.1.1` Terraform schema now if needed to get to a
-  cleaner multi-cloud design.
-- Use explicit provider resources: `betternat_aws_gateway` and
-  `betternat_gcp_gateway`.
-- Add an AWS module in the next version and make it the default AWS user install
-  path after it passes the same AWS smoke tests as the provider.
-- Add GCP support under the same provider name, but keep GCP alpha scoped until
-  route failover, public identity behavior, lease backend, and cleanup are
-  validated in a disposable GCP environment.
-- Publish a GCP module as `nowakeai/betternat/google` once the GCP provider
-  resource exists.
-- Keep the provider as the advanced and module-author interface.
-
-This keeps the current GA provider usable while giving BetterNAT a cleaner
-long-term product surface.
+Break the unpromoted `v0.1.1` schema now if needed, make the AWS module the
+default user path after it passes the same smoke gates as the provider, keep GCP
+alpha scoped until disposable HA/datapath/public-identity evidence is complete,
+and keep provider resources as the advanced and module-author interface.

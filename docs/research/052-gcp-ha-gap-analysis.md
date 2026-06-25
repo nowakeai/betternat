@@ -64,12 +64,11 @@ Validated:
 Implemented but not live-validated:
 
 - optional provider-owned Firestore Native database lifecycle,
-- GCP support bundle collection.
+- GCP support bundle collection with live GCE evidence.
 
 Not yet validated or still incomplete:
 
 - GCP public identity handover,
-- LoxiLB counters and restart replay on GCE,
 - raw LoxiLB HA baseline comparison,
 - split-brain, stale-generation, and route-operation failure injection,
 - multi-zone and GKE/private-node topologies,
@@ -114,7 +113,7 @@ nice-to-have polish:
 | Proactive handover | Upgrades, shutdown, Spot/MIG lifecycle, and manual maintenance should move ownership before the old active exits | Generic handover path exists; GCP live path unvalidated | Manual handover and systemd stop on active GCE node produce completed handover records and no route split-brain |
 | Route verification | GCP static route delete/insert is not an atomic AWS `ReplaceRoute` equivalent | GCP provider describes and replaces route | Every mutation verifies target and degrades on Compute API or propagation failure |
 | Stable public identity | Many egress users care about allowlists and source-IP continuity | GCP route-only mode intentionally has non-stable public identity | Either validate an address handover design or state that GCP alpha is non-stable only |
-| Datapath reconciliation | LoxiLB state can be lost after restart; BetterNAT owns desired-state replay | AWS path has this design; GCP must prove LoxiLB directly | LoxiLB on GCE install, counters, and restart replay; nftables is not a BetterNAT acceptance item |
+| Datapath reconciliation | LoxiLB state can be lost after restart; BetterNAT owns desired-state replay | Live GCE evidence passed for counters and restart replay | LoxiLB on GCE install, counters, and restart replay; nftables is not a BetterNAT acceptance item |
 | Peer readiness | A standby must be selected only if it is healthy enough to receive traffic | Registry and peer prepare APIs exist | Handover refuses stale, unhealthy, or wrong-generation standby records in live GCE smoke |
 | Observability | Operators need to see whether HA is working before failure | Metrics/status are provider-neutral, but GCP support bundle not proven | GCP status includes lease, route, datapath, handover, Firestore errors, and Compute operation IDs |
 | Rollback and destroy | Terraform cleanup must not fight or orphan agent-owned route changes | Provider cleanup passed substrate spike | Destroy after agent-owned handover restores/removes provider-owned routes and leaves no residual resources |
@@ -738,7 +737,10 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
 
 ### P1: Datapath And Public Identity
 
-- LoxiLB on GCE validated or explicitly rejected with evidence.
+- LoxiLB on GCE counters and restart replay validated in
+  `docs/research/057-gcp-loxilb-restart-results.md`; live HA may report a short
+  degraded datapath window during LoxiLB restart, then recover active after
+  rule replay.
 - Raw LoxiLB GCP HA behavior compared against BetterNAT-owned route fencing.
 - nftables is excluded from BetterNAT product acceptance.
 - Stable public IP is validated or explicitly not supported in GCP alpha.
@@ -758,8 +760,9 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
   status now compares Firestore lease owner with configured GCP route target,
   live doctor reads Firestore lease state and configured GCP routes for
   `cloud=gcp`, and support bundle collection includes GCP metadata, Firestore
-  database list, and configured route describe attempts. Status, doctor, and
-  history have live GCE evidence; full support-bundle evidence is still pending.
+  database list, and configured route describe attempts. Status, doctor,
+  history, LoxiLB counters, and support-bundle collection have live GCE
+  evidence.
 - Cleanup and residual scans include Firestore records and service accounts.
   `scripts/gcp-residual-scan.sh` now provides a read-only residual gate for
   Compute instances, routes, firewall rules, addresses, service accounts, and
@@ -774,15 +777,14 @@ experimental HA bootstrap path, not the GCP product alpha. BetterNAT's GCP bar
 is agent-owned HA around the datapath, not raw packet forwarding or manually
 driven route replacement.
 
-The next implementation step after the live HA smoke is datapath and failure
-injection validation:
+The next implementation step after the live HA and datapath smoke is raw
+baseline and failure-injection validation:
 
-1. Validate LoxiLB counters and restart replay on GCE.
-2. Run raw LoxiLB-on-GCE HA baseline comparison and split-brain/failure
+1. Run raw LoxiLB-on-GCE HA baseline comparison and split-brain/failure
    injection before promoting the GCP provider resource beyond route-only alpha.
-3. Decide and document the GCP capacity-repair model: unmanaged provider-owned
+2. Decide and document the GCP capacity-repair model: unmanaged provider-owned
    instances for alpha only, or MIG-backed replacement before GA.
-4. Test TCP, UDP, DNS, and long-download behavior across route-only failover.
+3. Test TCP, UDP, DNS, and long-download behavior across route-only failover.
 
 Until then, GCP should remain explicitly marked as route-only alpha work, not a
 complete GCP production contract.

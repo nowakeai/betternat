@@ -3,10 +3,16 @@ package loxilb
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/nowakeai/betternat/internal/config"
 	"github.com/nowakeai/betternat/internal/datapath"
 	"github.com/nowakeai/betternat/internal/localnet"
+)
+
+var (
+	reconcileAttempts = 8
+	reconcileBackoff  = time.Second
 )
 
 type Engine struct {
@@ -43,6 +49,31 @@ func (e *Engine) Reconcile(ctx context.Context, cfg config.DatapathConfig) error
 		return err
 	}
 	cfg = resolved
+	if _, err := desiredRules(cfg); err != nil {
+		return err
+	}
+	var lastErr error
+	attempts := reconcileAttempts
+	if attempts <= 0 {
+		attempts = 1
+	}
+	for attempt := 0; attempt < attempts; attempt++ {
+		if err := e.reconcileOnce(ctx, cfg); err != nil {
+			lastErr = err
+			if attempt+1 == attempts {
+				break
+			}
+			if sleepErr := sleepContext(ctx, reconcileBackoff); sleepErr != nil {
+				return lastErr
+			}
+			continue
+		}
+		return nil
+	}
+	return lastErr
+}
+
+func (e *Engine) reconcileOnce(ctx context.Context, cfg config.DatapathConfig) error {
 	if err := e.EnsureReady(ctx, cfg); err != nil {
 		return err
 	}
@@ -55,6 +86,20 @@ func (e *Engine) Reconcile(ctx context.Context, cfg config.DatapathConfig) error
 		return err
 	}
 	return e.applyMissingRules(ctx, cfg, current)
+}
+
+func sleepContext(ctx context.Context, delay time.Duration) error {
+	if delay <= 0 {
+		return ctx.Err()
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func (e *Engine) resolveSNATTo(cfg config.DatapathConfig) (config.DatapathConfig, error) {

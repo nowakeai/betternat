@@ -2,6 +2,10 @@
 
 Date: 2026-06-19
 
+Current note as of 2026-06-25: fallback recommendations in this evaluation are
+superseded. BetterNAT now has no product fallback datapath; see
+`docs/research/055-no-nftables-fallback-decision.md`.
+
 ## Question
 
 Could LoxiLB be used as the core datapath or HA foundation for BetterNAT?
@@ -12,7 +16,8 @@ LoxiLB should be the primary BetterNAT v0 datapath target.
 
 The AWS spikes validated the exact route-through NAT Gateway replacement use case: standalone LoxiLB can SNAT private-subnet traffic, preserve a stable EIP for new connections after EIP + `ReplaceRoute` failover, handle TCP/HTTPS/DNS/UDP, and expose useful firewall/conntrack state for BetterNAT observability.
 
-nftables/nf_conntrack should remain a mandatory fallback, but not the main product investment.
+nftables/nf_conntrack should remain only as legacy diagnostic code while it is
+phased out, not as a product fallback.
 
 It is stronger than the earlier "study only" candidates because it already has:
 
@@ -362,12 +367,10 @@ LoxiLB:
   owns datapath conntrack/maps
 ```
 
-Keep nftables fallback:
+Do not add nftables fallback UX:
 
 ```hcl
-resource "betternat_gateway" "egress" {
-  datapath_engine = "loxilb" # or "nftables"
-}
+datapath_engine = "loxilb"
 ```
 
 ## Decision

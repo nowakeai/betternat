@@ -13,11 +13,17 @@ For BetterNAT, should the NAT datapath be built on:
 
 ## Short Answer
 
-Current decision as of 2026-06-20:
+Current decision as of 2026-06-25:
 
-This comparison is superseded by the LoxiLB spikes. The default v0 datapath should be LoxiLB standalone egress SNAT. `nftables` + `nf_conntrack` remains the fallback engine. Custom eBPF NAT and VPP remain deferred.
+This comparison is superseded by the LoxiLB spikes and the no-fallback
+decision. The supported v0 datapath is LoxiLB standalone egress SNAT.
+`nftables` + `nf_conntrack` may remain only as legacy diagnostic code while it
+is phased out. Custom eBPF NAT and VPP remain deferred.
 
-Superseding architecture: `docs/architecture.md`.
+Superseded fallback note: BetterNAT no longer has a product fallback datapath.
+This comparison is retained as historical research only. The current sources of
+truth are `docs/architecture.md`, `docs/spec-v0.md`, and
+`docs/research/055-no-nftables-fallback-decision.md`.
 
 Use a layered strategy:
 
@@ -25,8 +31,8 @@ Use a layered strategy:
 Default v0 datapath:
   LoxiLB standalone egress SNAT
 
-Fallback v0 datapath:
-  nftables + nf_conntrack
+Product fallback datapath:
+  none
 
 Default v1 observability:
   custom eBPF flow accounting
@@ -387,7 +393,7 @@ Keep VPP as a separate research branch or future "performance edition." Do not u
 
 ```text
 primary datapath: LoxiLB standalone egress SNAT
-fallback datapath: nftables + nf_conntrack
+product fallback datapath: none
 control: Go AWS failover agent
 metrics: BetterNAT exporter from LoxiLB counters/conntrack, plus node/interface metrics
 UX: Terraform + AMI/bootstrap + doctor + rollback
@@ -420,7 +426,7 @@ Goal:
 ```text
 datapath: LoxiLB
 observability: normalized Prometheus exporter, top-N, cost attribution
-benchmarks: LoxiLB vs nftables fallback capacity profiles
+benchmarks: LoxiLB capacity profiles; legacy nftables diagnostics only
 ```
 
 Goal:
@@ -470,7 +476,10 @@ The technical stack belongs in an architecture section, not the first sentence.
 
 Use this wording in design docs and implementation notes:
 
-> BetterNAT uses LoxiLB as its primary standalone egress NAT datapath, keeps Linux nftables/nf_conntrack as a conservative fallback, and puts HA, metrics, cost attribution, and Terraform UX in BetterNAT-owned control-plane components.
+> BetterNAT uses LoxiLB as its supported standalone egress NAT datapath, keeps
+> legacy Linux nftables/nf_conntrack code only while it is phased out, and puts
+> HA, metrics, cost attribution, and Terraform UX in BetterNAT-owned
+> control-plane components.
 
 ### Avoid
 
@@ -489,7 +498,7 @@ That is accurate, but it is not a strong product headline for the target user.
 Use these labels:
 
 - **Primary datapath**: LoxiLB standalone egress SNAT.
-- **Fallback datapath**: Linux nftables/nf_conntrack.
+- **Product fallback datapath**: none.
 - **Observability**: BetterNAT metrics exporter using LoxiLB counters/conntrack, with optional custom eBPF later.
 - **Control plane**: Go AWS failover agent.
 - **Deployment**: Terraform + AMI.

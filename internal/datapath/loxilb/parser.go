@@ -59,7 +59,8 @@ func isEmptyFirewallOutput(data []byte) bool {
 	text := strings.ToLower(strings.TrimSpace(string(data)))
 	return strings.HasPrefix(text, "error") &&
 		(strings.Contains(text, "no") || strings.Contains(text, "empty")) &&
-		strings.Contains(text, "firewall")
+		(strings.Contains(text, "firewall") || strings.Contains(text, "fw")) &&
+		strings.Contains(text, "rule")
 }
 
 func parseFirewallCounters(data []byte) (datapath.Counters, error) {

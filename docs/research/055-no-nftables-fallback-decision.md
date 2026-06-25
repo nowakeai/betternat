@@ -11,8 +11,8 @@ packaging, or release acceptance gate, that is a product blocker or a new
 architecture decision. It must not be bypassed by passing the release with
 nftables.
 
-This applies to all clouds and all release gates. It is not a GCP-only
-decision.
+This applies to all clouds, all installation modes, and all release gates. It
+is not a GCP-only decision.
 
 ## Current Codebase Treatment
 

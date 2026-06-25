@@ -233,7 +233,7 @@ Done when:
 
 ## Phase 4: GCP Spike
 
-Status: `route-only live HA proof complete; datapath counters, raw baseline, and failure injection pending`
+Status: `route-only live HA and LoxiLB datapath proof complete; raw baseline and failure injection pending`
 
 Goal: validate whether GCP can support the BetterNAT product model before
 committing to a production resource.
@@ -261,7 +261,7 @@ Tasks:
 - [x] Define cleanup checklist.
 - [x] Validate gateway VM forwarding.
 - [x] Validate private client internet egress.
-- [ ] Validate LoxiLB counters.
+- [x] Validate LoxiLB counters.
 - [x] Validate route replacement to standby.
 - [x] Measure new-flow recovery time for startup-script client probes.
 - [ ] Validate or reject reserved external IP handover.
@@ -307,7 +307,7 @@ Done when:
 
 ## Phase 5: GCP Provider Alpha
 
-Status: `live route-only HA smoke passed; LoxiLB counters/restart, raw LoxiLB baseline, packaging, and release-contract validation pending`
+Status: `live route-only HA smoke and LoxiLB restart proof passed; raw LoxiLB baseline, packaging, and release-contract validation pending`
 
 Goal: expose a GCP alpha resource only after the spike proves the minimum
 control-plane behavior.
@@ -355,7 +355,7 @@ GCP validation:
 - [x] Two-agent lease-fenced route mutation.
 - [x] Passive failover after active crash.
 - [x] Proactive handover.
-- [ ] LoxiLB-on-GCE datapath counters and restart reconciliation.
+- [x] LoxiLB-on-GCE datapath counters and restart reconciliation.
 - [ ] Raw LoxiLB HA baseline compared against BetterNAT-owned route fencing,
   rollback, IAM, status, and cleanup.
 - [ ] GCP failure injection for route delete/insert, Compute operation polling,
@@ -598,8 +598,9 @@ Append dated notes here during implementation.
 - Extended `betternat support bundle` for `cloud=gcp`: bundles now attempt
   best-effort GCE metadata identity, Firestore database list, and configured
   route describes alongside the existing redacted config, daemon status,
-  handover, metrics, systemd, datapath, and local network snapshots. Live GCE
-  support-bundle evidence is still pending.
+  handover, metrics, systemd, datapath, and local network snapshots. Follow-up
+  live GCE support-bundle evidence passed in
+  `docs/research/057-gcp-loxilb-restart-results.md`.
 - Added `scripts/gcp-residual-scan.sh` as a read-only post-destroy cleanup gate
   for disposable GCP validation. It scans Compute instances, routes, firewall
   rules, addresses, service accounts, and BetterNAT Firestore records for a run
@@ -665,3 +666,15 @@ Append dated notes here during implementation.
   the active route target. Terraform destroy, bucket deletion, Firestore record
   cleanup, and residual scan passed. Evidence is recorded in
   `docs/research/056-gcp-proactive-handover-results.md`.
+- Ran disposable GCP LoxiLB datapath validation in `smooth-calling-490406-d9`
+  with run ID `bnat-gcp-dp-20260625100635`. Live GCE evidence showed LoxiLB
+  firewall counters increasing for private-client egress, Prometheus counter
+  export, source-IP probe success, and rule replay after active LoxiLB restart.
+  During container restart the active agent may report a short `DEGRADED`
+  window while LoxiLB CLI/API output is warming up; route ownership remained on
+  the active gateway and recovered to `ACTIVE` after the rule was replayed.
+  Support bundle collection captured GCP metadata, Firestore database listing,
+  configured route describe output, LoxiLB firewall state, metrics, status, and
+  systemd logs. Terraform destroy, bucket deletion, manual cleanup of
+  run-scoped Firestore handover history, and residual scan passed. Evidence is
+  recorded in `docs/research/057-gcp-loxilb-restart-results.md`.

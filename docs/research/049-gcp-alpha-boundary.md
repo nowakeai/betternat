@@ -5,8 +5,10 @@ Date: 2026-06-25
 ## Summary
 
 GCP support is feasible but not a provider-schema-only change. A disposable GCP
-spike has validated forwarding, nftables masquerade, tagged static route
-replacement, and cleanup. It has not validated LoxiLB on GCE, BetterNAT agent
+spike has validated forwarding, tagged static route replacement, and cleanup.
+The nftables masquerade part of that spike is historical substrate evidence,
+not a product fallback or GCP acceptance path. It has not validated BetterNAT
+agent
 coordination, stable public IP handover, or production GKE route migration.
 
 The provider may expose a narrow alpha `betternat_gcp_gateway` resource for the
@@ -34,7 +36,7 @@ An alpha should start with:
 - single region,
 - single-zone HA group,
 - GCE gateway VMs with `canIpForward=true`,
-- LoxiLB primary datapath and nftables fallback,
+- LoxiLB datapath only; no nftables fallback acceptance path,
 - static route replacement for new-flow recovery,
 - Firestore or GCS conditional-write coordination,
 - explicit cleanup and residual scans.

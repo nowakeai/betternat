@@ -87,7 +87,7 @@ These documents guide contributors and agents working in the repo.
 - [dev/AI_WORKFLOW.md](dev/AI_WORKFLOW.md) — AI-assisted workflow, validation ladder, documentation update rules, and product bias.
 - [dev/DEPENDENCY_POLICY.md](dev/DEPENDENCY_POLICY.md) — Dependency freshness, mature-component preference, and upgrade policy.
 - [dev/LOCAL_VM_TEST_MATRIX.md](dev/LOCAL_VM_TEST_MATRIX.md) — Local VM test matrix and AWS boundaries.
-- [dev/LINUX_DATAPATH_VALIDATION.md](dev/LINUX_DATAPATH_VALIDATION.md) — Environment-agnostic Linux validation plan for nftables, conntrack, and LoxiLB.
+- [dev/LINUX_DATAPATH_VALIDATION.md](dev/LINUX_DATAPATH_VALIDATION.md) — Environment-agnostic Linux validation plan for LoxiLB plus legacy nftables/conntrack diagnostics while retained.
 - [dev/TERRAFORM_PROVIDER_LOCAL_TESTING.md](dev/TERRAFORM_PROVIDER_LOCAL_TESTING.md) — Local provider testing layers: Go tests, Terraform CLI dev overrides, LocalStack, and AWS acceptance.
 - [dev/USER_DOCUMENTATION_GUIDE.md](dev/USER_DOCUMENTATION_GUIDE.md) — User-facing documentation rules based on fck-nat and LoxiLB references.
 
@@ -131,6 +131,7 @@ Read these first when revisiting product or architecture direction:
 - [research/054-gcp-agent-ha-smoke-results.md](research/054-gcp-agent-ha-smoke-results.md) — Live GCP two-agent HA smoke covering Firestore ownership, route repair, passive failover, cleanup, and remaining GCP alpha gaps.
 - [research/055-no-nftables-fallback-decision.md](research/055-no-nftables-fallback-decision.md) — Decision record that BetterNAT has no product nftables fallback; legacy code may remain only while phased out.
 - [research/056-gcp-proactive-handover-results.md](research/056-gcp-proactive-handover-results.md) — Live GCP proactive handover validation, lease-renewal fix, Firestore handover history support, client egress, and cleanup.
+- [research/057-gcp-loxilb-restart-results.md](research/057-gcp-loxilb-restart-results.md) — Live GCP LoxiLB datapath counter, restart replay, support bundle, and cleanup validation.
 
 ## Supporting Research
 

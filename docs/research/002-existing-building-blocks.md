@@ -8,11 +8,17 @@ Besides Cilium/Hubble, what existing wheels can BetterNAT reuse for datapath, ob
 
 ## Short Answer
 
-Current decision as of 2026-06-20:
+Current decision as of 2026-06-25:
 
-The v0 architecture is now LoxiLB-first. Standalone LoxiLB passed AWS route-through egress NAT, DNS/UDP, high-response download, and EIP + `ReplaceRoute` failover spikes. `nftables` + `nf_conntrack` remains a mandatory fallback and debugging baseline, but it is no longer the primary datapath investment.
+The v0 architecture is now LoxiLB-first with no product fallback datapath.
+Standalone LoxiLB passed AWS route-through egress NAT, DNS/UDP, high-response
+download, and EIP + `ReplaceRoute` failover spikes. `nftables` +
+`nf_conntrack` may remain only as legacy diagnostic code while it is phased out.
 
-Superseding architecture: `docs/architecture.md`.
+Superseded fallback note: BetterNAT no longer has a product fallback datapath.
+The current sources of truth are `docs/architecture.md`, `docs/spec-v0.md`,
+and `docs/research/055-no-nftables-fallback-decision.md`. Older fallback
+language in this document is design history only.
 
 There are useful existing components, but no obvious turnkey open-source "AWS NAT Gateway replacement with eBPF observability and EIP failover."
 
@@ -316,7 +322,7 @@ Forwarding remains nftables.
 Add optional fast path:
 
 - TC eBPF SNAT/DNAT for selected flows.
-- Keep nftables fallback.
+- Keep legacy nftables diagnostics stable only while the code remains.
 - Benchmark before enabling by default.
 
 ### Version 3 / Alternate Edition

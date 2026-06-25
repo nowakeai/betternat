@@ -84,7 +84,7 @@ flowchart LR
   agent -->|AssociateAddress| eip
   agent -->|ReplaceRoute| rt
   agent -->|apply/reconcile SNAT rule| loxi
-  agent -->|fallback SNAT rule| nft
+  agent -->|legacy diagnostics only| nft
   agent -->|export metrics| prom
 
   loxi -->|firewall counters / conntrack| agent
@@ -98,7 +98,8 @@ Ownership boundary:
 | Terraform state and install lifecycle | `terraform-provider-betternat` |
 | Runtime HA, lease, AWS failover | `betternat-agent` |
 | Primary packet datapath | LoxiLB |
-| Fallback packet datapath | nftables/nf_conntrack |
+| Product fallback datapath | None; LoxiLB readiness is a release gate |
+| Legacy diagnostics while retained | nftables/nf_conntrack |
 | Metrics normalization | `betternat-agent` |
 | Cloud primitives | AWS APIs |
 

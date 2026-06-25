@@ -3,12 +3,18 @@ package loxilb
 import "testing"
 
 func TestParseFirewallTreatsEmptyFirewallOutputAsNoRules(t *testing.T) {
-	rules, err := parseFirewall([]byte("Error: no firewall rules found\n"))
-	if err != nil {
-		t.Fatalf("parse empty firewall output: %v", err)
-	}
-	if len(rules) != 0 {
-		t.Fatalf("expected no rules, got %#v", rules)
+	for _, output := range []string{
+		"Error: no firewall rules found\n",
+		"Error: no FW rules found\n",
+		"Error: empty firewall rule list\n",
+	} {
+		rules, err := parseFirewall([]byte(output))
+		if err != nil {
+			t.Fatalf("parse empty firewall output %q: %v", output, err)
+		}
+		if len(rules) != 0 {
+			t.Fatalf("expected no rules for %q, got %#v", output, rules)
+		}
 	}
 }
 

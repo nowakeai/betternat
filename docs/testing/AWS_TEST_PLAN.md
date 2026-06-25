@@ -6,10 +6,10 @@ Last updated: 2026-06-20
 
 This document defines the AWS integration tests that local VM validation cannot prove.
 
-Local VM tests cover Linux build behavior, legacy nftables/nf_conntrack code
-while retained, basic agent reconciliation, metrics rendering, and local
-HA/lease simulations. AWS tests must prove the cloud control plane and real
-LoxiLB appliance datapath:
+Local VM tests cover Linux build behavior, legacy nftables/nf_conntrack
+diagnostics while retained, basic agent reconciliation, metrics rendering, and
+local HA/lease simulations. AWS tests must prove the cloud control plane and
+real LoxiLB appliance datapath; nftables is not a fallback acceptance path:
 
 - `ec2:ReplaceRoute`,
 - EIP association/reassociation and stable public egress IP,
