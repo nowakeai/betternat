@@ -693,3 +693,11 @@ Append dated notes here during implementation.
   service-account lifecycle, IAM binding cleanup, database deletion, bucket
   deletion, and residual scan. Evidence is recorded in
   `docs/research/058-gcp-provider-lifecycle-results.md`.
+- Ran disposable GCP route-only protocol failover validation in
+  `smooth-calling-490406-d9` with run ID `bnat-gcp-proto-20260625114222`.
+  Private-client TCP check-IP, HTTPS status, UDP DNS, and 1 MiB HTTPS download
+  worked before and after proactive handover from `gw-b` to `gw-a`; the
+  continuous new-flow probe recorded `80` samples, `74` ok, `6` failed, one
+  public-IP switch from `34.20.164.68` to `34.94.153.80`, and final residual
+  scan passed. Evidence is recorded in
+  `docs/research/059-gcp-protocol-failover-results.md`.

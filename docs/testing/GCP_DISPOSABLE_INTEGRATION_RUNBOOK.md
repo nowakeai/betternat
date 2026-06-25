@@ -334,6 +334,25 @@ Pass condition:
 - lease generation transfers to the standby,
 - old active does not keep repairing the route back.
 
+For route-only protocol coverage, run the protocol failover smoke from the
+operator host after two-agent HA is stable:
+
+```sh
+scripts/gcp-protocol-failover-smoke.sh \
+  --project "$BETTERNAT_GCP_PROJECT" \
+  --zone "$BETTERNAT_GCP_ZONE" \
+  --name "$BETTERNAT_GCP_NAME" \
+  --ssh-mode external \
+  --client-access proxy-gateway \
+  --samples 80 \
+  --interval 0.5 \
+  --output-dir "tmp/${BETTERNAT_GCP_NAME}/protocol-smoke"
+```
+
+Use `--ssh-mode iap --client-access direct` only when IAP SSH is authorized for
+the private client. `proxy-gateway` still runs probes on the private client; it
+only uses a gateway SSH proxy for operator access.
+
 ## Datapath Restart
 
 On the active node, restart LoxiLB or the selected datapath service:

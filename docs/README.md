@@ -133,6 +133,7 @@ Read these first when revisiting product or architecture direction:
 - [research/056-gcp-proactive-handover-results.md](research/056-gcp-proactive-handover-results.md) — Live GCP proactive handover validation, lease-renewal fix, Firestore handover history support, client egress, and cleanup.
 - [research/057-gcp-loxilb-restart-results.md](research/057-gcp-loxilb-restart-results.md) — Live GCP LoxiLB datapath counter, restart replay, support bundle, and cleanup validation.
 - [research/058-gcp-provider-lifecycle-results.md](research/058-gcp-provider-lifecycle-results.md) — Live GCP provider-owned runtime IAM, service-account, Firestore database lifecycle validation and per-gateway role fix.
+- [research/059-gcp-protocol-failover-results.md](research/059-gcp-protocol-failover-results.md) — Live GCP route-only protocol failover validation for TCP, HTTPS, UDP DNS, long download, public-IP switch, and cleanup.
 
 ## Supporting Research
 
