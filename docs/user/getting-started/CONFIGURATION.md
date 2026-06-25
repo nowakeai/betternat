@@ -239,6 +239,37 @@ resource "betternat_gcp_gateway" "egress" {
 Private client VMs must have the configured `client_tag` and no broader route
 with a higher priority that bypasses the BetterNAT route.
 
+Experimental provider-rendered GCP agent HA bootstrap is available behind an
+explicit switch:
+
+```hcl
+resource "betternat_gcp_gateway" "egress" {
+  name       = "lab-egress"
+  project_id = "shared-resources-alt"
+  region     = "us-west2"
+  zone       = "us-west2-a"
+
+  network    = google_compute_network.lab.name
+  subnetwork = google_compute_subnetwork.lab.name
+  client_tag = "lab-private-client"
+
+  private_cidrs = ["10.91.0.0/24"]
+
+  enable_agent_ha       = true
+  firestore_database_id = "(default)"
+  betternat_version     = "v0.1.0"
+}
+```
+
+When `enable_agent_ha = true`, the provider renders `agent_config_json`,
+`agent_config_hash`, `peer_api_auth_token`, runtime artifact URLs/checksums,
+and `startup_script` for a Firestore-backed, route-only agent HA smoke.
+Explicit `agent_binary_url`, `agent_binary_sha256`, `cli_binary_url`, and
+`cli_binary_sha256` overrides are supported for local mirrors and unreleased
+test builds. This path is still experimental until live two-agent route
+fencing, passive failover, proactive handover, LoxiLB-on-GCE, IAM, and cleanup
+evidence are complete.
+
 Experimental GCP agent HA config uses Firestore coordination and route-only
 public identity:
 

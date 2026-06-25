@@ -2,17 +2,24 @@ package tfprovider
 
 import (
 	"context"
+	cryptorand "crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	gcompute "google.golang.org/api/compute/v1"
 
+	"github.com/nowakeai/betternat/internal/bootstrap"
 	gcpinstall "github.com/nowakeai/betternat/internal/install/gcp"
+	"github.com/nowakeai/betternat/internal/provider"
 )
 
 var _ resource.Resource = (*GCPGatewayResource)(nil)
@@ -20,27 +27,39 @@ var _ resource.Resource = (*GCPGatewayResource)(nil)
 type GCPGatewayResource struct{}
 
 type GCPGatewayResourceModel struct {
-	ID              types.String `tfsdk:"id"`
-	Name            types.String `tfsdk:"name"`
-	ProjectID       types.String `tfsdk:"project_id"`
-	Region          types.String `tfsdk:"region"`
-	Zone            types.String `tfsdk:"zone"`
-	Network         types.String `tfsdk:"network"`
-	Subnetwork      types.String `tfsdk:"subnetwork"`
-	ClientTag       types.String `tfsdk:"client_tag"`
-	RouteName       types.String `tfsdk:"route_name"`
-	RoutePriority   types.Int64  `tfsdk:"route_priority"`
-	RouteDestRange  types.String `tfsdk:"route_destination_cidr"`
-	MachineType     types.String `tfsdk:"machine_type"`
-	ImageProject    types.String `tfsdk:"image_project"`
-	ImageFamily     types.String `tfsdk:"image_family"`
-	GatewayCount    types.Int64  `tfsdk:"gateway_count"`
-	PrivateCIDRs    types.List   `tfsdk:"private_cidrs"`
-	StartupScript   types.String `tfsdk:"startup_script"`
-	GatewayStatuses types.Map    `tfsdk:"gateway_statuses"`
-	EgressPublicIPs types.Map    `tfsdk:"egress_public_ips"`
-	RouteTarget     types.String `tfsdk:"route_target"`
-	Status          types.String `tfsdk:"status"`
+	ID                  types.String `tfsdk:"id"`
+	Name                types.String `tfsdk:"name"`
+	ProjectID           types.String `tfsdk:"project_id"`
+	Region              types.String `tfsdk:"region"`
+	Zone                types.String `tfsdk:"zone"`
+	Network             types.String `tfsdk:"network"`
+	Subnetwork          types.String `tfsdk:"subnetwork"`
+	ClientTag           types.String `tfsdk:"client_tag"`
+	RouteName           types.String `tfsdk:"route_name"`
+	RoutePriority       types.Int64  `tfsdk:"route_priority"`
+	RouteDestRange      types.String `tfsdk:"route_destination_cidr"`
+	MachineType         types.String `tfsdk:"machine_type"`
+	ImageProject        types.String `tfsdk:"image_project"`
+	ImageFamily         types.String `tfsdk:"image_family"`
+	GatewayCount        types.Int64  `tfsdk:"gateway_count"`
+	PrivateCIDRs        types.List   `tfsdk:"private_cidrs"`
+	EnableAgentHA       types.Bool   `tfsdk:"enable_agent_ha"`
+	BetterNATVersion    types.String `tfsdk:"betternat_version"`
+	AgentBinaryURL      types.String `tfsdk:"agent_binary_url"`
+	AgentBinarySHA256   types.String `tfsdk:"agent_binary_sha256"`
+	CLIBinaryURL        types.String `tfsdk:"cli_binary_url"`
+	CLIBinarySHA256     types.String `tfsdk:"cli_binary_sha256"`
+	LoxiCMDBinaryURL    types.String `tfsdk:"loxicmd_binary_url"`
+	LoxiCMDBinarySHA256 types.String `tfsdk:"loxicmd_binary_sha256"`
+	FirestoreDatabaseID types.String `tfsdk:"firestore_database_id"`
+	PeerAPIAuthToken    types.String `tfsdk:"peer_api_auth_token"`
+	AgentConfigJSON     types.String `tfsdk:"agent_config_json"`
+	AgentConfigHash     types.String `tfsdk:"agent_config_hash"`
+	StartupScript       types.String `tfsdk:"startup_script"`
+	GatewayStatuses     types.Map    `tfsdk:"gateway_statuses"`
+	EgressPublicIPs     types.Map    `tfsdk:"egress_public_ips"`
+	RouteTarget         types.String `tfsdk:"route_target"`
+	Status              types.String `tfsdk:"status"`
 }
 
 func NewGCPGatewayResource() resource.Resource {
@@ -53,7 +72,7 @@ func (r *GCPGatewayResource) Metadata(_ context.Context, req resource.MetadataRe
 
 func (r *GCPGatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "BetterNAT GCP alpha gateway resource. Manages GCE forwarding gateway VMs and a tagged default route. This alpha path validates GCP forwarding and route replacement only; it does not yet provide BetterNAT agent lease coordination or stable public IP handover.",
+		MarkdownDescription: "BetterNAT GCP alpha gateway resource. By default this manages GCE forwarding gateway VMs and a tagged default route for substrate validation. The experimental enable_agent_ha path renders BetterNAT agent bootstrap for Firestore-backed route-only HA, but live two-agent HA validation and stable public IP handover are still pending.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{Computed: true},
 			"name": schema.StringAttribute{
@@ -114,6 +133,62 @@ func (r *GCPGatewayResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Required:            true,
 				MarkdownDescription: "Private CIDR ranges to masquerade on gateway instances.",
 			},
+			"enable_agent_ha": schema.BoolAttribute{
+				Optional:            true,
+				Computed:            true,
+				Default:             booldefault.StaticBool(false),
+				MarkdownDescription: "Experimental. When true, renders BetterNAT agent config and cloud-init user data for GCP route-only HA using Firestore coordination. This remains a validation path until live two-agent HA evidence is complete.",
+			},
+			"betternat_version": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "BetterNAT runtime release tag used to derive linux_amd64 agent/CLI artifact URLs and checksums when enable_agent_ha is true.",
+			},
+			"agent_binary_url": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				Sensitive:           true,
+				MarkdownDescription: "Optional URL for the betternat-agent binary used by the GCP agent HA bootstrap path.",
+			},
+			"agent_binary_sha256": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Optional SHA256 checksum for agent_binary_url.",
+			},
+			"cli_binary_url": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				Sensitive:           true,
+				MarkdownDescription: "Optional URL for the BetterNAT CLI binary used by the GCP agent HA bootstrap path.",
+			},
+			"cli_binary_sha256": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Optional SHA256 checksum for cli_binary_url.",
+			},
+			"loxicmd_binary_url": schema.StringAttribute{
+				Optional:  true,
+				Sensitive: true,
+			},
+			"loxicmd_binary_sha256": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "Optional SHA256 checksum for loxicmd_binary_url.",
+			},
+			"firestore_database_id": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				Default:             stringdefault.StaticString("(default)"),
+				MarkdownDescription: "Firestore Native database ID used by the experimental GCP agent HA path.",
+			},
+			"peer_api_auth_token": schema.StringAttribute{
+				Computed:            true,
+				Sensitive:           true,
+				MarkdownDescription: "Provider-generated bearer token rendered into the experimental GCP agent HA config for authenticated peer handover coordination.",
+			},
+			"agent_config_json": schema.StringAttribute{
+				Computed:  true,
+				Sensitive: true,
+			},
+			"agent_config_hash": schema.StringAttribute{Computed: true},
 			"startup_script":    schema.StringAttribute{Computed: true, Sensitive: true},
 			"gateway_statuses":  schema.MapAttribute{ElementType: types.StringType, Computed: true},
 			"egress_public_ips": schema.MapAttribute{ElementType: types.StringType, Computed: true},
@@ -129,7 +204,7 @@ func (r *GCPGatewayResource) Create(ctx context.Context, req resource.CreateRequ
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	applier, inputs, err := gcpApplierAndInputs(ctx, plan)
+	applier, inputs, err := gcpApplierAndInputs(ctx, &plan)
 	if err != nil {
 		resp.Diagnostics.AddError("Configure GCP gateway", err.Error())
 		return
@@ -154,7 +229,7 @@ func (r *GCPGatewayResource) Read(ctx context.Context, req resource.ReadRequest,
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	applier, inputs, err := gcpApplierAndInputs(ctx, state)
+	applier, inputs, err := gcpApplierAndInputs(ctx, &state)
 	if err != nil {
 		resp.Diagnostics.AddError("Configure GCP gateway", err.Error())
 		return
@@ -185,7 +260,7 @@ func (r *GCPGatewayResource) Delete(ctx context.Context, req resource.DeleteRequ
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	applier, inputs, err := gcpApplierAndInputs(ctx, state)
+	applier, inputs, err := gcpApplierAndInputs(ctx, &state)
 	if err != nil {
 		resp.Diagnostics.AddError("Configure GCP gateway cleanup", err.Error())
 		return
@@ -195,7 +270,7 @@ func (r *GCPGatewayResource) Delete(ctx context.Context, req resource.DeleteRequ
 	}
 }
 
-func gcpApplierAndInputs(ctx context.Context, model GCPGatewayResourceModel) (gcpinstall.Applier, gcpinstall.Inputs, error) {
+func gcpApplierAndInputs(ctx context.Context, model *GCPGatewayResourceModel) (gcpinstall.Applier, gcpinstall.Inputs, error) {
 	privateCIDRs, err := listStrings(ctx, model.PrivateCIDRs)
 	if err != nil {
 		return gcpinstall.Applier{}, gcpinstall.Inputs{}, err
@@ -204,13 +279,17 @@ func gcpApplierAndInputs(ctx context.Context, model GCPGatewayResourceModel) (gc
 	if err != nil {
 		return gcpinstall.Applier{}, gcpinstall.Inputs{}, fmt.Errorf("create GCP compute service: %w", err)
 	}
-	inputs := gcpInputs(model, privateCIDRs)
+	inputs := gcpInputs(*model, privateCIDRs)
+	if err := enrichGCPAgentBootstrap(model, &inputs, privateCIDRs); err != nil {
+		return gcpinstall.Applier{}, gcpinstall.Inputs{}, err
+	}
 	return gcpinstall.Applier{Compute: service}, inputs, nil
 }
 
 func gcpInputs(model GCPGatewayResourceModel, privateCIDRs []string) gcpinstall.Inputs {
 	name := model.Name.ValueString()
 	routeName := stringDefault(model.RouteName, name+"-default-via-gateway")
+	enableAgentHA := boolDefault(model.EnableAgentHA, false)
 	inputs := gcpinstall.Inputs{
 		Name:           name,
 		ProjectID:      model.ProjectID.ValueString(),
@@ -239,12 +318,24 @@ func gcpInputs(model GCPGatewayResourceModel, privateCIDRs []string) gcpinstall.
 	if inputs.GatewayCount == 0 {
 		inputs.GatewayCount = 2
 	}
-	inputs.StartupScript = gcpinstall.GatewayStartupScript(gcpinstall.StartupScriptInputs{PrivateCIDRs: privateCIDRs})
+	if enableAgentHA {
+		inputs.StartupScript = stringDefault(model.StartupScript, "")
+	} else {
+		inputs.StartupScript = gcpinstall.GatewayStartupScript(gcpinstall.StartupScriptInputs{PrivateCIDRs: privateCIDRs})
+	}
 	return inputs
 }
 
 func applyGCPResult(model *GCPGatewayResourceModel, inputs gcpinstall.Inputs, result gcpinstall.ReadResult) {
+	applyGCPComputedPlan(model, inputs)
 	model.ID = types.StringValue(fmt.Sprintf("%s/%s/%s", inputs.ProjectID, inputs.Zone, inputs.Name))
+	model.GatewayStatuses = mustStringMap(result.GatewayInstances)
+	model.EgressPublicIPs = mustStringMap(result.EgressPublicIPs)
+	model.RouteTarget = types.StringValue(result.RouteTarget)
+	model.Status = types.StringValue(result.Status)
+}
+
+func applyGCPComputedPlan(model *GCPGatewayResourceModel, inputs gcpinstall.Inputs) {
 	model.RouteName = types.StringValue(inputs.RouteName)
 	model.RoutePriority = types.Int64Value(inputs.RoutePriority)
 	model.RouteDestRange = types.StringValue(inputs.RouteDestRange)
@@ -252,11 +343,143 @@ func applyGCPResult(model *GCPGatewayResourceModel, inputs gcpinstall.Inputs, re
 	model.ImageProject = types.StringValue(inputs.ImageProject)
 	model.ImageFamily = types.StringValue(inputs.ImageFamily)
 	model.GatewayCount = types.Int64Value(inputs.GatewayCount)
+	model.EnableAgentHA = types.BoolValue(boolDefault(model.EnableAgentHA, false))
+	model.FirestoreDatabaseID = types.StringValue(stringDefault(model.FirestoreDatabaseID, "(default)"))
 	model.StartupScript = types.StringValue(inputs.StartupScript)
-	model.GatewayStatuses = mustStringMap(result.GatewayInstances)
-	model.EgressPublicIPs = mustStringMap(result.EgressPublicIPs)
-	model.RouteTarget = types.StringValue(result.RouteTarget)
-	model.Status = types.StringValue(result.Status)
+}
+
+func enrichGCPAgentBootstrap(model *GCPGatewayResourceModel, inputs *gcpinstall.Inputs, privateCIDRs []string) error {
+	if !boolDefault(model.EnableAgentHA, false) {
+		model.AgentConfigJSON = types.StringValue("")
+		model.AgentConfigHash = types.StringValue("")
+		return nil
+	}
+	artifacts, err := resolveGCPBootstrapArtifacts(model)
+	if err != nil {
+		return err
+	}
+	if artifacts.AgentBinaryURL == "" || artifacts.CLIBinaryURL == "" {
+		return fmt.Errorf("enable_agent_ha requires betternat_version or explicit agent_binary_url and cli_binary_url")
+	}
+	peerAPIAuthToken, err := gcpPeerAPIAuthTokenForPlan(model)
+	if err != nil {
+		return err
+	}
+	agentConfig, err := provider.RenderAgentConfig(provider.GatewaySpec{
+		Name:         inputs.Name,
+		Cloud:        "gcp",
+		Region:       inputs.Region,
+		PrivateCIDRs: privateCIDRs,
+		GCP: provider.GCPSpec{
+			ProjectID:           inputs.ProjectID,
+			Zone:                inputs.Zone,
+			Network:             inputs.Network,
+			ClientTag:           inputs.ClientTag,
+			RoutePriority:       inputs.RoutePriority,
+			FirestoreDatabaseID: stringDefault(model.FirestoreDatabaseID, "(default)"),
+		},
+		HA: provider.HASpec{
+			Enabled:              true,
+			LeaseBackend:         "firestore",
+			TTLSeconds:           10,
+			RenewSeconds:         1,
+			RouteMode:            "replace_route",
+			RouteDestinationCIDR: inputs.RouteDestRange,
+			RouteTargetType:      "instance",
+		},
+		Coordination: provider.CoordinationSpec{
+			Backend: "firestore",
+		},
+		Control: provider.ControlSpec{
+			PeerAPIEnabled:       true,
+			PeerAPIListenAddress: "0.0.0.0",
+			PeerAPIListenPort:    9109,
+			PeerAPIAuthToken:     peerAPIAuthToken,
+		},
+		Observability: provider.ObservabilitySpec{
+			PrometheusListenAddress: "0.0.0.0",
+			PrometheusListenPort:    9108,
+			OutboundProbeURL:        "https://checkip.amazonaws.com",
+		},
+	}, provider.NodeSpec{
+		HAGroupID:            inputs.Name + "-" + inputs.Zone,
+		InstanceID:           "auto",
+		AvailabilityZone:     inputs.Zone,
+		PrimaryInterface:     "ens4",
+		RouteTableIDs:        []string{inputs.RouteName},
+		RouteDestinationCIDR: inputs.RouteDestRange,
+	})
+	if err != nil {
+		return err
+	}
+	configBytes, err := json.Marshal(agentConfig)
+	if err != nil {
+		return fmt.Errorf("marshal GCP agent config: %w", err)
+	}
+	configHash := sha256.Sum256(configBytes)
+	userData, err := bootstrap.RenderUserData(bootstrap.Spec{
+		AgentConfig:         string(configBytes),
+		AgentBinaryURL:      artifacts.AgentBinaryURL,
+		AgentBinarySHA256:   artifacts.AgentBinarySHA256,
+		CLIBinaryURL:        artifacts.CLIBinaryURL,
+		CLIBinarySHA256:     artifacts.CLIBinarySHA256,
+		LoxiCMDBinaryURL:    stringDefault(model.LoxiCMDBinaryURL, ""),
+		LoxiCMDBinarySHA256: stringDefault(model.LoxiCMDBinarySHA256, ""),
+		PrimaryInterface:    "ens4",
+	})
+	if err != nil {
+		return err
+	}
+	inputs.StartupScript = userData
+	model.AgentBinaryURL = types.StringValue(artifacts.AgentBinaryURL)
+	model.AgentBinarySHA256 = types.StringValue(artifacts.AgentBinarySHA256)
+	model.CLIBinaryURL = types.StringValue(artifacts.CLIBinaryURL)
+	model.CLIBinarySHA256 = types.StringValue(artifacts.CLIBinarySHA256)
+	model.PeerAPIAuthToken = types.StringValue(peerAPIAuthToken)
+	model.AgentConfigJSON = types.StringValue(string(configBytes))
+	model.AgentConfigHash = types.StringValue(hex.EncodeToString(configHash[:]))
+	return nil
+}
+
+func gcpPeerAPIAuthTokenForPlan(model *GCPGatewayResourceModel) (string, error) {
+	if !model.PeerAPIAuthToken.IsNull() && !model.PeerAPIAuthToken.IsUnknown() && model.PeerAPIAuthToken.ValueString() != "" {
+		return model.PeerAPIAuthToken.ValueString(), nil
+	}
+	token := make([]byte, 32)
+	if _, err := cryptorand.Read(token); err != nil {
+		return "", fmt.Errorf("generate GCP peer API auth token: %w", err)
+	}
+	return hex.EncodeToString(token), nil
+}
+
+func resolveGCPBootstrapArtifacts(model *GCPGatewayResourceModel) (bootstrapArtifacts, error) {
+	result := bootstrapArtifacts{
+		AgentBinaryURL:    stringDefault(model.AgentBinaryURL, ""),
+		AgentBinarySHA256: stringDefault(model.AgentBinarySHA256, ""),
+		CLIBinaryURL:      stringDefault(model.CLIBinaryURL, ""),
+		CLIBinarySHA256:   stringDefault(model.CLIBinarySHA256, ""),
+	}
+	version := stringDefault(model.BetterNATVersion, "")
+	if version == "" {
+		return result, nil
+	}
+	artifactSet, err := runtimeArtifacts(version, "linux", "amd64")
+	if err != nil {
+		return bootstrapArtifacts{}, err
+	}
+	if result.AgentBinaryURL == "" {
+		result.AgentBinaryURL = artifactSet.AgentBinaryURL
+	}
+	if result.AgentBinarySHA256 == "" {
+		result.AgentBinarySHA256 = artifactSet.AgentBinarySHA256
+	}
+	if result.CLIBinaryURL == "" {
+		result.CLIBinaryURL = artifactSet.CLIBinaryURL
+	}
+	if result.CLIBinarySHA256 == "" {
+		result.CLIBinarySHA256 = artifactSet.CLIBinarySHA256
+	}
+	return result, nil
 }
 
 func sanitizeGCPLabel(value string) string {

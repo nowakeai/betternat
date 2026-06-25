@@ -233,7 +233,7 @@ Done when:
 
 ## Phase 4: GCP Spike
 
-Status: `forwarding, route replacement, Firestore lease implementation, and local agent GCP backend wiring complete; live agent-owned HA, LoxiLB, and public identity decisions pending`
+Status: `forwarding, route replacement, Firestore lease implementation, local agent GCP backend wiring, and experimental provider-rendered agent bootstrap complete; live agent-owned HA, LoxiLB, and public identity decisions pending`
 
 Goal: validate whether GCP can support the BetterNAT product model before
 committing to a production resource.
@@ -261,6 +261,8 @@ Tasks:
 - [ ] Validate or reject reserved external IP handover.
 - [x] Validate coordination backend choice.
 - [ ] Run live Firestore contention spike.
+- [x] Render experimental GCP agent HA config and checksum-verified bootstrap
+  user data from the provider.
 - [ ] Compare raw LoxiLB GCP HA behavior against BetterNAT-owned route fencing.
 - [ ] Run two-agent GCE HA smoke where route mutation is lease-fenced.
 - [ ] Validate passive failover after active crash.

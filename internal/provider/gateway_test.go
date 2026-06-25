@@ -71,6 +71,61 @@ func TestRenderAgentConfig(t *testing.T) {
 	}
 }
 
+func TestRenderAgentConfigForGCPRouteOnlyHA(t *testing.T) {
+	cfg, err := RenderAgentConfig(GatewaySpec{
+		Name:         "gcp-egress",
+		Cloud:        "gcp",
+		Region:       "us-west1",
+		PrivateCIDRs: []string{"10.91.0.0/24"},
+		GCP: GCPSpec{
+			ProjectID:           "shared-resources-alt",
+			Zone:                "us-west1-a",
+			Network:             "bnat-net",
+			ClientTag:           "bnat-client",
+			RoutePriority:       800,
+			FirestoreDatabaseID: "(default)",
+		},
+		HA: HASpec{
+			Enabled:              true,
+			LeaseBackend:         "firestore",
+			TTLSeconds:           10,
+			RenewSeconds:         1,
+			RouteMode:            "replace_route",
+			RouteDestinationCIDR: "0.0.0.0/0",
+			RouteTargetType:      "instance",
+		},
+		Coordination: CoordinationSpec{
+			Backend: "firestore",
+		},
+	}, NodeSpec{
+		HAGroupID:            "gcp-egress-us-west1-a",
+		InstanceID:           "auto",
+		AvailabilityZone:     "us-west1-a",
+		PrimaryInterface:     "ens4",
+		RouteTableIDs:        []string{"gcp-egress-default-via-gateway"},
+		RouteDestinationCIDR: "0.0.0.0/0",
+	})
+	if err != nil {
+		t.Fatalf("render config: %v", err)
+	}
+
+	if cfg.Cloud != "gcp" || cfg.GCP.ProjectID != "shared-resources-alt" || cfg.GCP.Zone != "us-west1-a" {
+		t.Fatalf("unexpected GCP config: %#v", cfg.GCP)
+	}
+	if cfg.HA.Lease.Backend != "firestore" || cfg.Coordination.Backend != "firestore" {
+		t.Fatalf("unexpected coordination config: lease=%#v coordination=%#v", cfg.HA.Lease, cfg.Coordination)
+	}
+	if len(cfg.HA.RouteFailover.RouteTableIDs) != 1 || cfg.HA.RouteFailover.RouteTableIDs[0] != "gcp-egress-default-via-gateway" {
+		t.Fatalf("unexpected GCP route targets: %#v", cfg.HA.RouteFailover)
+	}
+	if cfg.HA.PublicIdentity.Mode != "" {
+		t.Fatalf("GCP route-only HA must not configure public identity: %#v", cfg.HA.PublicIdentity)
+	}
+	if cfg.Datapath.LoxiLB.SNATInterface != "ens4" {
+		t.Fatalf("unexpected GCP primary interface: %#v", cfg.Datapath.LoxiLB)
+	}
+}
+
 func TestRenderAgentConfigWithoutStablePublicIdentity(t *testing.T) {
 	cfg, err := RenderAgentConfig(GatewaySpec{
 		Name:         "prod-egress",

@@ -414,6 +414,11 @@ provider should:
 
 Runtime route mutation should be agent-owned and lease-fenced.
 
+Current implementation note: the provider can now render experimental
+Firestore-backed GCP agent config, runtime artifact checksums, peer API token,
+and cloud-init user data when `enable_agent_ha = true`. That is a prerequisite
+for live HA smoke, not proof that live GCE HA is complete.
+
 ### 10. Agent Packaging And Bootstrap
 
 GCP HA requires the same appliance bootstrap quality as AWS:
@@ -464,6 +469,8 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
   `renjie@altresear.ch`.
 - [x] Agent runtime can construct Firestore coordination and a GCP route
   provider for `cloud=gcp`.
+- [x] Provider can render experimental GCP agent HA config and bootstrap user
+  data behind an explicit switch.
 - [ ] Agent on GCE mutates routes only after lease verification in live
   validation.
 - [x] GCP `cloud.Provider` route replace/describe implementation exists for
@@ -483,7 +490,7 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
 - Stable public IP is validated or explicitly not supported in GCP alpha.
 - Existing connections are documented as not preserved.
 - Bootstrap installs agent, CLI, datapath, config, metrics, and systemd units
-  with artifact integrity checks.
+  with artifact integrity checks in live GCE validation.
 
 ### P2: Production Fit
 

@@ -14,6 +14,7 @@ func TestRenderUserData(t *testing.T) {
 	}
 
 	assertContains(t, script, "chmod 0600 '/etc/betternat/agent.json'")
+	assertContains(t, script, "apt-get install -y docker.io || DEBIAN_FRONTEND=noninteractive apt-get install -y docker")
 	assertContains(t, script, "install_package docker")
 	assertContains(t, script, "net.ipv4.ip_forward = 1")
 	assertContains(t, script, "for rp_filter in /proc/sys/net/ipv4/conf/*/rp_filter; do")

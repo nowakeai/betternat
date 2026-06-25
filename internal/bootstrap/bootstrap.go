@@ -101,7 +101,12 @@ if ! command -v curl >/dev/null 2>&1; then
 fi
 
 if ! command -v docker >/dev/null 2>&1; then
-  install_package docker
+  if command -v apt-get >/dev/null 2>&1; then
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io || DEBIAN_FRONTEND=noninteractive apt-get install -y docker
+  else
+    install_package docker
+  fi
 fi
 {{- end }}
 
