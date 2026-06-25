@@ -148,17 +148,20 @@ func (c *controlStatusCache) refreshRegistryStatus(ctx context.Context, cfg conf
 	for _, agentRecord := range agents {
 		nodeID := agentRecordNodeID(agentRecord)
 		row := agentapi.StatusInstance{
-			NodeID:         nodeID,
-			Role:           roleForInstance(nodeID, leaseRecord.OwnerInstanceID),
-			Health:         healthForAgent(agentRecord),
-			LifecycleState: agentRecord.HAState,
-			PrivateIP:      agentRecord.PrivateIP,
-			PublicIP:       agentRecord.PublicIP,
-			ControlURL:     agentRecord.ControlURL,
-			Version:        agentRecord.Version,
-			Metrics:        "registry",
-			Fresh:          true,
+			NodeID:          nodeID,
+			Role:            roleForInstance(nodeID, leaseRecord.OwnerInstanceID),
+			Health:          healthForAgent(agentRecord),
+			LifecycleState:  agentRecord.HAState,
+			PrivateIP:       agentRecord.PrivateIP,
+			PublicIP:        agentRecord.PublicIP,
+			ControlURL:      agentRecord.ControlURL,
+			Version:         agentRecord.Version,
+			Metrics:         "registry",
+			Fresh:           true,
+			LeaseGeneration: agentRecord.LeaseGeneration,
 		}
+		routeTargetMatch := agentRecord.RouteTargetMatch
+		row.RouteTargetMatch = &routeTargetMatch
 		if !agentRecord.UpdatedAt.IsZero() {
 			row.AgeSeconds = now.Sub(agentRecord.UpdatedAt).Seconds()
 		}
@@ -664,6 +667,12 @@ func selectHandoverTarget(status agentapi.StatusResponse, source string, request
 		if !row.Fresh {
 			if requested != "auto" {
 				return "", fmt.Errorf("handover target %q is stale", rowNodeID)
+			}
+			continue
+		}
+		if status.LeaseGeneration != 0 && row.LeaseGeneration != 0 && row.LeaseGeneration != status.LeaseGeneration {
+			if requested != "auto" {
+				return "", fmt.Errorf("handover target %q has stale lease generation", rowNodeID)
 			}
 			continue
 		}

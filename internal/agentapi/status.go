@@ -42,20 +42,22 @@ type StatusResponse struct {
 }
 
 type StatusInstance struct {
-	NodeID         string  `json:"node_id"`
-	InstanceID     string  `json:"instance_id,omitempty"`
-	Role           string  `json:"role"`
-	Health         string  `json:"health,omitempty"`
-	LifecycleState string  `json:"lifecycle_state,omitempty"`
-	PrivateIP      string  `json:"private_ip,omitempty"`
-	PublicIP       string  `json:"public_ip,omitempty"`
-	ControlURL     string  `json:"control_url,omitempty"`
-	Version        string  `json:"version,omitempty"`
-	RXMbps         float64 `json:"rx_mbps,omitempty"`
-	TXMbps         float64 `json:"tx_mbps,omitempty"`
-	Metrics        string  `json:"metrics,omitempty"`
-	Fresh          bool    `json:"fresh,omitempty"`
-	AgeSeconds     float64 `json:"age_seconds,omitempty"`
+	NodeID           string  `json:"node_id"`
+	InstanceID       string  `json:"instance_id,omitempty"`
+	Role             string  `json:"role"`
+	Health           string  `json:"health,omitempty"`
+	LifecycleState   string  `json:"lifecycle_state,omitempty"`
+	PrivateIP        string  `json:"private_ip,omitempty"`
+	PublicIP         string  `json:"public_ip,omitempty"`
+	ControlURL       string  `json:"control_url,omitempty"`
+	Version          string  `json:"version,omitempty"`
+	RXMbps           float64 `json:"rx_mbps,omitempty"`
+	TXMbps           float64 `json:"tx_mbps,omitempty"`
+	Metrics          string  `json:"metrics,omitempty"`
+	Fresh            bool    `json:"fresh,omitempty"`
+	AgeSeconds       float64 `json:"age_seconds,omitempty"`
+	LeaseGeneration  uint64  `json:"lease_generation,omitempty"`
+	RouteTargetMatch *bool   `json:"route_target_match,omitempty"`
 }
 
 type HandoverRequest struct {
