@@ -272,6 +272,10 @@ Tasks:
 - [ ] Run two-agent GCE HA smoke where route mutation is lease-fenced.
 - [ ] Validate passive failover after active crash.
 - [ ] Validate proactive handover during graceful shutdown or upgrade.
+- [ ] Validate that the active reports `ACTIVE` only after Firestore lease,
+  route target, and local datapath readiness all match.
+- [ ] Validate that a standby cannot mutate routes while another unexpired
+  Firestore lease owner exists.
 - [ ] Validate destroy/rollback after an agent-owned handover.
 - [ ] Decide GCP capacity repair model: unmanaged instances for alpha only or
   MIG-backed replacement before GA.
@@ -591,6 +595,13 @@ Append dated notes here during implementation.
   for disposable GCP validation. It scans Compute instances, routes, firewall
   rules, addresses, service accounts, and BetterNAT Firestore records for a run
   name. Live post-destroy evidence is still pending.
+- Deepened the GCP HA review in `docs/research/052-gcp-ha-gap-analysis.md`:
+  raw LoxiLB already has HA primitives, so the BetterNAT-specific GCP gate is
+  now explicitly agent-owned cloud egress ownership: Firestore lease fencing,
+  route mutation, active/standby status, passive failover, proactive handover,
+  datapath readiness, supportability, and cleanup. Single-node forwarding,
+  manual route replacement, provider status reads, and bootstrap rendering are
+  substrate evidence only.
 - Opened implementation PRs:
   - main repo: `https://github.com/nowakeai/betternat/pull/1`
   - split provider repo:

@@ -59,15 +59,26 @@ Validated:
 - provider read path observing out-of-band route handover,
 - destroy and residual cleanup.
 
-Not validated or implemented:
+Implemented but not live-validated:
 
-- GCP lease backend,
-- GCP agent registry and peer discovery,
-- GCP proactive handover state machine,
-- GCP passive lease-expiry failover,
+- Firestore lease backend,
+- Firestore agent registry and handover records,
+- GCP route controller for tagged static route mutation,
+- agent runtime wiring for `cloud=gcp`,
+- GCP runtime service-account and IAM permission contract,
+- optional provider-owned Firestore Native database lifecycle,
+- GCP preflight and residual-scan scripts,
+- GCP support bundle collection.
+
+Not yet validated or still incomplete:
+
+- live Firestore contention with a real database,
+- two-agent route mutation guarded by a live Firestore lease,
+- passive lease-expiry failover after a hard active crash,
+- proactive handover on graceful shutdown or upgrade,
 - GCP public identity handover,
 - LoxiLB datapath on GCE,
-- GCP-specific IAM least privilege,
+- applied least-privilege runtime IAM with no broad project role,
 - multi-zone and GKE/private-node topologies,
 - production migration from Cloud NAT.
 
@@ -120,6 +131,62 @@ its own HA patterns. BetterNAT can reuse LoxiLB as the local datapath, but the
 product still owns cloud route safety, lease fencing, lifecycle handover,
 operator status, and rollback.
 
+## Revised HA Gate
+
+GCP should not be considered a BetterNAT-equivalent alpha until the following
+sequence passes in a disposable project:
+
+1. Two GCE gateway nodes boot with the BetterNAT agent, publish registry
+   records, and keep LoxiLB or nftables ready.
+2. Exactly one node acquires a Firestore lease generation and mutates the
+   configured tagged default route.
+3. The active node reports `ACTIVE` only after route verification and datapath
+   readiness pass.
+4. The standby reports `STANDBY` and refuses route mutation while another
+   unexpired owner holds the lease.
+5. A hard active crash causes the standby to acquire the next lease generation,
+   move the route, verify egress, and expose failover metrics.
+6. A graceful handover moves route ownership and transfers the lease without a
+   split-brain window.
+7. Destroy after handover removes or restores the provider-owned route and
+   leaves no residual instances, service accounts, addresses, Firestore
+   records, or firewall rules.
+
+Evidence that is insufficient by itself:
+
+- a single GCE VM forwarding packets,
+- manual `gcloud compute routes delete/create` replacement,
+- provider status reading a route target,
+- Firestore unit tests without live contention,
+- GCP bootstrap rendering without an agent-owned failover.
+
+The first group proves BetterNAT's HA product layer. The second group proves
+only substrate readiness.
+
+## Raw LoxiLB HA Research Implications
+
+The upstream LoxiLB docs matter because BetterNAT should be honest about what
+it adds. LoxiLB's HA documentation covers flat-L2 active/backup, L3
+active/backup with BGP, active/active BGP ECMP, connection sync, and BFD-based
+fast failover. `kube-loxilb` can choose an active LoxiLB pod, monitor health,
+and elect a replacement in Kubernetes service-load-balancer deployments. The
+multi-cloud notes also describe AWS floating-IP style HA, while explicitly
+calling out that full elastic-IP support for GCP is not available in that
+pattern.
+
+That changes the BetterNAT bar in two ways:
+
+- Do not market "HA" as a generic LoxiLB capability. LoxiLB already has HA
+  modes.
+- Market and test the narrower BetterNAT layer: Terraform-owned appliance
+  lifecycle, cloud route/identity ownership, fenced mutation, cost-oriented NAT
+  replacement UX, rollback, and normalized status.
+
+For GCP this means a raw-LoxiLB baseline should be run, but passing raw-LoxiLB
+HA does not automatically pass BetterNAT. The pass condition is whether
+BetterNAT can wrap the datapath in a safe cloud egress ownership model that a
+Terraform user can install, observe, fail over, and destroy.
+
 ## Additional Underweighted Areas
 
 The review also found several areas that were not weighted strongly enough in
@@ -150,6 +217,19 @@ the first GCP spike plan:
   to explain a failed failover from local logs, Firestore records, route state,
   and operation IDs without requiring an engineer to have owner access to the
   customer's project.
+- Cloud route failure semantics. GCP static routes with next-hop instances have
+  important behavior that the HA controller must account for: `canIpForward`
+  is required, Google Cloud does not validate guest routing software health,
+  stopped/deleted next-hop behavior depends on competing routes, and a route
+  by instance name does not update when the instance is deleted. BetterNAT must
+  verify the route and datapath from the agent instead of trusting route API
+  success.
+- Public identity honesty. Route-only GCP failover can restore egress while
+  changing the observed public IP. That is useful for some workloads but is not
+  the same product promise as AWS shared-EIP mode.
+- Runtime image quality. HA is weak if replacement nodes must fetch unsigned or
+  unavailable packages during an outage. The GCP path needs a prebaked image or
+  private artifact mirror gate before GA.
 
 ## DynamoDB Equivalent
 
