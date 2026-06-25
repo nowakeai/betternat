@@ -25,7 +25,7 @@ type agentDocument struct {
 	DatapathEngine      string    `firestore:"datapath_engine"`
 	DatapathReady       bool      `firestore:"datapath_ready"`
 	HAState             string    `firestore:"ha_state"`
-	LeaseGeneration     uint64    `firestore:"lease_generation"`
+	LeaseGeneration     int64     `firestore:"lease_generation"`
 	RouteTargetMatch    bool      `firestore:"route_target_match"`
 	PublicIdentityMatch bool      `firestore:"public_identity_match"`
 	UpdatedAt           time.Time `firestore:"updated_at"`
@@ -43,7 +43,7 @@ type handoverDocument struct {
 	SourceInstanceID string    `firestore:"source_instance_id"`
 	TargetInstanceID string    `firestore:"target_instance_id"`
 	Reason           string    `firestore:"reason"`
-	LeaseGeneration  uint64    `firestore:"lease_generation"`
+	LeaseGeneration  int64     `firestore:"lease_generation"`
 	Message          string    `firestore:"message"`
 	Error            string    `firestore:"error"`
 	CreatedAt        time.Time `firestore:"created_at"`
@@ -74,6 +74,10 @@ func (b *Backend) agentDocument(record coordination.AgentRecord, ttl time.Durati
 	if record.ExpiresAt.IsZero() {
 		record.ExpiresAt = record.UpdatedAt.Add(ttl)
 	}
+	leaseGeneration, ok := generationToFirestore(record.LeaseGeneration)
+	if !ok {
+		return agentDocument{}, fmt.Errorf("agent lease generation exceeded firestore integer range")
+	}
 	return agentDocument{
 		RecordType:          agentRecordType,
 		GatewayID:           record.GatewayID,
@@ -92,7 +96,7 @@ func (b *Backend) agentDocument(record coordination.AgentRecord, ttl time.Durati
 		DatapathEngine:      record.DatapathEngine,
 		DatapathReady:       record.DatapathReady,
 		HAState:             record.HAState,
-		LeaseGeneration:     record.LeaseGeneration,
+		LeaseGeneration:     leaseGeneration,
 		RouteTargetMatch:    record.RouteTargetMatch,
 		PublicIdentityMatch: record.PublicIdentityMatch,
 		UpdatedAt:           record.UpdatedAt,
@@ -118,7 +122,7 @@ func agentRecordFromDocument(doc agentDocument) coordination.AgentRecord {
 		DatapathEngine:      doc.DatapathEngine,
 		DatapathReady:       doc.DatapathReady,
 		HAState:             doc.HAState,
-		LeaseGeneration:     doc.LeaseGeneration,
+		LeaseGeneration:     generationFromFirestore(doc.LeaseGeneration),
 		RouteTargetMatch:    doc.RouteTargetMatch,
 		PublicIdentityMatch: doc.PublicIdentityMatch,
 		UpdatedAt:           doc.UpdatedAt,
@@ -158,6 +162,10 @@ func (b *Backend) handoverDocument(record coordination.HandoverRecord, ttl time.
 	if record.ExpiresAt.IsZero() {
 		record.ExpiresAt = record.UpdatedAt.Add(ttl)
 	}
+	leaseGeneration, ok := generationToFirestore(record.LeaseGeneration)
+	if !ok {
+		return handoverDocument{}, fmt.Errorf("handover lease generation exceeded firestore integer range")
+	}
 	return handoverDocument{
 		RecordType:       handoverRecordType,
 		GatewayID:        b.gatewayID,
@@ -169,7 +177,7 @@ func (b *Backend) handoverDocument(record coordination.HandoverRecord, ttl time.
 		SourceInstanceID: record.SourceInstanceID,
 		TargetInstanceID: record.TargetInstanceID,
 		Reason:           record.Reason,
-		LeaseGeneration:  record.LeaseGeneration,
+		LeaseGeneration:  leaseGeneration,
 		Message:          record.Message,
 		Error:            record.Error,
 		CreatedAt:        record.CreatedAt,
@@ -188,7 +196,7 @@ func handoverRecordFromDocument(doc handoverDocument) coordination.HandoverRecor
 		SourceInstanceID: doc.SourceInstanceID,
 		TargetInstanceID: doc.TargetInstanceID,
 		Reason:           doc.Reason,
-		LeaseGeneration:  doc.LeaseGeneration,
+		LeaseGeneration:  generationFromFirestore(doc.LeaseGeneration),
 		Message:          doc.Message,
 		Error:            doc.Error,
 		CreatedAt:        doc.CreatedAt,

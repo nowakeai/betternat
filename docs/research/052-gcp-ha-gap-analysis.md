@@ -685,10 +685,10 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
   and current.
 - [x] Unit tests prove acquire, renew, release, expired takeover, and transfer
   fencing decisions.
-- [ ] Live Firestore spike proves two contenders cannot both acquire an
-  unexpired lease. The reusable integration test exists, but
-  `shared-resources-alt` has no Firestore database and database creation is
-  currently blocked by IAM for `renjie@altresear.ch`.
+- [x] Live Firestore spike proves two contenders cannot both acquire an
+  unexpired lease. `TestIntegrationFirestoreLeaseContention` passed against the
+  `(default)` Firestore Native database in `smooth-calling-490406-d9`; see
+  `docs/research/053-gcp-firestore-live-contention-results.md`.
 - [x] Agent runtime can construct Firestore coordination and a GCP route
   provider for `cloud=gcp`.
 - [x] Provider can render experimental GCP agent HA config and bootstrap user
@@ -703,15 +703,14 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
   custom roles.
 - [x] Provider has opt-in runtime IAM custom-role and binding lifecycle behind
   `manage_runtime_iam`.
-- [ ] Live `manage_runtime_iam` validation. Current `shared-resources-alt`
-  preflight for `renjie@altresear.ch` is missing `iam.roles.create`,
-  `iam.roles.update`, and `iam.roles.delete`.
+- [ ] Live `manage_runtime_iam` validation. The `smooth-calling-490406-d9`
+  preflight has the required custom-role lifecycle permissions; Terraform apply
+  validation is still pending.
 - [x] Provider has opt-in Firestore Native database lifecycle behind
   `manage_firestore_database`.
-- [ ] Live `manage_firestore_database` validation. Current
-  `shared-resources-alt` preflight for `renjie@altresear.ch` is missing
-  Firestore database create/delete permission and the project has no existing
-  Firestore database.
+- [ ] Live `manage_firestore_database` validation. The `smooth-calling-490406-d9`
+  preflight has database create/delete permission and a manually created
+  `(default)` database; provider-owned database lifecycle apply is still pending.
 - [ ] Agent on GCE mutates routes only after lease verification in live
   validation.
 - [x] GCP `cloud.Provider` route replace/describe implementation exists for
@@ -782,16 +781,12 @@ driven route replacement.
 The next implementation step after the Firestore lease backend and local agent
 wiring is live coordination and HA validation:
 
-1. Run a live `shared-resources-alt` Firestore contention spike with two or
-   more contenders.
-2. Run the extended live smoke against an existing or temporary Firestore
-   database to validate lease, registry, and handover records together.
-3. Run the agent on two GCE gateways and prove route mutation is lease-fenced.
-4. Validate passive failover, proactive handover, and LoxiLB-on-GCE before
+1. Run the agent on two GCE gateways and prove route mutation is lease-fenced.
+2. Validate passive failover, proactive handover, and LoxiLB-on-GCE before
    promoting the GCP provider resource beyond substrate alpha.
-5. Decide and document the GCP capacity-repair model: unmanaged provider-owned
+3. Decide and document the GCP capacity-repair model: unmanaged provider-owned
    instances for alpha only, or MIG-backed replacement before GA.
-6. Test destroy/rollback after an agent-owned handover, not only after provider
+4. Test destroy/rollback after an agent-owned handover, not only after provider
    initial route creation.
 
 Until then, GCP should remain explicitly marked as non-HA alpha substrate work.

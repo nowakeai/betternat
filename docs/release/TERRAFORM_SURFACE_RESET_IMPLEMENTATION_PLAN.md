@@ -265,7 +265,7 @@ Tasks:
 - [x] Measure new-flow recovery time for startup-script client probes.
 - [ ] Validate or reject reserved external IP handover.
 - [x] Validate coordination backend choice.
-- [ ] Run live Firestore contention spike.
+- [x] Run live Firestore contention spike.
 - [x] Render experimental GCP agent HA config and checksum-verified bootstrap
   user data from the provider.
 - [ ] Compare raw LoxiLB GCP HA behavior against BetterNAT-owned route fencing.
@@ -350,7 +350,7 @@ GCP validation:
 - [ ] Disposable GCP apply.
 - [ ] Private client egress.
 - [ ] Route replacement.
-- [ ] Live Firestore contention.
+- [x] Live Firestore contention.
 - [ ] Two-agent lease-fenced route mutation.
 - [ ] Passive failover after active crash.
 - [ ] Proactive handover.
@@ -553,10 +553,9 @@ Append dated notes here during implementation.
   go test ./internal/coordination/firestore \
     -run TestIntegrationFirestoreLeaseContention -count=1
   ```
-  `shared-resources-alt` now has `firestore.googleapis.com` enabled, but
-  `renjie@altresear.ch` could not create a named Firestore database:
-  `The caller does not have permission`. Live validation needs an existing
-  Firestore Native database or temporary database creation permission.
+  Live validation later moved to `smooth-calling-490406-d9`, where the
+  `(default)` Firestore Native database exists in `us-west2` and the live
+  contention test now passes.
 - Extracted provider-neutral coordination records and interfaces into
   `internal/coordination`. Agent registry and handover flows now depend on
   `coordination.AgentRecord`, `coordination.HandoverRecord`, and reader/store
@@ -578,16 +577,10 @@ Append dated notes here during implementation.
   handover coordination, uses `internal/cloud/gcp` for route mutation, and
   rejects shared public identity. Live GCE activation/handover validation is
   still pending.
-- Added `scripts/gcp-ha-preflight.sh` for read-only GCP HA preflight. Current
-  `shared-resources-alt` results for `renjie@altresear.ch`:
-  - base HA smoke is blocked because the project has no Firestore database and
-    the account lacks `datastore.databases.create`,
-  - provider-owned Firestore database smoke with
-    `manage_firestore_database = true` is blocked by missing Firestore database
-    create/delete permission,
-  - provider-owned runtime IAM smoke with `manage_runtime_iam = true` is also
-    blocked by missing `iam.roles.create`, `iam.roles.update`, and
-    `iam.roles.delete`.
+- Added `scripts/gcp-ha-preflight.sh` for read-only GCP HA preflight.
+  `smooth-calling-490406-d9` now passes preflight for enabled APIs, Firestore
+  database presence, database lifecycle permissions, and runtime custom-role
+  lifecycle permissions. Terraform apply validation is still pending.
 - Strengthened HA route-mutation fencing in code: activation, active ownership
   repair, and proactive handover now verify the current lease generation before
   and after cloud mutations. Local tests cover stopping route repair/handover
@@ -644,6 +637,14 @@ Append dated notes here during implementation.
   evidence, route-priority coexistence, clock-skew tolerance, peer API
   authentication, org-policy constraints, and TCP/UDP/DNS/long-flow behavior
   across failover.
+- Switched live GCP coordination validation to project `smooth-calling-490406-d9`,
+  enabled Firestore API, created the `(default)` Firestore Native database in
+  `us-west2`, and passed
+  `TestIntegrationFirestoreLeaseContention`. The first live attempt exposed that
+  Firestore document fields cannot use Go `uint64`; the Firestore coordination
+  DTOs now store generation fields as `int64` and convert at the package
+  boundary with overflow checks. Evidence is recorded in
+  `docs/research/053-gcp-firestore-live-contention-results.md`.
 - Opened implementation PRs:
   - main repo: `https://github.com/nowakeai/betternat/pull/1`
   - split provider repo:

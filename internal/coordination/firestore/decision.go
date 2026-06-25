@@ -2,6 +2,7 @@ package firestorecoord
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/nowakeai/betternat/internal/lease"
@@ -21,7 +22,7 @@ type leaseDocument struct {
 	GatewayID       string    `firestore:"gateway_id"`
 	HAGroupID       string    `firestore:"ha_group_id"`
 	OwnerInstanceID string    `firestore:"owner_instance_id"`
-	Generation      uint64    `firestore:"generation"`
+	Generation      int64     `firestore:"generation"`
 	ExpiresAt       time.Time `firestore:"expires_at"`
 	UpdatedAt       time.Time `firestore:"updated_at"`
 }
@@ -32,6 +33,9 @@ func acquireLease(current leaseDocument, exists bool, gatewayID string, haGroupI
 	}
 	if exists && current.OwnerInstanceID != "" && current.OwnerInstanceID != owner && now.Before(current.ExpiresAt) {
 		return leaseDocument{}, fmt.Errorf("lease is held by %q until %s", current.OwnerInstanceID, current.ExpiresAt.UTC().Format(time.RFC3339))
+	}
+	if current.Generation == math.MaxInt64 {
+		return leaseDocument{}, fmt.Errorf("lease generation exceeded firestore integer range")
 	}
 	return leaseDocument{
 		RecordType:      leaseRecordID,
@@ -72,6 +76,9 @@ func transferLease(current leaseDocument, record lease.Record, newOwner string, 
 	if !now.Before(current.ExpiresAt) {
 		return leaseDocument{}, fmt.Errorf("lease expired at %s", current.ExpiresAt.UTC().Format(time.RFC3339))
 	}
+	if current.Generation == math.MaxInt64 {
+		return leaseDocument{}, fmt.Errorf("lease generation exceeded firestore integer range")
+	}
 	current.OwnerInstanceID = newOwner
 	current.Generation++
 	current.ExpiresAt = now.Add(ttl)
@@ -90,15 +97,30 @@ func releaseLease(current leaseDocument, record lease.Record) error {
 }
 
 func sameOwnerAndGeneration(current leaseDocument, record lease.Record) bool {
-	return current.OwnerInstanceID == record.OwnerInstanceID && current.Generation == record.Generation
+	generation, ok := generationToFirestore(record.Generation)
+	return ok && current.OwnerInstanceID == record.OwnerInstanceID && current.Generation == generation
 }
 
 func leaseRecordFromDocument(doc leaseDocument) lease.Record {
 	return lease.Record{
 		HAGroupID:       doc.HAGroupID,
 		OwnerInstanceID: doc.OwnerInstanceID,
-		Generation:      doc.Generation,
+		Generation:      generationFromFirestore(doc.Generation),
 		ExpiresAt:       doc.ExpiresAt,
 		UpdatedAt:       doc.UpdatedAt,
 	}
+}
+
+func generationToFirestore(generation uint64) (int64, bool) {
+	if generation > math.MaxInt64 {
+		return 0, false
+	}
+	return int64(generation), true
+}
+
+func generationFromFirestore(generation int64) uint64 {
+	if generation < 0 {
+		return 0
+	}
+	return uint64(generation)
 }

@@ -21,7 +21,7 @@ production GKE route table.
 Set these values explicitly for each run:
 
 ```sh
-export BETTERNAT_GCP_PROJECT=shared-resources-alt
+export BETTERNAT_GCP_PROJECT=smooth-calling-490406-d9
 export BETTERNAT_GCP_REGION=us-west2
 export BETTERNAT_GCP_ZONE=us-west2-a
 export BETTERNAT_GCP_NAME=bnat-gcp-ga-smoke

@@ -124,6 +124,7 @@ Read these first when revisiting product or architecture direction:
 - [research/050-terraform-surface-reset-aws-smoke.md](research/050-terraform-surface-reset-aws-smoke.md) — Unpublished provider `v0.2.0` local-mirror AWS smoke for `betternat_aws_gateway`, handover, data source reads, destroy, and residual scan.
 - [research/051-gcp-forwarding-spike-results.md](research/051-gcp-forwarding-spike-results.md) — Disposable GCP forwarding spike proving GCE `canIpForward`, nftables masquerade, tagged route replacement, and cleanup.
 - [research/052-gcp-ha-gap-analysis.md](research/052-gcp-ha-gap-analysis.md) — GCP HA gap analysis covering Firestore coordination, route fencing, public identity, LoxiLB, IAM, observability, and release gates.
+- [research/053-gcp-firestore-live-contention-results.md](research/053-gcp-firestore-live-contention-results.md) — Live Firestore Native contention validation for GCP lease, registry, handover records, and cleanup.
 
 ## Supporting Research
 
