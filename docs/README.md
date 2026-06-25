@@ -120,6 +120,7 @@ Read these first when revisiting product or architecture direction:
 - [research/047-runtime-alpha8-asg-lifecycle-validation.md](research/047-runtime-alpha8-asg-lifecycle-validation.md) — Runtime alpha8 ASG lifecycle validation through provider artifact overrides, completed durable handover, client probe, and cleanup evidence.
 - [research/048-provider-module-boundary-plan.md](research/048-provider-module-boundary-plan.md) — Provider/module responsibility split, AWS module migration path, and multi-cloud naming decision.
 - [research/049-gcp-alpha-boundary.md](research/049-gcp-alpha-boundary.md) — GCP alpha scope boundary, business signal, and spike gate.
+- [research/050-terraform-surface-reset-aws-smoke.md](research/050-terraform-surface-reset-aws-smoke.md) — Unpublished provider `v0.2.0` local-mirror AWS smoke for `betternat_aws_gateway`, handover, data source reads, destroy, and residual scan.
 
 ## Supporting Research
 

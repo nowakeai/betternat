@@ -456,10 +456,12 @@ Append dated notes here during implementation.
 - AWS module validation passed with a local provider `0.2.0` filesystem mirror:
   `terraform fmt -check -recursive`, root `terraform init -backend=false` and
   `terraform validate`, plus validate for all five examples.
-- Cloud mutation tests were not run during implementation. AWS profile
-  `601427795217_AdministratorAccess` is usable, and GCP must be invoked with
-  explicit `--project shared-resources-alt`; perform disposable AWS/GCP smoke
-  only after PR review and before any release.
+- AWS smoke was later run without publishing by using a local provider
+  filesystem mirror for `nowakeai/betternat v0.2.0`; see
+  `docs/research/050-terraform-surface-reset-aws-smoke.md`.
+- GCP must be invoked with explicit `--project shared-resources-alt`; the GCP
+  implementation remains gated on the spike plan and was not run as part of the
+  AWS Terraform surface smoke.
 - Opened implementation PRs:
   - main repo: `https://github.com/nowakeai/betternat/pull/1`
   - split provider repo:
