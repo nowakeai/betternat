@@ -321,7 +321,7 @@ Tasks:
 - [x] Add GCP startup-script and model tests.
 - [x] Add read-only GCP HA preflight for APIs, Firestore database presence, and
   IAM permissions.
-- [ ] Add disposable GCP integration runbook.
+- [x] Add disposable GCP integration runbook.
 
 Validation:
 
@@ -574,6 +574,10 @@ Append dated notes here during implementation.
   and after cloud mutations. Local tests cover stopping route repair/handover
   when the active lease changes mid-operation; live GCE evidence is still
   pending.
+- Added `docs/testing/GCP_DISPOSABLE_INTEGRATION_RUNBOOK.md` as the executable
+  GCP evidence path for disposable apply, private egress, Firestore contention,
+  two-agent HA, passive failover, proactive handover, datapath restart, failure
+  injection, destroy, and residual scans.
 - Opened implementation PRs:
   - main repo: `https://github.com/nowakeai/betternat/pull/1`
   - split provider repo:

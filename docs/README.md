@@ -75,6 +75,7 @@ These are executable plans and runbooks, not product docs.
 - [testing/AWS_SUPPLEMENTAL_RUNBOOK.md](testing/AWS_SUPPLEMENTAL_RUNBOOK.md) — Execution checklist for the low-cost AWS supplemental test pass.
 - [testing/LOW_COST_SOAK_RUNBOOK.md](testing/LOW_COST_SOAK_RUNBOOK.md) — Low-cost soak runbook with periodic egress probes, agent restarts, LoxiLB restart checks, and handover evidence collection.
 - [testing/GCP_SPIKE_PLAN.md](testing/GCP_SPIKE_PLAN.md) — Disposable GCP validation plan before any GCP alpha provider implementation.
+- [testing/GCP_DISPOSABLE_INTEGRATION_RUNBOOK.md](testing/GCP_DISPOSABLE_INTEGRATION_RUNBOOK.md) — Disposable GCP apply, Firestore contention, two-agent HA, failover, handover, datapath, and cleanup evidence checklist.
 
 ## Development
 

@@ -15,6 +15,10 @@ manual route replacement test is only substrate evidence.
 This is a disposable-environment spike. It must not replace existing Cloud NAT
 or mutate production GKE routes.
 
+Use [GCP Disposable Integration Runbook](GCP_DISPOSABLE_INTEGRATION_RUNBOOK.md)
+for the executable apply, HA, failure-injection, and cleanup pass once preflight
+permissions are available.
+
 ## Target Project
 
 Use `shared-resources-alt` for functional tests unless a different disposable
