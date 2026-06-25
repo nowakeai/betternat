@@ -277,8 +277,8 @@ Minimum:
 - observed public IP before and after failover,
 - appliance CPU,
 - appliance network throughput,
-- LoxiLB or nftables rule counters,
-- conntrack entries,
+- LoxiLB rule and conntrack counters,
+- legacy Linux conntrack snapshots only when useful for host diagnostics,
 - agent logs,
 - CloudTrail events for `ReplaceRoute`, `AssociateAddress`, `ModifyInstanceAttribute`, DynamoDB conditional writes.
 

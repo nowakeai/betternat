@@ -197,7 +197,8 @@ Important distinction:
 
 - LoxiLB has its own eBPF conntrack state and is inspected with `loxicmd get conntrack -o json`.
 - Linux `nf_conntrack_max` is not the primary LoxiLB NAT capacity knob.
-- This setting is retained for fallback/compatibility and is applied only when the kernel exposes it.
+- This setting is retained only for legacy diagnostics and host compatibility
+  when the kernel exposes it. It is not a fallback datapath setting.
 
 Not included yet:
 

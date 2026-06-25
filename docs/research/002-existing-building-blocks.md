@@ -74,7 +74,8 @@ Why this is the right first wheel:
 - Debugging is understandable.
 - Kernel handles TCP/UDP/ICMP and related conntrack behavior.
 - We can benchmark against it before writing any mutating eBPF datapath.
-- It gives us a fallback path even after eBPF fast path exists.
+- Historically, it gave the project a simple diagnostic baseline before the
+  LoxiLB decision. It is not a product fallback path.
 
 Downside:
 

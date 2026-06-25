@@ -133,7 +133,8 @@ Inject at least one failure in each dangerous phase before promotion:
 - Route mutation timing.
 - Handover/new-flow recovery timing.
 - Public IP behavior before and after route replacement.
-- LoxiLB or nftables datapath counters.
+- LoxiLB datapath and conntrack counters. nftables is not a GCP acceptance
+  path.
 - Lease backend transaction behavior.
 - Firestore lease generation before and after passive failover.
 - Firestore handover records for proactive handover.

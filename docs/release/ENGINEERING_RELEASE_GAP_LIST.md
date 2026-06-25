@@ -1007,7 +1007,7 @@ AWS low-cost soak and systemd-stop validation on 2026-06-24:
 
 Current alpha bootstrap applies only the conservative baseline gateway sysctls documented in `ALPHA_BOOTSTRAP_RELEASE_PATH.md`.
 
-LoxiLB/eBPF has its own conntrack state, so Linux `nf_conntrack_max` is not a primary LoxiLB capacity knob. BetterNAT keeps it only as a conditional fallback/compatibility setting when the kernel exposes it.
+LoxiLB/eBPF has its own conntrack state, so Linux `nf_conntrack_max` is not a primary LoxiLB capacity knob. BetterNAT keeps it only as a conditional legacy-diagnostics and host-compatibility setting when the kernel exposes it; it is not a fallback datapath setting.
 
 Defer until benchmark-backed:
 

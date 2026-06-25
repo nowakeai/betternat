@@ -989,8 +989,8 @@ P2 items are valuable, but should not block alpha or early P1 hardening.
   - [ ] large-response workloads.
 - [ ] Define benchmark-backed instance sizing guidance.
 - [ ] Add optional advanced tuning profile:
-  - [ ] conntrack hash buckets for fallback,
-  - [ ] conntrack timeout profile for fallback,
+  - [ ] benchmark-backed LoxiLB/eBPF conntrack capacity profile,
+  - [ ] Linux host conntrack diagnostics only where they affect host behavior,
   - [ ] ephemeral port range,
   - [ ] backlog settings,
   - [ ] ENA/RSS/IRQ guidance.
