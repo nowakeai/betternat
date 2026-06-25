@@ -231,6 +231,38 @@ func TestEnsureOwnershipDoesNotMutateWhenAlreadyOwned(t *testing.T) {
 	}
 }
 
+func TestEnsureOwnershipFencedStopsWhenLeaseChangesBeforeRouteRepair(t *testing.T) {
+	leaseManager := &fakeLease{}
+	record, err := leaseManager.Acquire(context.Background(), "i-active")
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	cloudProvider := &fakeCloud{
+		routes: map[string]cloud.RouteTarget{
+			"rtb-a:0.0.0.0/0": {RouteTableID: "rtb-a", DestinationCIDR: "0.0.0.0/0", Target: "i-old"},
+			"rtb-b:0.0.0.0/0": {RouteTableID: "rtb-b", DestinationCIDR: "0.0.0.0/0", Target: "i-old"},
+		},
+		identity: cloud.PublicIdentity{AllocationID: "eipalloc-123", InstanceID: "i-old", PublicIP: "198.51.100.10"},
+		onAssociate: func() {
+			leaseManager.record.Generation++
+			leaseManager.record.OwnerInstanceID = "i-other"
+		},
+	}
+	controller := Controller{Cloud: cloudProvider, Lease: leaseManager}
+
+	_, err = controller.EnsureOwnershipFenced(context.Background(), validHAConfig(), "i-active", record)
+	if err == nil {
+		t.Fatal("expected fenced ownership repair to fail")
+	}
+	wantCalls := []string{
+		"describe-eip:eipalloc-123",
+		"associate:eipalloc-123:i-active",
+	}
+	if !equalStrings(cloudProvider.calls, wantCalls) {
+		t.Fatalf("route repair must not continue after lease changes: got %#v want %#v", cloudProvider.calls, wantCalls)
+	}
+}
+
 func TestHandoverMovesCloudOwnershipThenTransfersLease(t *testing.T) {
 	leaseManager := &fakeLease{}
 	current, err := leaseManager.Acquire(context.Background(), "i-active")
@@ -265,6 +297,37 @@ func TestHandoverMovesCloudOwnershipThenTransfersLease(t *testing.T) {
 	}
 	if !equalStrings(cloudProvider.calls, wantCalls) {
 		t.Fatalf("unexpected calls: got %#v want %#v", cloudProvider.calls, wantCalls)
+	}
+}
+
+func TestHandoverStopsWhenLeaseChangesBeforeRouteMutation(t *testing.T) {
+	leaseManager := &fakeLease{}
+	current, err := leaseManager.Acquire(context.Background(), "i-active")
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	cloudProvider := &fakeCloud{
+		routes: map[string]cloud.RouteTarget{
+			"rtb-a:0.0.0.0/0": {RouteTableID: "rtb-a", DestinationCIDR: "0.0.0.0/0", Target: "i-active"},
+			"rtb-b:0.0.0.0/0": {RouteTableID: "rtb-b", DestinationCIDR: "0.0.0.0/0", Target: "i-active"},
+		},
+		identity: cloud.PublicIdentity{AllocationID: "eipalloc-123", InstanceID: "i-active", PublicIP: "198.51.100.10"},
+		onAssociate: func() {
+			leaseManager.record.Generation++
+			leaseManager.record.OwnerInstanceID = "i-other"
+		},
+	}
+	controller := Controller{Cloud: cloudProvider, Lease: leaseManager}
+
+	_, err = controller.Handover(context.Background(), validHAConfig(), "i-active", "i-standby", current)
+	if err == nil {
+		t.Fatal("expected handover to fail after lease change")
+	}
+	wantCalls := []string{
+		"associate:eipalloc-123:i-standby",
+	}
+	if !equalStrings(cloudProvider.calls, wantCalls) {
+		t.Fatalf("handover route mutation must not continue after lease changes: got %#v want %#v", cloudProvider.calls, wantCalls)
 	}
 }
 
@@ -393,6 +456,8 @@ type fakeCloud struct {
 	replaceErr            error
 	replaceErrs           []error
 	replaceMutatesOnError bool
+	onAssociate           func()
+	onReplace             func()
 }
 
 func (f *fakeCloud) ReplaceRoute(_ context.Context, target cloud.RouteTarget) error {
@@ -408,6 +473,9 @@ func (f *fakeCloud) ReplaceRoute(_ context.Context, target cloud.RouteTarget) er
 	if err == nil || f.replaceMutatesOnError {
 		f.routes[target.RouteTableID+":"+target.DestinationCIDR] = target
 	}
+	if f.onReplace != nil {
+		f.onReplace()
+	}
 	if err != nil {
 		return err
 	}
@@ -416,6 +484,9 @@ func (f *fakeCloud) ReplaceRoute(_ context.Context, target cloud.RouteTarget) er
 
 func (f *fakeCloud) AssociateEIP(_ context.Context, allocationID string, instanceID string) (cloud.PublicIdentity, error) {
 	f.calls = append(f.calls, "associate:"+allocationID+":"+instanceID)
+	if f.onAssociate != nil {
+		f.onAssociate()
+	}
 	f.identity = cloud.PublicIdentity{
 		AllocationID: allocationID,
 		PublicIP:     "198.51.100.10",

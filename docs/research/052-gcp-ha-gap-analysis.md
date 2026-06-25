@@ -569,7 +569,10 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
   tagged static routes with `nextHopInstance`.
 - [ ] Passive failover after active crash works.
 - [ ] Proactive handover works.
-- [ ] Route mutation cannot occur without a current lease generation.
+- [ ] Route mutation cannot occur without a current lease generation. The
+  controller now verifies the current lease generation before and after active
+  repair, activation, and handover cloud mutations in local tests, but live GCE
+  evidence is still required.
 - [ ] Agent degrades instead of reporting active when Firestore or Compute route
   verification is unavailable.
 - [x] Provider destroy remains safe after out-of-band route movement.

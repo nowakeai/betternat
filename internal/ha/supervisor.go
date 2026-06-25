@@ -136,7 +136,7 @@ func (s Supervisor) step(ctx context.Context, cfg config.Config, localInstanceID
 		if leaseErr := controller.VerifyLease(ctx, renewed, localInstanceID); leaseErr != nil {
 			return StepResult{State: StateDegraded, Lease: renewed, Err: fmt.Errorf("verify HA lease before ownership repair: %w", leaseErr)}
 		}
-		ownership, ownershipErr := controller.EnsureOwnership(ctx, cfg, localInstanceID)
+		ownership, ownershipErr := controller.EnsureOwnershipFenced(ctx, cfg, localInstanceID, renewed)
 		if ownershipErr != nil {
 			return StepResult{State: StateDegraded, Lease: renewed, Err: ownershipErr}
 		}

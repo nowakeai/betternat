@@ -96,9 +96,15 @@ func (c Controller) Activate(ctx context.Context, cfg config.Config, localInstan
 		if cfg.HA.PublicIdentity.AllocationID == "" {
 			return fail("ha.public_identity.allocation_id is required for shared_eip")
 		}
+		if err := c.verifyLeaseFence(ctx, record, localInstanceID, "before shared public identity activation"); err != nil {
+			return fail("%w", err)
+		}
 		identity, err := c.Cloud.AssociateEIP(ctx, cfg.HA.PublicIdentity.AllocationID, localInstanceID)
 		if err != nil {
 			return fail("associate EIP %q: %w", cfg.HA.PublicIdentity.AllocationID, err)
+		}
+		if err := c.verifyLeaseFence(ctx, record, localInstanceID, "after shared public identity activation"); err != nil {
+			return fail("%w", err)
 		}
 		result.PublicIdentity = identity
 	} else if cfg.HA.PublicIdentity.Mode != "" {
@@ -110,8 +116,14 @@ func (c Controller) Activate(ctx context.Context, cfg config.Config, localInstan
 		return fail("%w", err)
 	}
 	for _, target := range routes {
+		if err := c.verifyLeaseFence(ctx, record, localInstanceID, "before route activation"); err != nil {
+			return fail("%w", err)
+		}
 		if err := c.Cloud.ReplaceRoute(ctx, target); err != nil {
 			return fail("replace route %s %s: %w", target.RouteTableID, target.DestinationCIDR, err)
+		}
+		if err := c.verifyLeaseFence(ctx, record, localInstanceID, "after route activation"); err != nil {
+			return fail("%w", err)
 		}
 		result.Routes = append(result.Routes, target)
 	}
@@ -174,6 +186,16 @@ func (c Controller) VerifyLease(ctx context.Context, record lease.Record, localI
 	return nil
 }
 
+func (c Controller) verifyLeaseFence(ctx context.Context, record lease.Record, localInstanceID string, phase string) error {
+	if record.OwnerInstanceID == "" {
+		return nil
+	}
+	if err := c.VerifyLease(ctx, record, localInstanceID); err != nil {
+		return fmt.Errorf("verify HA lease %s: %w", phase, err)
+	}
+	return nil
+}
+
 func (c Controller) now() time.Time {
 	if c.Now != nil {
 		return c.Now()
@@ -182,6 +204,17 @@ func (c Controller) now() time.Time {
 }
 
 func (c Controller) EnsureOwnership(ctx context.Context, cfg config.Config, localInstanceID string) (ActivationResult, error) {
+	return c.ensureOwnership(ctx, cfg, localInstanceID, lease.Record{})
+}
+
+func (c Controller) EnsureOwnershipFenced(ctx context.Context, cfg config.Config, localInstanceID string, record lease.Record) (ActivationResult, error) {
+	if record.OwnerInstanceID == "" {
+		return ActivationResult{}, fmt.Errorf("lease record is required for fenced ownership repair")
+	}
+	return c.ensureOwnership(ctx, cfg, localInstanceID, record)
+}
+
+func (c Controller) ensureOwnership(ctx context.Context, cfg config.Config, localInstanceID string, record lease.Record) (ActivationResult, error) {
 	if !cfg.HA.Enabled {
 		return ActivationResult{}, nil
 	}
@@ -204,9 +237,15 @@ func (c Controller) EnsureOwnership(ctx context.Context, cfg config.Config, loca
 			return ActivationResult{}, fmt.Errorf("describe public identity %q: %w", cfg.HA.PublicIdentity.AllocationID, err)
 		}
 		if identity.InstanceID != localInstanceID {
+			if err := c.verifyLeaseFence(ctx, record, localInstanceID, "before public identity repair"); err != nil {
+				return ActivationResult{}, err
+			}
 			identity, err = c.Cloud.AssociateEIP(ctx, cfg.HA.PublicIdentity.AllocationID, localInstanceID)
 			if err != nil {
 				return ActivationResult{}, fmt.Errorf("associate EIP %q: %w", cfg.HA.PublicIdentity.AllocationID, err)
+			}
+			if err := c.verifyLeaseFence(ctx, record, localInstanceID, "after public identity repair"); err != nil {
+				return ActivationResult{}, err
 			}
 		}
 		if identity.InstanceID != localInstanceID {
@@ -227,8 +266,14 @@ func (c Controller) EnsureOwnership(ctx context.Context, cfg config.Config, loca
 			return ActivationResult{}, fmt.Errorf("describe route %s %s: %w", target.RouteTableID, target.DestinationCIDR, err)
 		}
 		if actual.Target != target.Target {
+			if err := c.verifyLeaseFence(ctx, record, localInstanceID, "before route repair"); err != nil {
+				return ActivationResult{}, err
+			}
 			if err := c.Cloud.ReplaceRoute(ctx, target); err != nil {
 				return ActivationResult{}, fmt.Errorf("replace route %s %s: %w", target.RouteTableID, target.DestinationCIDR, err)
+			}
+			if err := c.verifyLeaseFence(ctx, record, localInstanceID, "after route repair"); err != nil {
+				return ActivationResult{}, err
 			}
 			actual, err = c.Cloud.DescribeRoute(ctx, target.RouteTableID, target.DestinationCIDR)
 			if err != nil {
@@ -291,9 +336,15 @@ func (c Controller) Handover(ctx context.Context, cfg config.Config, localInstan
 		if cfg.HA.PublicIdentity.AllocationID == "" {
 			return HandoverResult{}, fmt.Errorf("ha.public_identity.allocation_id is required for shared_eip")
 		}
+		if err := c.verifyLeaseFence(ctx, record, localInstanceID, "before handover public identity mutation"); err != nil {
+			return HandoverResult{}, err
+		}
 		identity, err := c.Cloud.AssociateEIP(ctx, cfg.HA.PublicIdentity.AllocationID, targetInstanceID)
 		if err != nil {
 			return HandoverResult{}, fmt.Errorf("associate EIP %q to handover target %q: %w", cfg.HA.PublicIdentity.AllocationID, targetInstanceID, err)
+		}
+		if err := c.verifyLeaseFence(ctx, record, localInstanceID, "after handover public identity mutation"); err != nil {
+			return HandoverResult{}, err
 		}
 		result.PublicIdentity = identity
 	} else if cfg.HA.PublicIdentity.Mode != "" {
@@ -305,12 +356,20 @@ func (c Controller) Handover(ctx context.Context, cfg config.Config, localInstan
 		return HandoverResult{}, err
 	}
 	for _, target := range routes {
-		if err := c.replaceRouteForHandover(ctx, target, targetInstanceID); err != nil {
+		if err := c.replaceRouteForHandover(ctx, target, targetInstanceID, localInstanceID, record); err != nil {
 			return HandoverResult{}, fmt.Errorf("replace route %s %s to handover target %q: %w", target.RouteTableID, target.DestinationCIDR, targetInstanceID, err)
 		}
 		result.Routes = append(result.Routes, target)
 	}
 	if err := c.verifyTargetOwnership(ctx, cfg, targetInstanceID, result.Routes); err != nil {
+		revertErr := c.revertHandover(ctx, cfg, localInstanceID)
+		result.Reverted = revertErr == nil
+		if revertErr != nil {
+			return result, fmt.Errorf("%w; revert handover ownership to %q: %v", err, localInstanceID, revertErr)
+		}
+		return result, err
+	}
+	if err := c.verifyLeaseFence(ctx, record, localInstanceID, "before handover lease transfer"); err != nil {
 		revertErr := c.revertHandover(ctx, cfg, localInstanceID)
 		result.Reverted = revertErr == nil
 		if revertErr != nil {
@@ -331,7 +390,7 @@ func (c Controller) Handover(ctx context.Context, cfg config.Config, localInstan
 	return result, nil
 }
 
-func (c Controller) replaceRouteForHandover(ctx context.Context, target cloud.RouteTarget, targetInstanceID string) error {
+func (c Controller) replaceRouteForHandover(ctx context.Context, target cloud.RouteTarget, targetInstanceID string, localInstanceID string, record lease.Record) error {
 	var lastErr error
 	for attempt, backoff := range handoverRouteReplaceBackoffs {
 		if backoff > 0 {
@@ -343,8 +402,15 @@ func (c Controller) replaceRouteForHandover(ctx context.Context, target cloud.Ro
 			}
 		}
 		attemptCtx, cancel := context.WithTimeout(ctx, handoverRouteReplaceAttemptTimeout)
+		if err := c.verifyLeaseFence(ctx, record, localInstanceID, "before handover route mutation"); err != nil {
+			cancel()
+			return err
+		}
 		err := c.Cloud.ReplaceRoute(attemptCtx, target)
 		cancel()
+		if fenceErr := c.verifyLeaseFence(ctx, record, localInstanceID, "after handover route mutation"); fenceErr != nil {
+			return fenceErr
+		}
 		if err != nil {
 			lastErr = err
 		}

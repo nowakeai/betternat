@@ -569,6 +569,11 @@ Append dated notes here during implementation.
   - provider-owned runtime IAM smoke with `manage_runtime_iam = true` is also
     blocked by missing `iam.roles.create`, `iam.roles.update`, and
     `iam.roles.delete`.
+- Strengthened HA route-mutation fencing in code: activation, active ownership
+  repair, and proactive handover now verify the current lease generation before
+  and after cloud mutations. Local tests cover stopping route repair/handover
+  when the active lease changes mid-operation; live GCE evidence is still
+  pending.
 - Opened implementation PRs:
   - main repo: `https://github.com/nowakeai/betternat/pull/1`
   - split provider repo:
