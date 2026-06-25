@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/nowakeai/betternat/internal/coordination"
 )
 
 func TestIntegrationFirestoreLeaseContention(t *testing.T) {
@@ -34,6 +36,8 @@ func TestIntegrationFirestoreLeaseContention(t *testing.T) {
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cleanupCancel()
 		_, _ = active.leaseDoc().Delete(cleanupCtx)
+		_, _ = active.recordsCollection().Doc(agentRecordID("gce-b")).Delete(cleanupCtx)
+		_, _ = active.recordsCollection().Doc(handoverRecordID("req-1")).Delete(cleanupCtx)
 	}()
 
 	record, err := active.Acquire(ctx, "gce-a")
@@ -68,6 +72,53 @@ func TestIntegrationFirestoreLeaseContention(t *testing.T) {
 	}
 	if renewed.OwnerInstanceID != "gce-b" || renewed.Generation != 2 {
 		t.Fatalf("unexpected renewed record: %#v", renewed)
+	}
+
+	if err := standby.PutAgent(ctx, coordination.AgentRecord{
+		NodeID:          "gce-b",
+		PrivateIP:       "10.0.1.20",
+		DatapathReady:   true,
+		HAState:         "active",
+		LeaseGeneration: renewed.Generation,
+	}, time.Minute); err != nil {
+		t.Fatalf("put agent: %v", err)
+	}
+	agents, err := standby.ListAgents(ctx)
+	if err != nil {
+		t.Fatalf("list agents: %v", err)
+	}
+	if len(agents) != 1 || agents[0].NodeID != "gce-b" || !agents[0].DatapathReady {
+		t.Fatalf("unexpected agents: %#v", agents)
+	}
+
+	handover, err := standby.CreateHandover(ctx, coordination.HandoverRecord{
+		RequestID:       "req-1",
+		SourceNodeID:    "gce-a",
+		TargetNodeID:    "gce-b",
+		Reason:          "integration",
+		LeaseGeneration: record.Generation,
+	}, time.Minute)
+	if err != nil {
+		t.Fatalf("create handover: %v", err)
+	}
+	if handover.Status != "requested" {
+		t.Fatalf("unexpected created handover: %#v", handover)
+	}
+	handover.Status = "completed"
+	handover.LeaseGeneration = renewed.Generation
+	updated, err := standby.UpdateHandover(ctx, handover, time.Minute)
+	if err != nil {
+		t.Fatalf("update handover: %v", err)
+	}
+	if updated.Status != "completed" || updated.LeaseGeneration != renewed.Generation {
+		t.Fatalf("unexpected updated handover: %#v", updated)
+	}
+	handovers, err := standby.ListHandovers(ctx)
+	if err != nil {
+		t.Fatalf("list handovers: %v", err)
+	}
+	if len(handovers) != 1 || handovers[0].RequestID != "req-1" || handovers[0].Status != "completed" {
+		t.Fatalf("unexpected handovers: %#v", handovers)
 	}
 
 	if err := standby.Release(ctx, renewed); err != nil {

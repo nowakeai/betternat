@@ -509,6 +509,11 @@ Append dated notes here during implementation.
   interfaces instead of DynamoDB-specific record types. DynamoDB remains the AWS
   implementation, but this removes the type-level blocker for Firestore-backed
   GCP registry and handover support.
+- Extended `internal/coordination/firestore` beyond leases to implement agent
+  registry and handover records under the same per-gateway Firestore records
+  collection. The skipped live smoke now validates lease contention, registry
+  publish/list, and handover create/update/list when a Firestore database is
+  available.
 - Opened implementation PRs:
   - main repo: `https://github.com/nowakeai/betternat/pull/1`
   - split provider repo:

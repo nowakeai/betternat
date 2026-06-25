@@ -9,6 +9,13 @@ import (
 
 const leaseRecordID = "lease"
 
+const (
+	agentRecordType    = "agent"
+	handoverRecordType = "handover"
+	agentPrefix        = "agent#"
+	handoverPrefix     = "handover#"
+)
+
 type leaseDocument struct {
 	RecordType      string    `firestore:"record_type"`
 	GatewayID       string    `firestore:"gateway_id"`
