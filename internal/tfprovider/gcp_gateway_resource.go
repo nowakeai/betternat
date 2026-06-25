@@ -42,6 +42,7 @@ type GCPGatewayResourceModel struct {
 	ImageProject                types.String `tfsdk:"image_project"`
 	ImageFamily                 types.String `tfsdk:"image_family"`
 	GatewayCount                types.Int64  `tfsdk:"gateway_count"`
+	CapacityRepairMode          types.String `tfsdk:"capacity_repair_mode"`
 	PrivateCIDRs                types.List   `tfsdk:"private_cidrs"`
 	ServiceAccountEmail         types.String `tfsdk:"service_account_email"`
 	RuntimeServiceAccountID     types.String `tfsdk:"runtime_service_account_id"`
@@ -136,6 +137,12 @@ func (r *GCPGatewayResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional: true,
 				Computed: true,
 				Default:  int64default.StaticInt64(2),
+			},
+			"capacity_repair_mode": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				Default:             stringdefault.StaticString("unmanaged"),
+				MarkdownDescription: "Experimental GCP capacity repair mode. `unmanaged` preserves the current provider-owned VM behavior. `mig` creates a zonal Managed Instance Group from an instance template so failed gateway capacity can be replaced by GCE.",
 			},
 			"private_cidrs": schema.ListAttribute{
 				ElementType:         types.StringType,
@@ -411,6 +418,7 @@ func gcpInputs(model GCPGatewayResourceModel, privateCIDRs []string) gcpinstall.
 		ImageProject:        stringDefault(model.ImageProject, "debian-cloud"),
 		ImageFamily:         stringDefault(model.ImageFamily, "debian-12"),
 		GatewayCount:        int64Default(model.GatewayCount, 2),
+		CapacityRepairMode:  stringDefault(model.CapacityRepairMode, "unmanaged"),
 		PrivateCIDRs:        privateCIDRs,
 		ServiceAccountEmail: stringDefault(model.ServiceAccountEmail, ""),
 		Labels: map[string]string{
@@ -424,6 +432,9 @@ func gcpInputs(model GCPGatewayResourceModel, privateCIDRs []string) gcpinstall.
 	}
 	if inputs.GatewayCount == 0 {
 		inputs.GatewayCount = 2
+	}
+	if inputs.CapacityRepairMode == "" {
+		inputs.CapacityRepairMode = "unmanaged"
 	}
 	if enableAgentHA {
 		inputs.StartupScript = stringDefault(model.StartupScript, "")
@@ -450,6 +461,7 @@ func applyGCPComputedPlan(model *GCPGatewayResourceModel, inputs gcpinstall.Inpu
 	model.ImageProject = types.StringValue(inputs.ImageProject)
 	model.ImageFamily = types.StringValue(inputs.ImageFamily)
 	model.GatewayCount = types.Int64Value(inputs.GatewayCount)
+	model.CapacityRepairMode = types.StringValue(inputs.CapacityRepairMode)
 	model.ServiceAccountEmail = types.StringValue(inputs.ServiceAccountEmail)
 	model.RuntimeServiceAccountID = types.StringValue(stringDefault(model.RuntimeServiceAccountID, ""))
 	model.RuntimeIAMRoleID = types.StringValue(stringDefault(model.RuntimeIAMRoleID, ""))

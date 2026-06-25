@@ -146,6 +146,26 @@ func TestGCPStablePublicIdentityRequiresAgentHA(t *testing.T) {
 	}
 }
 
+func TestGCPInputsCapacityRepairMode(t *testing.T) {
+	model := baseGCPGatewayModel()
+	privateCIDRs := []string{"10.91.0.0/24"}
+
+	inputs := gcpInputs(model, privateCIDRs)
+	if inputs.CapacityRepairMode != "unmanaged" {
+		t.Fatalf("expected default unmanaged capacity repair mode, got %q", inputs.CapacityRepairMode)
+	}
+
+	model.CapacityRepairMode = types.StringValue("mig")
+	inputs = gcpInputs(model, privateCIDRs)
+	if inputs.CapacityRepairMode != "mig" {
+		t.Fatalf("expected explicit mig capacity repair mode, got %q", inputs.CapacityRepairMode)
+	}
+	applyGCPComputedPlan(&model, inputs)
+	if model.CapacityRepairMode.ValueString() != "mig" {
+		t.Fatalf("expected computed plan to preserve mig mode, got %q", model.CapacityRepairMode.ValueString())
+	}
+}
+
 func TestGCPAgentHABootstrapRequiresArtifacts(t *testing.T) {
 	model := baseGCPGatewayModel()
 	model.EnableAgentHA = types.BoolValue(true)
@@ -395,6 +415,7 @@ func baseGCPGatewayModel() GCPGatewayResourceModel {
 		ImageProject:                types.StringNull(),
 		ImageFamily:                 types.StringNull(),
 		GatewayCount:                types.Int64Null(),
+		CapacityRepairMode:          types.StringNull(),
 		ServiceAccountEmail:         types.StringNull(),
 		RuntimeServiceAccountID:     types.StringNull(),
 		ManageRuntimeServiceAccount: types.BoolNull(),

@@ -24,6 +24,7 @@ type Inputs struct {
 	ImageProject        string
 	ImageFamily         string
 	GatewayCount        int64
+	CapacityRepairMode  string
 	PrivateCIDRs        []string
 	Labels              map[string]string
 	ServiceAccountEmail string
@@ -53,6 +54,26 @@ func (a Applier) Apply(ctx context.Context, inputs Inputs) (Result, error) {
 	if err := inputs.validate(); err != nil {
 		return Result{}, err
 	}
+	if capacityRepairMode(inputs) == "mig" {
+		if err := a.createInstanceTemplate(ctx, inputs); err != nil {
+			return Result{}, err
+		}
+		if err := a.createInstanceGroupManager(ctx, inputs); err != nil {
+			return Result{}, err
+		}
+		names, err := a.waitManagedGatewayNames(ctx, inputs)
+		if err != nil {
+			return Result{}, err
+		}
+		if err := a.createRoute(ctx, inputs, names[0]); err != nil {
+			return Result{}, err
+		}
+		read, err := a.Read(ctx, inputs)
+		if err != nil {
+			return Result{}, err
+		}
+		return Result{GatewayInstances: read.GatewayInstances, EgressPublicIPs: read.EgressPublicIPs, RouteTarget: read.RouteTarget}, nil
+	}
 	for _, name := range gatewayNames(inputs.Name, inputs.GatewayCount) {
 		if err := a.createInstance(ctx, inputs, name); err != nil {
 			return Result{}, err
@@ -73,13 +94,22 @@ func (a Applier) Cleanup(ctx context.Context, inputs Inputs) error {
 		return err
 	}
 	var firstErr error
+	if err := a.deleteRoute(ctx, inputs); err != nil && !isNotFound(err) && firstErr == nil {
+		firstErr = err
+	}
+	if capacityRepairMode(inputs) == "mig" {
+		if err := a.deleteInstanceGroupManager(ctx, inputs); err != nil && !isNotFound(err) && firstErr == nil {
+			firstErr = err
+		}
+		if err := a.deleteInstanceTemplate(ctx, inputs); err != nil && !isNotFound(err) && firstErr == nil {
+			firstErr = err
+		}
+		return firstErr
+	}
 	for _, name := range gatewayNames(inputs.Name, inputs.GatewayCount) {
 		if err := a.deleteInstance(ctx, inputs, name); err != nil && !isNotFound(err) && firstErr == nil {
 			firstErr = err
 		}
-	}
-	if err := a.deleteRoute(ctx, inputs); err != nil && !isNotFound(err) && firstErr == nil {
-		firstErr = err
 	}
 	return firstErr
 }
@@ -90,7 +120,19 @@ func (a Applier) Read(ctx context.Context, inputs Inputs) (ReadResult, error) {
 	}
 	instances := map[string]string{}
 	ips := map[string]string{}
-	for _, name := range gatewayNames(inputs.Name, inputs.GatewayCount) {
+	names := gatewayNames(inputs.Name, inputs.GatewayCount)
+	if capacityRepairMode(inputs) == "mig" {
+		var err error
+		names, err = a.managedGatewayNames(ctx, inputs)
+		if err != nil {
+			if isNotFound(err) {
+				names = nil
+			} else {
+				return ReadResult{}, err
+			}
+		}
+	}
+	for _, name := range names {
 		inst, err := a.Compute.Instances.Get(inputs.ProjectID, inputs.Zone, name).Context(ctx).Do()
 		if err != nil {
 			if isNotFound(err) {
@@ -167,6 +209,100 @@ func gatewayInstance(inputs Inputs, name string) *compute.Instance {
 		}}
 	}
 	return inst
+}
+
+func gatewayInstanceTemplate(inputs Inputs) *compute.InstanceTemplate {
+	instance := gatewayInstance(inputs, "")
+	return &compute.InstanceTemplate{
+		Name:        instanceTemplateName(inputs),
+		Description: "BetterNAT GCP gateway instance template.",
+		Properties: &compute.InstanceProperties{
+			CanIpForward:      true,
+			MachineType:       valueOr(inputs.MachineType, "e2-small"),
+			Labels:            inputs.Labels,
+			Disks:             instance.Disks,
+			NetworkInterfaces: instance.NetworkInterfaces,
+			Metadata:          instance.Metadata,
+			ServiceAccounts:   instance.ServiceAccounts,
+		},
+	}
+}
+
+func gatewayInstanceGroupManager(inputs Inputs) *compute.InstanceGroupManager {
+	return &compute.InstanceGroupManager{
+		Name:             instanceGroupManagerName(inputs),
+		Description:      "BetterNAT GCP gateway managed instance group.",
+		BaseInstanceName: inputs.Name + "-gw-###",
+		InstanceTemplate: globalLink(inputs.ProjectID, "instanceTemplates", instanceTemplateName(inputs)),
+		TargetSize:       inputs.GatewayCount,
+		Zone:             zoneLink(inputs.ProjectID, inputs.Zone, "zones", inputs.Zone),
+	}
+}
+
+func (a Applier) createInstanceTemplate(ctx context.Context, inputs Inputs) error {
+	op, err := a.Compute.InstanceTemplates.Insert(inputs.ProjectID, gatewayInstanceTemplate(inputs)).Context(ctx).Do()
+	if err != nil {
+		return err
+	}
+	return a.waitGlobalOperation(ctx, inputs, op.Name)
+}
+
+func (a Applier) deleteInstanceTemplate(ctx context.Context, inputs Inputs) error {
+	op, err := a.Compute.InstanceTemplates.Delete(inputs.ProjectID, instanceTemplateName(inputs)).Context(ctx).Do()
+	if err != nil {
+		return err
+	}
+	return a.waitGlobalOperation(ctx, inputs, op.Name)
+}
+
+func (a Applier) createInstanceGroupManager(ctx context.Context, inputs Inputs) error {
+	op, err := a.Compute.InstanceGroupManagers.Insert(inputs.ProjectID, inputs.Zone, gatewayInstanceGroupManager(inputs)).Context(ctx).Do()
+	if err != nil {
+		return err
+	}
+	return a.waitZoneOperation(ctx, inputs, op.Name)
+}
+
+func (a Applier) deleteInstanceGroupManager(ctx context.Context, inputs Inputs) error {
+	op, err := a.Compute.InstanceGroupManagers.Delete(inputs.ProjectID, inputs.Zone, instanceGroupManagerName(inputs)).Context(ctx).Do()
+	if err != nil {
+		return err
+	}
+	return a.waitZoneOperation(ctx, inputs, op.Name)
+}
+
+func (a Applier) waitManagedGatewayNames(ctx context.Context, inputs Inputs) ([]string, error) {
+	poll := inputs.OperationPollTime
+	if poll <= 0 {
+		poll = 2 * time.Second
+	}
+	for {
+		names, err := a.managedGatewayNames(ctx, inputs)
+		if err != nil {
+			return nil, err
+		}
+		if len(names) > 0 {
+			return names, nil
+		}
+		if err := sleepContext(ctx, poll); err != nil {
+			return nil, err
+		}
+	}
+}
+
+func (a Applier) managedGatewayNames(ctx context.Context, inputs Inputs) ([]string, error) {
+	result, err := a.Compute.InstanceGroupManagers.ListManagedInstances(inputs.ProjectID, inputs.Zone, instanceGroupManagerName(inputs)).Context(ctx).Do()
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(result.ManagedInstances))
+	for _, managed := range result.ManagedInstances {
+		if managed == nil || managed.Instance == "" || managed.CurrentAction == "DELETING" || managed.CurrentAction == "ABANDONING" {
+			continue
+		}
+		names = append(names, baseName(managed.Instance))
+	}
+	return names, nil
 }
 
 func (a Applier) createRoute(ctx context.Context, inputs Inputs, gatewayName string) error {
@@ -256,6 +392,11 @@ func (i Inputs) validate() error {
 	if i.GatewayCount < 1 {
 		return fmt.Errorf("gateway_count must be at least 1")
 	}
+	switch capacityRepairMode(i) {
+	case "unmanaged", "mig":
+	default:
+		return fmt.Errorf("unsupported capacity_repair_mode %q", i.CapacityRepairMode)
+	}
 	return nil
 }
 
@@ -268,6 +409,21 @@ func gatewayNames(name string, count int64) []string {
 		names = append(names, fmt.Sprintf("%s-gw-%c", name, 'a'+rune(i)))
 	}
 	return names
+}
+
+func capacityRepairMode(inputs Inputs) string {
+	if strings.TrimSpace(inputs.CapacityRepairMode) == "" {
+		return "unmanaged"
+	}
+	return inputs.CapacityRepairMode
+}
+
+func instanceTemplateName(inputs Inputs) string {
+	return inputs.Name + "-template"
+}
+
+func instanceGroupManagerName(inputs Inputs) string {
+	return inputs.Name + "-mig"
 }
 
 func operationError(op *compute.Operation) error {

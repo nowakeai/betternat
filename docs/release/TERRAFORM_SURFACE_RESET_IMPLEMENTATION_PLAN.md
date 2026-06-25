@@ -290,6 +290,10 @@ Tasks:
 - [x] Validate destroy/rollback after an agent-owned route movement.
 - [x] Decide GCP capacity repair model: unmanaged instances for alpha only;
   MIG-backed replacement is the expected GA path unless a later ADR changes it.
+- [x] Add first GCP MIG capacity-repair implementation slice behind
+  `capacity_repair_mode = "mig"`; local tests cover template/MIG rendering and
+  Terraform input propagation, while live termination/replacement validation
+  remains a GA gate.
 - [x] Destroy all resources and scan residuals.
 
 Validation evidence:
@@ -469,6 +473,9 @@ Done when:
 - [x] GCP stable public identity first implementation path: use an existing
   regional static external address name and access-config handover; live GCE
   validation is still required before GA.
+- [x] GCP capacity repair first implementation path: opt-in zonal MIG mode in
+  `betternat_gcp_gateway`, with unmanaged VM mode retained as the alpha
+  default until live GCE replacement evidence is recorded.
 - [ ] Whether GCP lease backend is Firestore or GCS generation preconditions.
 - [ ] Provider version number for the surface reset.
 - [ ] Module versioning policy while provider and modules are released from

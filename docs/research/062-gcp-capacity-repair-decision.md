@@ -8,9 +8,15 @@ GCP alpha may continue to use provider-owned unmanaged GCE gateway instances.
 GCP GA should use Managed Instance Groups for capacity repair unless a later
 architecture decision proves a smaller repair loop is safer.
 
-The current `internal/install/gcp` applier creates fixed gateway VMs directly
-and deletes those VMs on cleanup. That is acceptable for disposable alpha
-validation, but it is not a production capacity-repair contract.
+The default `internal/install/gcp` applier path still creates fixed gateway VMs
+directly and deletes those VMs on cleanup. That is acceptable for disposable
+alpha validation, but it is not a production capacity-repair contract.
+
+The first GA-oriented implementation slice adds an opt-in Terraform/provider
+mode, `capacity_repair_mode = "mig"`, that creates a zonal instance template
+and managed instance group for gateway capacity. This is intentionally not the
+default until live GCE termination, replacement, failover, and cleanup evidence
+is recorded.
 
 ## Rationale
 
@@ -38,6 +44,7 @@ the default GA model.
 For GCP alpha:
 
 - unmanaged gateway VMs are allowed,
+- `capacity_repair_mode` defaults to `unmanaged`,
 - `gateway_count >= 2` is required for HA evidence,
 - replacement after VM loss is not automatic,
 - capacity repair must be documented as an alpha limitation,
@@ -45,8 +52,8 @@ For GCP alpha:
 
 For GCP GA:
 
-- provider/module should create instance templates and MIGs instead of fixed
-  unmanaged gateway VMs,
+- provider/module should make the MIG-backed path the documented default once
+  live validation passes,
 - replacement nodes must boot with the same BetterNAT config and register as
   standby without stealing ownership,
 - active owner termination must fail over through the existing lease-fenced

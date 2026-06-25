@@ -231,5 +231,14 @@ identity then needs:
 Leave `manage_firestore_database = false` when Firestore database lifecycle is
 owned by another Terraform stack or infra-admin workflow.
 
-Current GCP limitation: route-only GCP HA does not provide stable public egress
-IP failover yet.
+When `capacity_repair_mode = "mig"`, the Terraform execution identity also
+needs Compute Engine permissions to create, read, and delete the provider-owned
+instance template and zonal managed instance group, and to list managed
+instances while selecting the initial route target. Keep this mode limited to
+disposable GCP GA-readiness validation until live replacement evidence is
+recorded.
+
+Current GCP limitation: stable public egress IP handover has an implementation
+slice for existing regional static external IPv4 addresses, but live GCE
+handover validation and provider-owned static-address lifecycle management are
+still GA gates.

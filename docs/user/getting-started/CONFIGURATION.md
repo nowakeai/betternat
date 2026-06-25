@@ -293,6 +293,11 @@ or infra-admin stack. `firestore_location_id` defaults to `region` when
 database management is enabled.
 Set `runtime_service_account_id` only when the derived service-account ID is not
 acceptable for the project.
+Set `capacity_repair_mode = "mig"` only for disposable GCP GA-readiness
+validation. The default remains `unmanaged`; MIG mode creates a zonal instance
+template and managed instance group so GCE can replace lost gateway capacity,
+but live termination, failover, replacement, and cleanup evidence is still
+required before this becomes the documented GCP default.
 Explicit `agent_binary_url`, `agent_binary_sha256`, `cli_binary_url`, and
 `cli_binary_sha256` overrides are supported for local mirrors and unreleased
 test builds. This path is still experimental until live two-agent route
@@ -332,9 +337,11 @@ coordination:
   backend: firestore
 ```
 
-For GCP, `route_table_ids` currently means GCP static route names. Shared public
-identity is intentionally unsupported until a stable GCP public IP handover
-strategy is proven.
+For GCP, `route_table_ids` currently means GCP static route names. Existing
+regional static external IPv4 address handover can be rendered with
+`stable_public_identity_address_name` when `enable_agent_ha = true`, but live
+GCE stable-IP handover validation and provider-owned static-address lifecycle
+management remain GA gates.
 
 ## Update Behavior
 
