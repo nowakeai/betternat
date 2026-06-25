@@ -514,6 +514,11 @@ Append dated notes here during implementation.
   collection. The skipped live smoke now validates lease contention, registry
   publish/list, and handover create/update/list when a Firestore database is
   available.
+- Added `internal/cloud/gcp` as the GCP implementation of the provider-neutral
+  `cloud.Provider` route methods. It replaces GCP tagged static routes by
+  deleting and recreating the route with a `nextHopInstance`, verifies route
+  targets by reading Compute routes, and explicitly rejects shared public
+  identity operations until a GCP stable public IP strategy is proven.
 - Opened implementation PRs:
   - main repo: `https://github.com/nowakeai/betternat/pull/1`
   - split provider repo:

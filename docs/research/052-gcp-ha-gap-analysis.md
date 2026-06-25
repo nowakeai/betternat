@@ -353,6 +353,8 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
   `shared-resources-alt` database creation is currently blocked by IAM for
   `renjie@altresear.ch`.
 - [ ] Agent on GCE mutates routes only after lease verification.
+- [x] GCP `cloud.Provider` route replace/describe implementation exists for
+  tagged static routes with `nextHopInstance`.
 - [ ] Passive failover after active crash works.
 - [ ] Proactive handover works.
 - [x] Provider destroy remains safe after out-of-band route movement.
