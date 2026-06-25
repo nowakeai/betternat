@@ -348,8 +348,10 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
   and current.
 - [x] Unit tests prove acquire, renew, release, expired takeover, and transfer
   fencing decisions.
-- [ ] Live Firestore spike proves two contenders cannot both acquire an unexpired
-  lease.
+- [ ] Live Firestore spike proves two contenders cannot both acquire an
+  unexpired lease. The reusable integration test exists, but
+  `shared-resources-alt` database creation is currently blocked by IAM for
+  `renjie@altresear.ch`.
 - [ ] Agent on GCE mutates routes only after lease verification.
 - [ ] Passive failover after active crash works.
 - [ ] Proactive handover works.

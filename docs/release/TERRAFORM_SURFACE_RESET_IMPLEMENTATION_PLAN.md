@@ -492,6 +492,17 @@ Append dated notes here during implementation.
   cover missing leases, held leases, expired lease takeover, renew fences,
   release fences, and transfer fences. Live Firestore contention validation is
   still pending.
+- Added a skipped-by-default live Firestore contention integration test:
+  ```sh
+  BETTERNAT_GCP_FIRESTORE_PROJECT=<project> \
+  BETTERNAT_GCP_FIRESTORE_DATABASE=<database> \
+  go test ./internal/coordination/firestore \
+    -run TestIntegrationFirestoreLeaseContention -count=1
+  ```
+  `shared-resources-alt` now has `firestore.googleapis.com` enabled, but
+  `renjie@altresear.ch` could not create a named Firestore database:
+  `The caller does not have permission`. Live validation needs an existing
+  Firestore Native database or temporary database creation permission.
 - Opened implementation PRs:
   - main repo: `https://github.com/nowakeai/betternat/pull/1`
   - split provider repo:
