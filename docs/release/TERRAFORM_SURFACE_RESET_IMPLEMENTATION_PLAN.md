@@ -479,13 +479,12 @@ Append dated notes here during implementation.
   route target, private client egress returned active gateway IP
   `34.168.92.39`, `terraform destroy` removed provider-owned resources, and
   residual scans were empty after deleting precreated VPC/client resources.
-- Ran an extended unpublished Terraform provider GCP handover smoke with run ID
-  `bnat-gcp-ho-20260625051732`: provider-created route initially targeted
-  `gw-a` and client egress returned `34.168.92.39`; the route was manually
-  moved to `gw-b` and client egress returned `8.231.221.166`;
-  `terraform apply -refresh-only` updated both resource and data source route
-  targets to `gw-b`; `terraform destroy` still removed provider-owned gateway
-  VMs and route, and final residual scans were empty.
+- Reframed GCP scope after HA review: BetterNAT's core value over raw LoxiLB is
+  HA, so the current GCP implementation is only a forwarding substrate alpha.
+  Product-parity GCP work requires Firestore-backed lease/fencing, agent-owned
+  route mutation, proactive and passive handover, LoxiLB-on-GCE validation,
+  public identity decision, IAM, and observability gates. See
+  `docs/research/052-gcp-ha-gap-analysis.md`.
 - Opened implementation PRs:
   - main repo: `https://github.com/nowakeai/betternat/pull/1`
   - split provider repo:
