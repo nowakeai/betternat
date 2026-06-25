@@ -31,6 +31,7 @@ func (r fakeAgentReader) ListAgents(context.Context) ([]coordination.AgentRecord
 
 func TestSelectHandoverTargetRejectsStaleLeaseGeneration(t *testing.T) {
 	status := agentapi.StatusResponse{
+		Cloud:           "gcp",
 		LeaseGeneration: 9,
 		Instances: []agentapi.StatusInstance{
 			{NodeID: "gce-active", Role: "active", Fresh: true, LeaseGeneration: 9},
@@ -49,6 +50,30 @@ func TestSelectHandoverTargetRejectsStaleLeaseGeneration(t *testing.T) {
 	_, err = selectHandoverTarget(status, "gce-active", "gce-stale")
 	if err == nil || !strings.Contains(err.Error(), "stale lease generation") {
 		t.Fatalf("expected requested stale-generation target rejection, got %v", err)
+	}
+}
+
+func TestSelectHandoverTargetRequiresGenerationForGCP(t *testing.T) {
+	status := agentapi.StatusResponse{
+		Cloud:           "gcp",
+		LeaseGeneration: 9,
+		Instances: []agentapi.StatusInstance{
+			{NodeID: "gce-active", Role: "active", Fresh: true, LeaseGeneration: 9},
+			{NodeID: "gce-unknown", Role: "standby", Health: "Healthy", Fresh: true},
+		},
+	}
+	_, err := selectHandoverTarget(status, "gce-active", "gce-unknown")
+	if err == nil || !strings.Contains(err.Error(), "missing lease generation") {
+		t.Fatalf("expected requested missing-generation target rejection, got %v", err)
+	}
+
+	status.Cloud = "aws"
+	target, err := selectHandoverTarget(status, "gce-active", "gce-unknown")
+	if err != nil {
+		t.Fatalf("missing generation should remain compatible outside GCP: %v", err)
+	}
+	if target != "gce-unknown" {
+		t.Fatalf("unexpected target: %q", target)
 	}
 }
 

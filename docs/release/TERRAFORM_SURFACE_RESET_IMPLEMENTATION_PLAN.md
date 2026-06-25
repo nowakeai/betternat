@@ -730,5 +730,7 @@ Append dated notes here during implementation.
 - Added daemon handover target selection coverage for stale registry data:
   registry status now exposes per-peer lease generation and route-target-match
   fields, and handover target selection rejects a standby whose lease
-  generation is older than the current lease. Live GCE stale-registry and
-  restarted-old-active validation remains open.
+  generation is missing or older than the current lease for GCP. The target
+  selection helpers were split out of `control.go` to keep file size below the
+  project limit. Live GCE stale-registry and restarted-old-active validation
+  remains open.
