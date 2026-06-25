@@ -324,7 +324,9 @@ func (c Controller) Handover(ctx context.Context, cfg config.Config, localInstan
 
 	unlock := c.lockOwnership()
 	defer unlock()
-	if err := c.VerifyLease(ctx, record, localInstanceID); err != nil {
+	var err error
+	record, err = c.renewLeaseFence(ctx, record, localInstanceID, "after acquiring ownership lock")
+	if err != nil {
 		return HandoverResult{}, fmt.Errorf("verify HA lease after acquiring ownership lock: %w", err)
 	}
 
@@ -333,7 +335,8 @@ func (c Controller) Handover(ctx context.Context, cfg config.Config, localInstan
 		if cfg.HA.PublicIdentity.AllocationID == "" {
 			return HandoverResult{}, fmt.Errorf("ha.public_identity.allocation_id is required for shared_eip")
 		}
-		if err := c.verifyLeaseFence(ctx, record, localInstanceID, "before handover public identity mutation"); err != nil {
+		record, err = c.renewLeaseFence(ctx, record, localInstanceID, "before handover public identity mutation")
+		if err != nil {
 			return HandoverResult{}, err
 		}
 		identity, err := c.Cloud.AssociateEIP(ctx, cfg.HA.PublicIdentity.AllocationID, targetInstanceID)
@@ -353,7 +356,8 @@ func (c Controller) Handover(ctx context.Context, cfg config.Config, localInstan
 		return HandoverResult{}, err
 	}
 	for _, target := range routes {
-		if err := c.replaceRouteForHandover(ctx, target, targetInstanceID, localInstanceID, record); err != nil {
+		record, err = c.replaceRouteForHandover(ctx, target, targetInstanceID, localInstanceID, record)
+		if err != nil {
 			return HandoverResult{}, fmt.Errorf("replace route %s %s to handover target %q: %w", target.RouteTableID, target.DestinationCIDR, targetInstanceID, err)
 		}
 		result.Routes = append(result.Routes, target)
@@ -366,7 +370,8 @@ func (c Controller) Handover(ctx context.Context, cfg config.Config, localInstan
 		}
 		return result, err
 	}
-	if err := c.verifyLeaseFence(ctx, record, localInstanceID, "before handover lease transfer"); err != nil {
+	record, err = c.renewLeaseFence(ctx, record, localInstanceID, "before handover lease transfer")
+	if err != nil {
 		revertErr := c.revertHandover(ctx, cfg, localInstanceID)
 		result.Reverted = revertErr == nil
 		if revertErr != nil {
@@ -387,33 +392,49 @@ func (c Controller) Handover(ctx context.Context, cfg config.Config, localInstan
 	return result, nil
 }
 
-func (c Controller) replaceRouteForHandover(ctx context.Context, target cloud.RouteTarget, targetInstanceID string, localInstanceID string, record lease.Record) error {
+func (c Controller) renewLeaseFence(ctx context.Context, record lease.Record, localInstanceID string, phase string) (lease.Record, error) {
+	if err := c.VerifyLease(ctx, record, localInstanceID); err != nil {
+		return lease.Record{}, fmt.Errorf("verify HA lease %s: %w", phase, err)
+	}
+	renewed, err := c.Lease.Renew(ctx, record)
+	if err != nil {
+		return lease.Record{}, fmt.Errorf("renew HA lease %s: %w", phase, err)
+	}
+	if err := c.VerifyLease(ctx, renewed, localInstanceID); err != nil {
+		return lease.Record{}, fmt.Errorf("verify renewed HA lease %s: %w", phase, err)
+	}
+	return renewed, nil
+}
+
+func (c Controller) replaceRouteForHandover(ctx context.Context, target cloud.RouteTarget, targetInstanceID string, localInstanceID string, record lease.Record) (lease.Record, error) {
 	var lastErr error
 	for attempt, backoff := range handoverRouteReplaceBackoffs {
 		if backoff > 0 {
 			if err := sleepContext(ctx, backoff); err != nil {
 				if lastErr != nil {
-					return lastErr
+					return lease.Record{}, lastErr
 				}
-				return err
+				return lease.Record{}, err
 			}
 		}
 		attemptCtx, cancel := context.WithTimeout(ctx, handoverRouteReplaceAttemptTimeout)
-		if err := c.verifyLeaseFence(ctx, record, localInstanceID, "before handover route mutation"); err != nil {
+		renewed, err := c.renewLeaseFence(ctx, record, localInstanceID, "before handover route mutation")
+		if err != nil {
 			cancel()
-			return err
+			return lease.Record{}, err
 		}
-		err := c.Cloud.ReplaceRoute(attemptCtx, target)
+		record = renewed
+		err = c.Cloud.ReplaceRoute(attemptCtx, target)
 		cancel()
 		if fenceErr := c.verifyLeaseFence(ctx, record, localInstanceID, "after handover route mutation"); fenceErr != nil {
-			return fenceErr
+			return lease.Record{}, fenceErr
 		}
 		if err != nil {
 			lastErr = err
 		}
 		actual, verifyErr := c.Cloud.DescribeRoute(ctx, target.RouteTableID, target.DestinationCIDR)
 		if verifyErr == nil && actual.Target == targetInstanceID {
-			return nil
+			return record, nil
 		}
 		if err == nil && verifyErr != nil {
 			lastErr = fmt.Errorf("verify route after replace attempt %d: %w", attempt+1, verifyErr)
@@ -424,7 +445,7 @@ func (c Controller) replaceRouteForHandover(ctx context.Context, target cloud.Ro
 	if lastErr == nil {
 		lastErr = fmt.Errorf("route did not converge to %q", targetInstanceID)
 	}
-	return lastErr
+	return lease.Record{}, lastErr
 }
 
 func (c Controller) verifyTargetOwnership(ctx context.Context, cfg config.Config, targetInstanceID string, routes []cloud.RouteTarget) error {

@@ -233,7 +233,7 @@ Done when:
 
 ## Phase 4: GCP Spike
 
-Status: `substrate forwarding and experimental HA bootstrap complete; BetterNAT-value HA proof still pending`
+Status: `route-only live HA proof complete; datapath counters, raw baseline, and failure injection pending`
 
 Goal: validate whether GCP can support the BetterNAT product model before
 committing to a production resource.
@@ -272,7 +272,7 @@ Tasks:
 - [ ] Compare raw LoxiLB GCP HA behavior against BetterNAT-owned route fencing.
 - [x] Run two-agent GCE HA smoke where route mutation is lease-fenced.
 - [x] Validate passive failover after active crash.
-- [ ] Validate proactive handover during graceful shutdown or upgrade.
+- [x] Validate proactive handover during graceful shutdown or upgrade.
 - [x] Validate that the active reports `ACTIVE` only after Firestore lease,
   route target, and local datapath readiness all match.
 - [x] Validate that a standby cannot mutate routes while another unexpired
@@ -307,7 +307,7 @@ Done when:
 
 ## Phase 5: GCP Provider Alpha
 
-Status: `live route-only HA smoke passed; proactive handover, client egress, LoxiLB counters/restart, raw LoxiLB baseline, packaging, and release-contract validation pending`
+Status: `live route-only HA smoke passed; LoxiLB counters/restart, raw LoxiLB baseline, packaging, and release-contract validation pending`
 
 Goal: expose a GCP alpha resource only after the spike proves the minimum
 control-plane behavior.
@@ -348,19 +348,19 @@ GOCACHE=$PWD/tmp/go-build go build ./cmd/betternat ./cmd/betternat-agent ./cmd/t
 
 GCP validation:
 
-- [ ] Disposable GCP apply.
-- [ ] Private client egress.
-- [ ] Route replacement.
+- [x] Disposable GCP apply.
+- [x] Private client egress.
+- [x] Route replacement.
 - [x] Live Firestore contention.
 - [x] Two-agent lease-fenced route mutation.
 - [x] Passive failover after active crash.
-- [ ] Proactive handover.
+- [x] Proactive handover.
 - [ ] LoxiLB-on-GCE datapath counters and restart reconciliation.
 - [ ] Raw LoxiLB HA baseline compared against BetterNAT-owned route fencing,
   rollback, IAM, status, and cleanup.
 - [ ] GCP failure injection for route delete/insert, Compute operation polling,
   stale lease generation, stale registry, restarted old active, and clock skew.
-- [ ] Cleanup.
+- [x] Cleanup.
 
 Done when:
 
@@ -652,3 +652,16 @@ Append dated notes here during implementation.
     `https://github.com/nowakeai/terraform-provider-betternat/pull/1`
   - AWS module repo:
     `https://github.com/nowakeai/terraform-aws-betternat/pull/1`
+- Ran disposable GCP proactive handover validation in
+  `smooth-calling-490406-d9` with run ID `bnat-gcp-ho-20260625093238`.
+  The first live attempt exposed that proactive handover could return a failed
+  result after a slow GCP route mutation had already moved ownership. The HA
+  controller now renews and re-verifies the lease fence during handover route
+  mutations. Fixed live validation completed handover from `gw-a` to `gw-b`
+  at lease generation 3 and reverse handover from `gw-b` to `gw-a` at lease
+  generation 4. `betternat handover history` now supports Firestore-backed GCP
+  coordination records, and live history returned both successful fixed
+  handovers. `status --direct`, `doctor --live`, and client egress all matched
+  the active route target. Terraform destroy, bucket deletion, Firestore record
+  cleanup, and residual scan passed. Evidence is recorded in
+  `docs/research/056-gcp-proactive-handover-results.md`.

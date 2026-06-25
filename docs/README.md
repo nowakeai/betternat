@@ -130,6 +130,7 @@ Read these first when revisiting product or architecture direction:
 - [research/053-gcp-firestore-live-contention-results.md](research/053-gcp-firestore-live-contention-results.md) — Live Firestore Native contention validation for GCP lease, registry, handover records, and cleanup.
 - [research/054-gcp-agent-ha-smoke-results.md](research/054-gcp-agent-ha-smoke-results.md) — Live GCP two-agent HA smoke covering Firestore ownership, route repair, passive failover, cleanup, and remaining GCP alpha gaps.
 - [research/055-no-nftables-fallback-decision.md](research/055-no-nftables-fallback-decision.md) — Decision record that BetterNAT has no product nftables fallback; legacy code may remain only while phased out.
+- [research/056-gcp-proactive-handover-results.md](research/056-gcp-proactive-handover-results.md) — Live GCP proactive handover validation, lease-renewal fix, Firestore handover history support, client egress, and cleanup.
 
 ## Supporting Research
 

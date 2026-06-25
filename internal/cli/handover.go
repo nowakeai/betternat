@@ -19,6 +19,7 @@ import (
 	"github.com/nowakeai/betternat/internal/config"
 	"github.com/nowakeai/betternat/internal/coordination"
 	dynamodbcoord "github.com/nowakeai/betternat/internal/coordination/dynamodb"
+	firestorecoord "github.com/nowakeai/betternat/internal/coordination/firestore"
 )
 
 type handoverOptions struct {
@@ -48,6 +49,9 @@ type handoverRecordOutput struct {
 }
 
 var newHandoverStoreReader = func(ctx context.Context, cfg config.Config) (coordination.HandoverReader, error) {
+	if cfg.Cloud == "gcp" {
+		return firestorecoord.New(ctx, cfg.GCP.ProjectID, cfg.GCP.FirestoreDatabaseID, cfg.GatewayID, doctorLeaseKey(cfg), doctorLeaseTTL(cfg))
+	}
 	return dynamodbcoord.New(ctx, cfg.Region, cfg.Coordination.Table, doctorLeaseKey(cfg), doctorLeaseTTL(cfg))
 }
 
@@ -183,10 +187,17 @@ func openHandoverStore(ctx context.Context, configPath string) (coordination.Han
 	if err != nil {
 		return nil, err
 	}
-	if cfg.Coordination.Table == "" {
-		return nil, fmt.Errorf("coordination table is not configured")
+	if !handoverStoreConfigured(cfg) {
+		return nil, fmt.Errorf("coordination backend is not configured")
 	}
 	return newHandoverStoreReader(ctx, cfg)
+}
+
+func handoverStoreConfigured(cfg config.Config) bool {
+	if cfg.Coordination.Table != "" {
+		return true
+	}
+	return cfg.Cloud == "gcp" && cfg.HA.Enabled && cfg.HA.Lease.Backend == "firestore"
 }
 
 func filterHandoverRecords(records []coordination.HandoverRecord, status string) []coordination.HandoverRecord {

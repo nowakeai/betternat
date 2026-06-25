@@ -592,8 +592,20 @@ func (f *fakeLease) Acquire(_ context.Context, owner string) (lease.Record, erro
 	return f.record, nil
 }
 
-func (f *fakeLease) Renew(context.Context, lease.Record) (lease.Record, error) {
-	return lease.Record{}, errors.New("not implemented")
+func (f *fakeLease) Renew(_ context.Context, record lease.Record) (lease.Record, error) {
+	if f.record.OwnerInstanceID == "" {
+		return lease.Record{}, errors.New("lease not held")
+	}
+	if f.record.OwnerInstanceID != record.OwnerInstanceID || f.record.Generation != record.Generation {
+		return lease.Record{}, errors.New("lease fencing check failed")
+	}
+	expiresAt := f.expiresAt
+	if expiresAt.IsZero() {
+		expiresAt = time.Now().Add(time.Hour)
+	}
+	f.record.ExpiresAt = expiresAt
+	f.record.UpdatedAt = time.Now()
+	return f.record, nil
 }
 
 func (f *fakeLease) Release(context.Context, lease.Record) error {

@@ -91,14 +91,26 @@ The live run exposed and validated these implementation fixes:
 - GCP cleanup must delete gateway instances before deleting the route; otherwise
   a still-running active agent can recreate the route during destroy.
 
+## Follow-up Validation
+
+Follow-up run `bnat-gcp-ho-20260625093238` closed several gaps from this
+smoke. See `docs/research/056-gcp-proactive-handover-results.md`.
+
+Validated after this run:
+
+- private client egress from inside the client VM through the active gateway,
+- proactive handover from `gw-a` to `gw-b`,
+- reverse proactive handover from `gw-b` to `gw-a`,
+- GCP Firestore-backed `betternat handover history`,
+- GCP `betternat doctor --live` lease, route, datapath, Prometheus, and
+  source-IP probe checks.
+
 ## Remaining Gaps
 
-The run does not close the GCP alpha gate by itself. Still missing:
+The combined GCP live runs do not close the GCP alpha gate by themselves. Still
+missing:
 
-- private client egress verification from inside the client VM; IAP SSH for the
-  active account returned `403 not authorized`,
 - LoxiLB counter validation and restart replay on GCE,
-- proactive handover validation outside Terraform destroy,
 - raw LoxiLB GCP HA baseline comparison,
 - TCP, UDP, DNS, and long-download behavior across route-only failover,
 - stable public identity support, which remains unsupported for GCP route-only

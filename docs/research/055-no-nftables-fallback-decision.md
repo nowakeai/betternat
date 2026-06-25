@@ -11,6 +11,9 @@ packaging, or release acceptance gate, that is a product blocker or a new
 architecture decision. It must not be bypassed by passing the release with
 nftables.
 
+This applies to all clouds and all release gates. It is not a GCP-only
+decision.
+
 ## Current Codebase Treatment
 
 Existing nftables/nf_conntrack code may remain temporarily to avoid risky
@@ -28,8 +31,8 @@ Not allowed:
 - requiring nftables for release acceptance,
 - documenting nftables as an operator recovery path,
 - adding new Terraform or runtime UX around nftables fallback,
-- using nftables to pass AWS, GCP, or future-cloud datapath readiness when
-  LoxiLB is not ready.
+- using nftables to pass AWS, GCP, or future-cloud datapath readiness, HA,
+  smoke, soak, or release validation when LoxiLB is not ready.
 
 ## Superseded History
 
@@ -40,6 +43,6 @@ plans. Those notes are design history only. The current source of truth is:
 - `docs/spec-v0.md`
 - this decision record
 
-GCP GA preparation must validate LoxiLB directly. A route-only or HA smoke that
-does not prove LoxiLB datapath readiness is useful substrate evidence, not a
-complete datapath release gate.
+AWS, GCP, and future-cloud preparation must validate LoxiLB directly. A
+route-only or HA smoke that does not prove LoxiLB datapath readiness is useful
+substrate evidence, not a complete datapath release gate.
