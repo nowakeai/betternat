@@ -233,7 +233,7 @@ Done when:
 
 ## Phase 4: GCP Spike
 
-Status: `forwarding, route replacement, and Firestore lease implementation complete; live coordination, agent HA, and LoxiLB pending`
+Status: `forwarding, route replacement, Firestore lease implementation, and local agent GCP backend wiring complete; live agent-owned HA, LoxiLB, and public identity decisions pending`
 
 Goal: validate whether GCP can support the BetterNAT product model before
 committing to a production resource.
@@ -261,6 +261,10 @@ Tasks:
 - [ ] Validate or reject reserved external IP handover.
 - [x] Validate coordination backend choice.
 - [ ] Run live Firestore contention spike.
+- [ ] Compare raw LoxiLB GCP HA behavior against BetterNAT-owned route fencing.
+- [ ] Run two-agent GCE HA smoke where route mutation is lease-fenced.
+- [ ] Validate passive failover after active crash.
+- [ ] Validate proactive handover during graceful shutdown or upgrade.
 - [x] Destroy all resources and scan residuals.
 
 Validation evidence:
@@ -269,6 +273,7 @@ Validation evidence:
 - [x] Handover behavior.
 - [x] Public IP behavior for non-stable per-gateway public IPs.
 - [ ] Datapath counters.
+- [ ] Agent-owned lease, route, and handover behavior.
 - [x] Cleanup evidence.
 
 Done when:
@@ -278,7 +283,7 @@ Done when:
 
 ## Phase 5: GCP Provider Alpha
 
-Status: `narrow forwarding alpha implemented; lease/runtime HA pending`
+Status: `narrow forwarding alpha implemented; Firestore/runtime backend code exists; live runtime HA, packaging, IAM, and LoxiLB validation pending`
 
 Goal: expose a GCP alpha resource only after the spike proves the minimum
 control-plane behavior.

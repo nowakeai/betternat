@@ -16,6 +16,28 @@ datapath:
 - observable status and recovery signals,
 - deterministic cleanup and drift handling.
 
+This does not mean LoxiLB has no HA. LoxiLB documents active/backup,
+active/active BGP ECMP, connection sync, BFD fast failover, kube-loxilb role
+arbitration, and multi-cloud HA patterns. BetterNAT should not compete by
+claiming to invent those datapath or service-load-balancer primitives. The
+BetterNAT product boundary is narrower and more cloud-NAT-specific:
+
+- Terraform-first creation of the cloud substrate and runtime config,
+- provider-owned route, identity, IAM, and cleanup lifecycle,
+- agent-owned lease fencing before any route or public identity mutation,
+- stable egress identity where the cloud supports it,
+- operator-visible status for lease, route, identity, datapath, and handover,
+- safe rollback to the customer's previous cloud NAT or route owner.
+
+References:
+
+- LoxiLB HA deployment scenarios:
+  <https://docs.loxilb.io/main/ha-deploy/>
+- LoxiLB multi-cloud HA notes:
+  <https://github.com/loxilb-io/loxilbdocs/blob/main/docs/multi-cloud-ha.md>
+- kube-loxilb deployment and role/BGP controls:
+  <https://docs.loxilb.io/kube-loxilb/>
+
 The current GCP alpha implementation proves a necessary but insufficient layer:
 GCE forwarding VMs, nftables masquerade, tagged route replacement, provider
 status reads, and provider cleanup. It is not yet a BetterNAT-equivalent GCP HA
@@ -43,6 +65,32 @@ Not validated or implemented:
 - GCP-specific IAM least privilege,
 - multi-zone and GKE/private-node topologies,
 - production migration from Cloud NAT.
+
+## Raw LoxiLB Comparison
+
+The GCP decision must compare against two different baselines:
+
+1. Raw LoxiLB as a datapath or Kubernetes service load balancer.
+2. BetterNAT as a private-subnet egress replacement for managed cloud NAT.
+
+Raw LoxiLB can already provide important HA primitives, especially in
+Kubernetes or BGP-friendly environments. The missing BetterNAT work is the
+cloud egress appliance product layer around those primitives.
+
+| Area | Raw LoxiLB strength | BetterNAT requirement |
+| --- | --- | --- |
+| Datapath | eBPF L4/NAT datapath, conntrack, BGP, BFD, connection sync scenarios | Use LoxiLB as the primary local SNAT engine and reconcile desired egress rules after restart or failover |
+| HA election | kube-loxilb can arbitrate roles for service load balancer use cases | Cloud-independent lease fencing must guard route and public identity mutation |
+| Cloud route ownership | LoxiLB examples include cloud HA patterns, but route ownership is not the BetterNAT Terraform contract | Provider creates owned routes; agent mutates only configured routes while holding a valid lease |
+| Public identity | AWS Elastic IP pattern exists; GCP support is explicitly incomplete in LoxiLB multi-cloud notes | Product must validate stable egress identity per cloud or document route-only non-stable identity |
+| Install UX | LoxiLB install is component-focused | BetterNAT must install an appliance pool, service account/IAM, config, systemd, metrics, and rollback metadata |
+| Observability | LoxiLB exposes component state and counters | BetterNAT must expose normalized operator signals: active owner, lease generation, route target, public identity, datapath readiness, handover phase, and API errors |
+| Cleanup/rollback | Component teardown depends on deployment model | Terraform destroy and rollback must restore or preserve customer routes safely and scan residual cloud resources |
+
+Therefore the GCP gate is not "can a GCE VM forward packets with LoxiLB or
+nftables?" That only proves a datapath substrate. The gate is "can the
+BetterNAT agent safely own and move the cloud egress role under failure,
+upgrade, and cleanup conditions?"
 
 ## DynamoDB Equivalent
 
@@ -239,6 +287,15 @@ The route-moved-before-lease-transfer window exists on GCP just as it does on
 AWS. The old active must keep renewing the lease until it either completes the
 lease transfer or reverts the route.
 
+Additional cases to test:
+
+- active receives shutdown while Firestore is reachable but Compute route
+  mutation fails,
+- active receives shutdown after route mutation but before lease transfer,
+- standby is present in the registry but has stale datapath readiness,
+- two standbys race to accept a handover after the active disappears,
+- handover request is replayed after lease generation has changed.
+
 ### 3. Passive Failover
 
 Hard crashes still need lease-expiry failover:
@@ -251,6 +308,15 @@ Hard crashes still need lease-expiry failover:
 
 Test cases must prove that two standbys racing after expiry cannot both mutate
 the route. The winner is the only node whose acquire transaction succeeds.
+
+Additional cases to test:
+
+- active VM poweroff or GCE stop without systemd shutdown hooks,
+- LoxiLB process crash while the VM and agent remain alive,
+- Firestore transient outage on active only,
+- Firestore transient outage on standby only,
+- Compute route API transient failure after lease acquisition,
+- stale route target that already points at a dead instance before takeover.
 
 ### 4. Public Identity
 
@@ -270,6 +336,11 @@ GCP public identity options still need a separate spike:
 
 Do not imply GCP parity with AWS stable EIP until this is proven.
 
+The public identity gate is independent from route failover. A GCP alpha may
+ship route-only HA, but only if the Terraform schema, status data source,
+release notes, and docs all say that egress public IP is not stable across
+failover.
+
 ### 5. LoxiLB On GCE
 
 The current GCP tests used nftables. That is useful as a fallback and debugging
@@ -285,6 +356,11 @@ Required tests:
 - verify fallback to nftables,
 - compare throughput/CPU enough to decide whether LoxiLB remains primary on
   GCP.
+
+This also needs a raw-LoxiLB baseline run. If raw LoxiLB already provides a
+cleaner GCP HA mode for this exact egress use case, BetterNAT should either
+reuse that primitive behind the agent/provider contract or explicitly document
+why BetterNAT-owned route fencing is still required.
 
 ### 6. Multi-Zone And Regional Semantics
 
@@ -338,6 +414,40 @@ provider should:
 
 Runtime route mutation should be agent-owned and lease-fenced.
 
+### 10. Agent Packaging And Bootstrap
+
+GCP HA requires the same appliance bootstrap quality as AWS:
+
+- install BetterNAT agent and CLI artifacts with checksum verification,
+- install and start LoxiLB with a pinned or documented version,
+- write config with Firestore, route, network tag, and zone/project settings,
+- run systemd units with restart policy and ordered shutdown handover hooks,
+- expose logs and metrics consistently with AWS,
+- avoid startup-script-only behavior as the production control plane.
+
+### 11. Customer Route And Cloud NAT Migration
+
+GCP adoption is risky unless route ownership is explicit. The provider and docs
+must cover:
+
+- importing or replacing an existing `0.0.0.0/0` private route,
+- coexistence with Cloud NAT during migration,
+- rollback from BetterNAT route to Cloud NAT or a previous next hop,
+- route priority conflicts and network tag scoping,
+- behavior for subnets or workloads not carrying the BetterNAT route tag.
+
+### 12. Support Bundle And Postmortem Evidence
+
+The support workflow must collect enough data to debug HA incidents without
+project-owner access:
+
+- Firestore lease, registry, and handover records for the gateway path,
+- route object, operation IDs, and last observed target,
+- local datapath status and LoxiLB/nftables counters,
+- agent logs around lease renewals and route operations,
+- redacted service account and metadata identity,
+- cleanup residual scan output.
+
 ## Revised GCP Gates
 
 Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
@@ -360,14 +470,20 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
   tagged static routes with `nextHopInstance`.
 - [ ] Passive failover after active crash works.
 - [ ] Proactive handover works.
+- [ ] Route mutation cannot occur without a current lease generation.
+- [ ] Agent degrades instead of reporting active when Firestore or Compute route
+  verification is unavailable.
 - [x] Provider destroy remains safe after out-of-band route movement.
 
 ### P1: Datapath And Public Identity
 
 - LoxiLB on GCE validated or explicitly rejected with evidence.
+- Raw LoxiLB GCP HA behavior compared against BetterNAT-owned route fencing.
 - nftables fallback remains tested.
 - Stable public IP is validated or explicitly not supported in GCP alpha.
 - Existing connections are documented as not preserved.
+- Bootstrap installs agent, CLI, datapath, config, metrics, and systemd units
+  with artifact integrity checks.
 
 ### P2: Production Fit
 
@@ -376,19 +492,23 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
 - GKE/private-node install path tested in a disposable project.
 - Observability and support bundle include GCP-specific HA evidence.
 - Cleanup and residual scans include Firestore records and service accounts.
+- Cloud NAT migration and rollback route ownership are documented and tested.
 
 ## Immediate Recommendation
 
 Reframe the current `betternat_gcp_gateway` as a forwarding substrate spike, not
-the GCP product alpha.
+the GCP product alpha. BetterNAT's GCP bar is agent-owned HA around the datapath,
+not raw packet forwarding.
 
-The next implementation step after the Firestore lease backend is live
-coordination validation:
+The next implementation step after the Firestore lease backend and local agent
+wiring is live coordination validation:
 
 1. Run a live `shared-resources-alt` Firestore contention spike with two or
    more contenders.
 2. Run the extended live smoke against an existing or temporary Firestore
    database to validate lease, registry, and handover records together.
-3. Wire GCP agent HA to route replacement.
+3. Run the agent on two GCE gateways and prove route mutation is lease-fenced.
+4. Validate passive failover, proactive handover, and LoxiLB-on-GCE before
+   promoting the GCP provider resource beyond substrate alpha.
 
 Until then, GCP should remain explicitly marked as non-HA alpha substrate work.
