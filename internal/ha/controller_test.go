@@ -445,6 +445,99 @@ func TestHandoverRetriesRouteReplaceUntilRouteConverges(t *testing.T) {
 	}
 }
 
+func TestHandoverRevertsRouteOnlyWhenRouteDoesNotConverge(t *testing.T) {
+	oldBackoffs := handoverRouteReplaceBackoffs
+	handoverRouteReplaceBackoffs = []time.Duration{0, 0}
+	defer func() { handoverRouteReplaceBackoffs = oldBackoffs }()
+
+	leaseManager := &fakeLease{}
+	current, err := leaseManager.Acquire(context.Background(), "gce-active")
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	cloudProvider := &fakeCloud{
+		routes: map[string]cloud.RouteTarget{
+			"gcp-route:0.0.0.0/0": {RouteTableID: "gcp-route", DestinationCIDR: "0.0.0.0/0", Target: "gce-active"},
+		},
+		describeRouteResults: []cloud.RouteTarget{
+			{RouteTableID: "gcp-route", DestinationCIDR: "0.0.0.0/0", Target: "gce-active"},
+			{RouteTableID: "gcp-route", DestinationCIDR: "0.0.0.0/0", Target: "gce-active"},
+		},
+	}
+	cfg := validRouteOnlyHAConfig()
+	cfg.HA.RouteFailover.RouteTableIDs = []string{"gcp-route"}
+	controller := Controller{Cloud: cloudProvider, Lease: leaseManager}
+
+	result, err := controller.Handover(context.Background(), cfg, "gce-active", "gce-standby", current)
+	if err == nil {
+		t.Fatal("expected handover to fail when route does not converge")
+	}
+	if !result.Reverted {
+		t.Fatalf("expected route-only handover to revert failed ownership: %#v", result)
+	}
+	if leaseManager.record.OwnerInstanceID != "gce-active" {
+		t.Fatalf("lease must not transfer after failed route convergence: %#v", leaseManager.record)
+	}
+	if got := cloudProvider.routes["gcp-route:0.0.0.0/0"].Target; got != "gce-active" {
+		t.Fatalf("route should be reverted to active, got %q", got)
+	}
+	wantCalls := []string{
+		"replace:gcp-route:0.0.0.0/0:gce-standby",
+		"describe-route:gcp-route:0.0.0.0/0",
+		"replace:gcp-route:0.0.0.0/0:gce-standby",
+		"describe-route:gcp-route:0.0.0.0/0",
+		"replace:gcp-route:0.0.0.0/0:gce-active",
+	}
+	if !equalStrings(cloudProvider.calls, wantCalls) {
+		t.Fatalf("unexpected calls: got %#v want %#v", cloudProvider.calls, wantCalls)
+	}
+}
+
+func TestHandoverRevertsRouteOnlyWhenLeaseChangesAfterRouteMutation(t *testing.T) {
+	leaseManager := &fakeLease{}
+	current, err := leaseManager.Acquire(context.Background(), "gce-active")
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	replaceCalls := 0
+	cloudProvider := &fakeCloud{
+		routes: map[string]cloud.RouteTarget{
+			"gcp-route:0.0.0.0/0": {RouteTableID: "gcp-route", DestinationCIDR: "0.0.0.0/0", Target: "gce-active"},
+		},
+		onReplace: func() {
+			if replaceCalls == 0 {
+				leaseManager.record.OwnerInstanceID = "gce-other"
+				leaseManager.record.Generation++
+			}
+			replaceCalls++
+		},
+	}
+	cfg := validRouteOnlyHAConfig()
+	cfg.HA.RouteFailover.RouteTableIDs = []string{"gcp-route"}
+	controller := Controller{Cloud: cloudProvider, Lease: leaseManager}
+
+	result, err := controller.Handover(context.Background(), cfg, "gce-active", "gce-standby", current)
+	if err == nil {
+		t.Fatal("expected handover to fail after lease generation changes")
+	}
+	if !result.Reverted {
+		t.Fatalf("expected route-only handover to revert failed ownership: %#v", result)
+	}
+	if leaseManager.record.OwnerInstanceID != "gce-other" || leaseManager.record.Generation != current.Generation+1 {
+		t.Fatalf("stale active must not transfer the lease back to itself or standby: %#v", leaseManager.record)
+	}
+	if got := cloudProvider.routes["gcp-route:0.0.0.0/0"].Target; got != "gce-active" {
+		t.Fatalf("route should be reverted to original active, got %q", got)
+	}
+	wantCalls := []string{
+		"replace:gcp-route:0.0.0.0/0:gce-standby",
+		"replace:gcp-route:0.0.0.0/0:gce-active",
+	}
+	if !equalStrings(cloudProvider.calls, wantCalls) {
+		t.Fatalf("unexpected calls: got %#v want %#v", cloudProvider.calls, wantCalls)
+	}
+}
+
 func TestHandoverRejectsNonActiveRequester(t *testing.T) {
 	leaseManager := &fakeLease{}
 	current, err := leaseManager.Acquire(context.Background(), "i-active")
@@ -502,6 +595,8 @@ type fakeCloud struct {
 	replaceErr            error
 	replaceErrs           []error
 	replaceMutatesOnError bool
+	describeRouteResults  []cloud.RouteTarget
+	describeRouteErrs     []error
 	onAssociate           func()
 	onReplace             func()
 }
@@ -544,6 +639,19 @@ func (f *fakeCloud) AssociateEIP(_ context.Context, allocationID string, instanc
 
 func (f *fakeCloud) DescribeRoute(_ context.Context, routeTableID string, destinationCIDR string) (cloud.RouteTarget, error) {
 	f.calls = append(f.calls, "describe-route:"+routeTableID+":"+destinationCIDR)
+	if len(f.describeRouteResults) > 0 || len(f.describeRouteErrs) > 0 {
+		var route cloud.RouteTarget
+		if len(f.describeRouteResults) > 0 {
+			route = f.describeRouteResults[0]
+			f.describeRouteResults = f.describeRouteResults[1:]
+		}
+		var err error
+		if len(f.describeRouteErrs) > 0 {
+			err = f.describeRouteErrs[0]
+			f.describeRouteErrs = f.describeRouteErrs[1:]
+		}
+		return route, err
+	}
 	route, ok := f.routes[routeTableID+":"+destinationCIDR]
 	if !ok {
 		return cloud.RouteTarget{}, errors.New("route not found")

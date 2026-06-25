@@ -721,3 +721,9 @@ Append dated notes here during implementation.
   acceptable for alpha, but GCP GA should use MIG-backed capacity repair unless
   a later ADR changes the direction. See
   `docs/research/062-gcp-capacity-repair-decision.md`.
+- Added local HA controller coverage for two GCP route-only failure modes:
+  handover route replacement that does not converge is now reverted without
+  transferring the lease, and a stale lease generation after route mutation
+  stops lease transfer and attempts route ownership rollback. Live GCE coverage
+  is still required for route delete/insert operation failure, stale registry,
+  restarted old active, and clock-skew scenarios.

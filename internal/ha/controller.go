@@ -358,7 +358,13 @@ func (c Controller) Handover(ctx context.Context, cfg config.Config, localInstan
 	for _, target := range routes {
 		record, err = c.replaceRouteForHandover(ctx, target, targetInstanceID, localInstanceID, record)
 		if err != nil {
-			return HandoverResult{}, fmt.Errorf("replace route %s %s to handover target %q: %w", target.RouteTableID, target.DestinationCIDR, targetInstanceID, err)
+			replaceErr := fmt.Errorf("replace route %s %s to handover target %q: %w", target.RouteTableID, target.DestinationCIDR, targetInstanceID, err)
+			revertErr := c.revertHandover(ctx, cfg, localInstanceID)
+			result.Reverted = revertErr == nil
+			if revertErr != nil {
+				return result, fmt.Errorf("%w; revert handover ownership to %q: %v", replaceErr, localInstanceID, revertErr)
+			}
+			return result, replaceErr
 		}
 		result.Routes = append(result.Routes, target)
 	}
