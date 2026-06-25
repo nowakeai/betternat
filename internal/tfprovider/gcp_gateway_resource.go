@@ -45,6 +45,7 @@ type GCPGatewayResourceModel struct {
 	PrivateCIDRs          types.List   `tfsdk:"private_cidrs"`
 	ServiceAccountEmail   types.String `tfsdk:"service_account_email"`
 	RuntimeIAMPermissions types.List   `tfsdk:"runtime_iam_permissions"`
+	ManageRuntimeIAM      types.Bool   `tfsdk:"manage_runtime_iam"`
 	EnableAgentHA         types.Bool   `tfsdk:"enable_agent_ha"`
 	BetterNATVersion      types.String `tfsdk:"betternat_version"`
 	AgentBinaryURL        types.String `tfsdk:"agent_binary_url"`
@@ -145,6 +146,12 @@ func (r *GCPGatewayResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Computed:            true,
 				MarkdownDescription: "Permissions required by the experimental GCP agent HA runtime service account.",
 			},
+			"manage_runtime_iam": schema.BoolAttribute{
+				Optional:            true,
+				Computed:            true,
+				Default:             booldefault.StaticBool(false),
+				MarkdownDescription: "Experimental. When true with enable_agent_ha, the provider creates or updates a project-level BetterNAT runtime custom role and binds service_account_email to it. Leave false when IAM is managed outside this resource.",
+			},
 			"enable_agent_ha": schema.BoolAttribute{
 				Optional:            true,
 				Computed:            true,
@@ -221,8 +228,15 @@ func (r *GCPGatewayResource) Create(ctx context.Context, req resource.CreateRequ
 		resp.Diagnostics.AddError("Configure GCP gateway", err.Error())
 		return
 	}
+	if err := applyGCPRuntimeIAM(ctx, &plan); err != nil {
+		resp.Diagnostics.AddError("Configure GCP runtime IAM", err.Error())
+		return
+	}
 	result, err := applier.Apply(ctx, inputs)
 	if err != nil {
+		if cleanupErr := cleanupGCPRuntimeIAM(ctx, &plan); cleanupErr != nil {
+			err = fmt.Errorf("%w; cleanup GCP runtime IAM after failed create: %v", err, cleanupErr)
+		}
 		resp.Diagnostics.AddError("Create GCP gateway", err.Error())
 		return
 	}
@@ -279,6 +293,10 @@ func (r *GCPGatewayResource) Delete(ctx context.Context, req resource.DeleteRequ
 	}
 	if err := applier.Cleanup(ctx, inputs); err != nil {
 		resp.Diagnostics.AddError("Delete GCP gateway", err.Error())
+		return
+	}
+	if err := cleanupGCPRuntimeIAM(ctx, &state); err != nil {
+		resp.Diagnostics.AddError("Delete GCP runtime IAM", err.Error())
 	}
 }
 
@@ -358,9 +376,61 @@ func applyGCPComputedPlan(model *GCPGatewayResourceModel, inputs gcpinstall.Inpu
 	model.GatewayCount = types.Int64Value(inputs.GatewayCount)
 	model.ServiceAccountEmail = types.StringValue(inputs.ServiceAccountEmail)
 	model.RuntimeIAMPermissions = mustStringList(gcpinstall.RuntimeIAMPermissions())
+	model.ManageRuntimeIAM = types.BoolValue(boolDefault(model.ManageRuntimeIAM, false))
 	model.EnableAgentHA = types.BoolValue(boolDefault(model.EnableAgentHA, false))
 	model.FirestoreDatabaseID = types.StringValue(stringDefault(model.FirestoreDatabaseID, "(default)"))
 	model.StartupScript = types.StringValue(inputs.StartupScript)
+}
+
+func applyGCPRuntimeIAM(ctx context.Context, model *GCPGatewayResourceModel) error {
+	if !boolDefault(model.ManageRuntimeIAM, false) {
+		return nil
+	}
+	manager, inputs, err := gcpRuntimeIAMManagerAndInputs(ctx, model)
+	if err != nil {
+		return err
+	}
+	return manager.Apply(ctx, inputs)
+}
+
+func cleanupGCPRuntimeIAM(ctx context.Context, model *GCPGatewayResourceModel) error {
+	if !boolDefault(model.ManageRuntimeIAM, false) {
+		return nil
+	}
+	manager, inputs, err := gcpRuntimeIAMManagerAndInputs(ctx, model)
+	if err != nil {
+		return err
+	}
+	return manager.Cleanup(ctx, inputs)
+}
+
+func gcpRuntimeIAMManagerAndInputs(ctx context.Context, model *GCPGatewayResourceModel) (gcpinstall.RuntimeIAMManager, gcpinstall.RuntimeIAMInputs, error) {
+	inputs, err := gcpRuntimeIAMInputs(model)
+	if err != nil {
+		return gcpinstall.RuntimeIAMManager{}, gcpinstall.RuntimeIAMInputs{}, err
+	}
+	api, err := gcpinstall.NewRuntimeIAMAPI(ctx)
+	if err != nil {
+		return gcpinstall.RuntimeIAMManager{}, gcpinstall.RuntimeIAMInputs{}, err
+	}
+	return gcpinstall.RuntimeIAMManager{API: api}, inputs, nil
+}
+
+func gcpRuntimeIAMInputs(model *GCPGatewayResourceModel) (gcpinstall.RuntimeIAMInputs, error) {
+	if !boolDefault(model.ManageRuntimeIAM, false) {
+		return gcpinstall.RuntimeIAMInputs{}, nil
+	}
+	if !boolDefault(model.EnableAgentHA, false) {
+		return gcpinstall.RuntimeIAMInputs{}, fmt.Errorf("manage_runtime_iam requires enable_agent_ha")
+	}
+	inputs := gcpinstall.RuntimeIAMInputs{
+		ProjectID:           model.ProjectID.ValueString(),
+		ServiceAccountEmail: stringDefault(model.ServiceAccountEmail, ""),
+	}
+	if err := inputs.Validate(); err != nil {
+		return gcpinstall.RuntimeIAMInputs{}, err
+	}
+	return inputs, nil
 }
 
 func enrichGCPAgentBootstrap(model *GCPGatewayResourceModel, inputs *gcpinstall.Inputs, privateCIDRs []string) error {

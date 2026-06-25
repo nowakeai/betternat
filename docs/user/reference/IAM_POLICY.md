@@ -152,6 +152,7 @@ When `enable_agent_ha = true`, set:
 
 ```hcl
 service_account_email = "betternat-runtime@PROJECT_ID.iam.gserviceaccount.com"
+manage_runtime_iam    = true
 ```
 
 Attach the following permissions to that service account, ideally through a
@@ -177,10 +178,24 @@ The provider exposes the same list as
 `betternat_gcp_gateway.runtime_iam_permissions` so validation stacks can render
 custom roles from the provider's runtime contract.
 
+When `manage_runtime_iam = true`, `betternat_gcp_gateway` manages the
+project-level custom role `projects/PROJECT_ID/roles/betterNATRuntime` and
+adds an IAM binding for:
+
+```text
+serviceAccount:SERVICE_ACCOUNT_EMAIL
+```
+
+Use this only when the Terraform execution identity is intentionally allowed to
+manage project custom roles and project IAM policy bindings. Leave
+`manage_runtime_iam = false` when an infra-admin stack owns IAM. The provider
+does not create the service account itself.
+
 Current GCP limitations:
 
-- provider-owned GCP custom role and IAM binding lifecycle is not implemented
-  yet,
+- provider-owned GCP custom role and IAM binding lifecycle exists behind the
+  explicit `manage_runtime_iam` switch, but still needs live validation in the
+  GCP HA smoke,
 - Firestore database creation may require project-owner or App Engine/Firestore
   admin permissions outside the gateway runtime role,
 - route-only GCP HA does not provide stable public egress IP failover yet.

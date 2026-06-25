@@ -32,6 +32,18 @@ type RuntimeIAMManager struct {
 	API RuntimeIAMAPI
 }
 
+func NewRuntimeIAMAPI(ctx context.Context) (RuntimeIAMAPI, error) {
+	iamService, err := gcpiam.NewService(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("create GCP IAM service: %w", err)
+	}
+	resourceManagerService, err := cloudresourcemanager.NewService(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("create GCP resource manager service: %w", err)
+	}
+	return googleRuntimeIAMAPI{iam: iamService, resourceManager: resourceManagerService}, nil
+}
+
 func (m RuntimeIAMManager) Apply(ctx context.Context, inputs RuntimeIAMInputs) error {
 	if err := inputs.validate(); err != nil {
 		return err
@@ -92,6 +104,38 @@ func (m RuntimeIAMManager) Cleanup(ctx context.Context, inputs RuntimeIAMInputs)
 	return nil
 }
 
+type googleRuntimeIAMAPI struct {
+	iam             *gcpiam.Service
+	resourceManager *cloudresourcemanager.Service
+}
+
+func (a googleRuntimeIAMAPI) GetRole(ctx context.Context, name string) (*gcpiam.Role, error) {
+	return a.iam.Projects.Roles.Get(name).Context(ctx).Do()
+}
+
+func (a googleRuntimeIAMAPI) CreateRole(ctx context.Context, parent string, request *gcpiam.CreateRoleRequest) (*gcpiam.Role, error) {
+	return a.iam.Projects.Roles.Create(parent, request).Context(ctx).Do()
+}
+
+func (a googleRuntimeIAMAPI) PatchRole(ctx context.Context, name string, role *gcpiam.Role) (*gcpiam.Role, error) {
+	return a.iam.Projects.Roles.Patch(name, role).
+		UpdateMask("title,description,includedPermissions,stage").
+		Context(ctx).
+		Do()
+}
+
+func (a googleRuntimeIAMAPI) DeleteRole(ctx context.Context, name string) (*gcpiam.Role, error) {
+	return a.iam.Projects.Roles.Delete(name).Context(ctx).Do()
+}
+
+func (a googleRuntimeIAMAPI) GetPolicy(ctx context.Context, projectID string) (*cloudresourcemanager.Policy, error) {
+	return a.resourceManager.Projects.GetIamPolicy(projectID, &cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do()
+}
+
+func (a googleRuntimeIAMAPI) SetPolicy(ctx context.Context, projectID string, policy *cloudresourcemanager.Policy) (*cloudresourcemanager.Policy, error) {
+	return a.resourceManager.Projects.SetIamPolicy(projectID, &cloudresourcemanager.SetIamPolicyRequest{Policy: policy}).Context(ctx).Do()
+}
+
 func runtimeRoleName(projectID string, roleID string) string {
 	return "projects/" + projectID + "/roles/" + roleID
 }
@@ -111,6 +155,10 @@ func (i RuntimeIAMInputs) roleID() string {
 		return i.RoleID
 	}
 	return runtimeRoleID
+}
+
+func (i RuntimeIAMInputs) Validate() error {
+	return i.validate()
 }
 
 func (i RuntimeIAMInputs) validate() error {

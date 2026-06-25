@@ -487,8 +487,9 @@ gateway VMs. The experimental agent HA path requires this field so live smoke
 does not depend on the broad and environment-specific Compute Engine default
 service account.
 The provider also exposes the runtime permission contract as computed
-`runtime_iam_permissions`; provider-owned custom role and binding lifecycle are
-still pending.
+`runtime_iam_permissions`. It can manage the project-level BetterNAT runtime
+custom role and service-account binding when `manage_runtime_iam = true`; that
+IAM lifecycle is still pending live validation in the GCP HA smoke.
 
 ### 10. Agent Packaging And Bootstrap
 
@@ -572,9 +573,9 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
 ### P2: Production Fit
 
 - Least-privilege IAM documented and tested. The current implementation can
-  attach an explicit runtime service account and exposes the runtime permission
-  contract, but provider-owned custom role and IAM binding lifecycle are still
-  pending.
+  attach an explicit runtime service account, exposes the runtime permission
+  contract, and has opt-in provider-owned custom role and IAM binding
+  lifecycle. Live GCP validation is still pending.
 - Multi-zone behavior documented and tested.
 - GKE/private-node install path tested in a disposable project.
 - Observability and support bundle include GCP-specific HA evidence.

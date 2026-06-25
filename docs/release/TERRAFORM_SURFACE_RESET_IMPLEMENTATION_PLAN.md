@@ -296,7 +296,7 @@ Done when:
 
 ## Phase 5: GCP Provider Alpha
 
-Status: `narrow forwarding alpha implemented; Firestore/runtime backend code, explicit runtime service-account attachment, and GCP runtime IAM permission contract exist; live runtime HA, provider-owned IAM wiring, packaging, and LoxiLB validation pending`
+Status: `narrow forwarding alpha implemented; Firestore/runtime backend code, explicit runtime service-account attachment, and opt-in GCP runtime IAM wiring exist; live runtime HA, IAM validation, packaging, and LoxiLB validation pending`
 
 Goal: expose a GCP alpha resource only after the spike proves the minimum
 control-plane behavior.
@@ -312,6 +312,8 @@ Tasks:
 - [x] Add GCP IAM docs.
 - [x] Allow explicit runtime service account attachment for GCP gateway VMs.
 - [x] Expose GCP runtime IAM permission contract from the provider.
+- [x] Add opt-in provider-owned GCP runtime custom role and service-account
+  binding lifecycle behind `manage_runtime_iam`.
 - [x] Add GCP startup-script and model tests.
 - [ ] Add disposable GCP integration runbook.
 

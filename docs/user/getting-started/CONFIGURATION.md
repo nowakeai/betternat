@@ -260,6 +260,7 @@ resource "betternat_gcp_gateway" "egress" {
 
   enable_agent_ha       = true
   service_account_email = "betternat-runtime@shared-resources-alt.iam.gserviceaccount.com"
+  manage_runtime_iam    = true
   firestore_database_id = "(default)"
   betternat_version     = "v0.1.0"
 }
@@ -274,6 +275,10 @@ metadata. The provider renders `agent_config_json`, `agent_config_hash`,
 for a Firestore-backed, route-only agent HA smoke.
 The required permission list is exposed as computed
 `runtime_iam_permissions`; see [IAM Policy](../reference/IAM_POLICY.md#gcp-alpha-runtime-service-account).
+Set `manage_runtime_iam = true` to let this resource create or update the
+project-level BetterNAT runtime custom role and bind `service_account_email` to
+it. Leave it false when IAM is managed by a separate Terraform stack or an
+infra-admin workflow.
 Explicit `agent_binary_url`, `agent_binary_sha256`, `cli_binary_url`, and
 `cli_binary_sha256` overrides are supported for local mirrors and unreleased
 test builds. This path is still experimental until live two-agent route

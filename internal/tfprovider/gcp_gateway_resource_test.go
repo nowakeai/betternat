@@ -30,6 +30,9 @@ func TestGCPInputsDefaultToForwardingStartupScript(t *testing.T) {
 	if model.ServiceAccountEmail.ValueString() != "" {
 		t.Fatalf("default forwarding path should not require service account: %q", model.ServiceAccountEmail.ValueString())
 	}
+	if model.ManageRuntimeIAM.ValueBool() {
+		t.Fatal("runtime IAM management should default to disabled")
+	}
 	perms, err := listStrings(context.Background(), model.RuntimeIAMPermissions)
 	if err != nil {
 		t.Fatalf("runtime iam permissions: %v", err)
@@ -134,6 +137,52 @@ func TestGCPAgentHABootstrapRequiresServiceAccount(t *testing.T) {
 	}
 }
 
+func TestGCPRuntimeIAMInputsRequireAgentHA(t *testing.T) {
+	model := baseGCPGatewayModel()
+	model.ManageRuntimeIAM = types.BoolValue(true)
+	model.ServiceAccountEmail = types.StringValue("betternat-runtime@shared-resources-alt.iam.gserviceaccount.com")
+
+	_, err := gcpRuntimeIAMInputs(&model)
+	if err == nil {
+		t.Fatal("expected manage_runtime_iam without agent HA to fail")
+	}
+	if !strings.Contains(err.Error(), "manage_runtime_iam requires enable_agent_ha") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestGCPRuntimeIAMInputsUseRuntimeServiceAccount(t *testing.T) {
+	model := baseGCPGatewayModel()
+	model.EnableAgentHA = types.BoolValue(true)
+	model.ManageRuntimeIAM = types.BoolValue(true)
+	model.ServiceAccountEmail = types.StringValue("betternat-runtime@shared-resources-alt.iam.gserviceaccount.com")
+
+	inputs, err := gcpRuntimeIAMInputs(&model)
+	if err != nil {
+		t.Fatalf("runtime iam inputs: %v", err)
+	}
+	if inputs.ProjectID != "shared-resources-alt" {
+		t.Fatalf("unexpected project id: %s", inputs.ProjectID)
+	}
+	if inputs.ServiceAccountEmail != "betternat-runtime@shared-resources-alt.iam.gserviceaccount.com" {
+		t.Fatalf("unexpected service account: %s", inputs.ServiceAccountEmail)
+	}
+}
+
+func TestGCPRuntimeIAMInputsRequireServiceAccount(t *testing.T) {
+	model := baseGCPGatewayModel()
+	model.EnableAgentHA = types.BoolValue(true)
+	model.ManageRuntimeIAM = types.BoolValue(true)
+
+	_, err := gcpRuntimeIAMInputs(&model)
+	if err == nil {
+		t.Fatal("expected missing service account error")
+	}
+	if !strings.Contains(err.Error(), "service_account_email") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func baseGCPGatewayModel() GCPGatewayResourceModel {
 	return GCPGatewayResourceModel{
 		Name:                types.StringValue("bnat-gcp"),
@@ -151,6 +200,7 @@ func baseGCPGatewayModel() GCPGatewayResourceModel {
 		ImageFamily:         types.StringNull(),
 		GatewayCount:        types.Int64Null(),
 		ServiceAccountEmail: types.StringNull(),
+		ManageRuntimeIAM:    types.BoolNull(),
 		EnableAgentHA:       types.BoolNull(),
 		FirestoreDatabaseID: types.StringNull(),
 	}
