@@ -94,11 +94,11 @@ func (a Applier) Cleanup(ctx context.Context, inputs Inputs) error {
 		return err
 	}
 	var firstErr error
-	if err := a.deleteRoute(ctx, inputs); err != nil && !isNotFound(err) && firstErr == nil {
-		firstErr = err
-	}
 	if capacityRepairMode(inputs) == "mig" {
 		if err := a.deleteInstanceGroupManager(ctx, inputs); err != nil && !isNotFound(err) && firstErr == nil {
+			firstErr = err
+		}
+		if err := a.deleteRoute(ctx, inputs); err != nil && !isNotFound(err) && firstErr == nil {
 			firstErr = err
 		}
 		if err := a.deleteInstanceTemplate(ctx, inputs); err != nil && !isNotFound(err) && firstErr == nil {
@@ -110,6 +110,9 @@ func (a Applier) Cleanup(ctx context.Context, inputs Inputs) error {
 		if err := a.deleteInstance(ctx, inputs, name); err != nil && !isNotFound(err) && firstErr == nil {
 			firstErr = err
 		}
+	}
+	if err := a.deleteRoute(ctx, inputs); err != nil && !isNotFound(err) && firstErr == nil {
+		firstErr = err
 	}
 	return firstErr
 }

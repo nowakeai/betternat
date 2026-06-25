@@ -15,8 +15,8 @@ alpha validation, but it is not a production capacity-repair contract.
 The first GA-oriented implementation slice adds an opt-in Terraform/provider
 mode, `capacity_repair_mode = "mig"`, that creates a zonal instance template
 and managed instance group for gateway capacity. This is intentionally not the
-default until live GCE termination, replacement, failover, and cleanup evidence
-is recorded.
+default until the remaining protocol, packaging, and multi-topology evidence is
+recorded.
 
 ## Rationale
 
@@ -65,9 +65,11 @@ For GCP GA:
 ## Required Validation Before GA
 
 - Terminate a non-owner gateway and prove the MIG replaces it while the active
-  route target remains unchanged.
+  route target remains unchanged. Passed for a zonal MIG in
+  `docs/research/063-gcp-mig-stable-ip-results.md`.
 - Terminate the active gateway and prove standby takeover happens before
-  capacity repair is treated as healthy.
+  capacity repair is treated as healthy. Passed for a zonal MIG with static
+  public identity in `docs/research/063-gcp-mig-stable-ip-results.md`.
 - Prove the replacement node joins the registry as `STANDBY`.
 - Prove route target and Firestore lease generation do not regress when the old
   active name or replacement name differs from the previous VM.

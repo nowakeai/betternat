@@ -6,11 +6,11 @@ Date: 2026-06-25
 
 GCP alpha remains route-only and non-stable for public egress identity.
 
-BetterNAT must not claim stable GCP public identity until access-config
-handover is live-validated. The runtime now has local support for using an
-existing regional static external IPv4 address as a shared public identity, but
-the mode is not validated on live GCE yet and the provider does not create or
-delete the static address.
+BetterNAT must not claim stable GCP public identity as a GA contract until
+access-config handover is protocol-validated and documented with its GCP
+network prerequisites. The runtime now has live evidence for moving an existing
+regional static external IPv4 address during a disposable MIG failover, but the
+provider does not create or delete the static address.
 
 ## Rationale
 
@@ -30,17 +30,20 @@ BetterNAT now maps those primitives to its existing shared public identity
 contract for GCP: `ha.public_identity.mode="shared_eip"` uses
 `allocation_id` as the regional static address name, removes conflicting
 access configs, detaches the address from the previous instance when needed,
-and adds it to the target gateway access config. A production design still
-needs to prove at least:
+and adds it to the target gateway access config. Live validation in
+`docs/research/063-gcp-mig-stable-ip-results.md` proved takeover during active
+gateway deletion, but also proved two required prerequisites: the gateway subnet
+needs Private Google Access or an equivalent private Google API path, and the
+runtime service account needs `compute.addresses.use` plus
+`compute.subnetworks.useExternalIp`. A production design still needs to prove
+at least:
 
-- exact Compute API calls and IAM permissions for detach/attach access config,
-- operation ordering with the Firestore lease generation,
+- source-IP continuity for private-client protocol checks after handover,
 - interaction with route delete/insert because GCP route replacement is not
   atomic,
 - behavior when detach succeeds but attach fails,
 - behavior when the old active restarts after losing the external IP,
 - organization-policy impact for external IP restrictions,
-- source-IP continuity for new flows after handover,
 - cleanup of static external addresses after Terraform destroy.
 
 ## Current Product Contract
@@ -53,10 +56,9 @@ For GCP alpha:
 - stable allowlist semantics are unsupported,
 - `betternat status` and `doctor --live` must report route-only status rather
   than pretending a shared public identity exists.
-- experimental local support exists behind
-  `stable_public_identity_address_name`, but it must not be marketed as
-  validated until a live GCE handover run proves source-IP continuity and
-  cleanup.
+- experimental support exists behind `stable_public_identity_address_name`, but
+  it must not be marketed as GA until protocol checks, documentation, and
+  cleanup semantics are complete.
 
 For GCP GA:
 
@@ -72,3 +74,5 @@ For GCP GA:
   <https://docs.cloud.google.com/sdk/gcloud/reference/compute/instances/delete-access-config>
 - Live route-only protocol evidence:
   `docs/research/059-gcp-protocol-failover-results.md`
+- Live MIG plus static IP handover evidence:
+  `docs/research/063-gcp-mig-stable-ip-results.md`

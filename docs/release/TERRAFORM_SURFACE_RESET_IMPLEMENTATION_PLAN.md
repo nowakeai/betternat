@@ -768,3 +768,11 @@ Append dated notes here during implementation.
   nftables/nf_conntrack code may remain temporarily as legacy diagnostics only,
   and legacy scripts or `fallback_datapath_engine` must not be used as release,
   recovery, or cloud-acceptance fallback evidence.
+- Ran combined GCP MIG capacity-repair and stable-public-identity validation in
+  `smooth-calling-490406-d9` with run ID `bnat-gcp-migpi-20260625141300`.
+  The run proved opt-in zonal MIG creation, non-owner replacement without route
+  or static-IP drift, active deletion with route plus static-IP takeover,
+  expanded runtime IAM permissions, and final residual cleanup. It also proved
+  that stable public identity requires Private Google Access or an equivalent
+  private Google API path on the gateway subnet. Evidence is recorded in
+  `docs/research/063-gcp-mig-stable-ip-results.md`.
