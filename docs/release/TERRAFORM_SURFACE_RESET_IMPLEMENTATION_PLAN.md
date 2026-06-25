@@ -233,7 +233,7 @@ Done when:
 
 ## Phase 4: GCP Spike
 
-Status: `forwarding and route replacement complete; coordination and LoxiLB pending`
+Status: `forwarding, route replacement, and Firestore lease implementation complete; live coordination, agent HA, and LoxiLB pending`
 
 Goal: validate whether GCP can support the BetterNAT product model before
 committing to a production resource.
@@ -245,7 +245,7 @@ Scope:
 - One or two gateway VMs with `canIpForward=true`.
 - Static route from private subnet egress to the active gateway VM.
 - LoxiLB first, nftables fallback if needed.
-- Firestore transaction or GCS generation-precondition lease backend.
+- Firestore transaction lease backend.
 - Optional reserved static external IP test.
 
 Tasks:
@@ -259,7 +259,8 @@ Tasks:
 - [x] Validate route replacement to standby.
 - [x] Measure new-flow recovery time for startup-script client probes.
 - [ ] Validate or reject reserved external IP handover.
-- [ ] Validate coordination backend choice.
+- [x] Validate coordination backend choice.
+- [ ] Run live Firestore contention spike.
 - [x] Destroy all resources and scan residuals.
 
 Validation evidence:
@@ -485,6 +486,12 @@ Append dated notes here during implementation.
   route mutation, proactive and passive handover, LoxiLB-on-GCE validation,
   public identity decision, IAM, and observability gates. See
   `docs/research/052-gcp-ha-gap-analysis.md`.
+- Implemented `internal/coordination/firestore` as the GCP equivalent of the
+  DynamoDB lease backend. It implements acquire, renew, release, transfer, and
+  current with Firestore transactions and generation-based fencing. Unit tests
+  cover missing leases, held leases, expired lease takeover, renew fences,
+  release fences, and transfer fences. Live Firestore contention validation is
+  still pending.
 - Opened implementation PRs:
   - main repo: `https://github.com/nowakeai/betternat/pull/1`
   - split provider repo:

@@ -344,15 +344,16 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
 
 ### P0: HA Correctness
 
-- Firestore lease backend implemented with acquire, renew, release, transfer,
+- [x] Firestore lease backend implemented with acquire, renew, release, transfer,
   and current.
-- Unit tests prove concurrent acquire and transfer fencing.
-- Live Firestore spike proves two contenders cannot both acquire an unexpired
+- [x] Unit tests prove acquire, renew, release, expired takeover, and transfer
+  fencing decisions.
+- [ ] Live Firestore spike proves two contenders cannot both acquire an unexpired
   lease.
-- Agent on GCE mutates routes only after lease verification.
-- Passive failover after active crash works.
-- Proactive handover works.
-- Provider destroy remains safe after out-of-band route movement.
+- [ ] Agent on GCE mutates routes only after lease verification.
+- [ ] Passive failover after active crash works.
+- [ ] Proactive handover works.
+- [x] Provider destroy remains safe after out-of-band route movement.
 
 ### P1: Datapath And Public Identity
 
@@ -374,15 +375,13 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
 Reframe the current `betternat_gcp_gateway` as a forwarding substrate spike, not
 the GCP product alpha.
 
-The next implementation step should be Firestore-backed coordination:
+The next implementation step after the Firestore lease backend is live
+coordination validation:
 
-1. Add `internal/coordination/firestore`.
-2. Implement the existing `lease.Manager` and `lease.Transferer` interfaces.
-3. Add a provider-neutral coordination record interface if the current
-   DynamoDB-specific registry/handover structs cannot be reused cleanly.
-4. Add emulator/unit tests for acquire/renew/release/transfer races.
-5. Run a live `shared-resources-alt` Firestore contention spike with two or
+1. Run a live `shared-resources-alt` Firestore contention spike with two or
    more contenders.
-6. Only then wire GCP agent HA to route replacement.
+2. Add a provider-neutral coordination record interface if the current
+   DynamoDB-specific registry/handover structs cannot be reused cleanly.
+3. Only then wire GCP agent HA to route replacement.
 
 Until then, GCP should remain explicitly marked as non-HA alpha substrate work.
