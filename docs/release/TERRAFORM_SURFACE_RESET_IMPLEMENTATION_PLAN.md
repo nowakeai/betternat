@@ -285,7 +285,7 @@ Done when:
 
 ## Phase 5: GCP Provider Alpha
 
-Status: `narrow forwarding alpha implemented; Firestore/runtime backend code exists; live runtime HA, packaging, IAM, and LoxiLB validation pending`
+Status: `narrow forwarding alpha implemented; Firestore/runtime backend code and explicit runtime service-account attachment exist; live runtime HA, provider-owned IAM, packaging, and LoxiLB validation pending`
 
 Goal: expose a GCP alpha resource only after the spike proves the minimum
 control-plane behavior.
@@ -299,6 +299,7 @@ Tasks:
 - [x] Add `betternat_gcp_gateway_status`.
 - [ ] Add provider docs for GCP alpha.
 - [ ] Add GCP IAM docs.
+- [x] Allow explicit runtime service account attachment for GCP gateway VMs.
 - [x] Add GCP startup-script and model tests.
 - [ ] Add disposable GCP integration runbook.
 

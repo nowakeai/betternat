@@ -22,6 +22,26 @@ func TestGatewayStartupScriptConfiguresForwardingAndMasquerade(t *testing.T) {
 	}
 }
 
+func TestGatewayInstanceAttachesRuntimeServiceAccount(t *testing.T) {
+	inst := gatewayInstance(Inputs{
+		Name:                "prod-egress",
+		ProjectID:           "shared-resources-alt",
+		Region:              "us-west1",
+		Zone:                "us-west1-a",
+		Subnetwork:          "public-a",
+		ServiceAccountEmail: "betternat-runtime@shared-resources-alt.iam.gserviceaccount.com",
+	}, "prod-egress-gw-a")
+	if len(inst.ServiceAccounts) != 1 {
+		t.Fatalf("expected service account on instance: %#v", inst.ServiceAccounts)
+	}
+	if got := inst.ServiceAccounts[0].Email; got != "betternat-runtime@shared-resources-alt.iam.gserviceaccount.com" {
+		t.Fatalf("unexpected service account: %s", got)
+	}
+	if len(inst.ServiceAccounts[0].Scopes) != 1 || inst.ServiceAccounts[0].Scopes[0] != "https://www.googleapis.com/auth/cloud-platform" {
+		t.Fatalf("unexpected service account scopes: %#v", inst.ServiceAccounts[0].Scopes)
+	}
+}
+
 func TestClientVerifyStartupScriptWritesSerialEvidence(t *testing.T) {
 	script := ClientVerifyStartupScript()
 	for _, want := range []string{

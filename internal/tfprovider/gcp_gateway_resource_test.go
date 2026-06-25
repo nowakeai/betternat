@@ -26,6 +26,9 @@ func TestGCPInputsDefaultToForwardingStartupScript(t *testing.T) {
 	if model.AgentConfigHash.ValueString() != "" || model.AgentConfigJSON.ValueString() != "" {
 		t.Fatalf("default forwarding path should not render agent config: hash=%q json=%q", model.AgentConfigHash.ValueString(), model.AgentConfigJSON.ValueString())
 	}
+	if model.ServiceAccountEmail.ValueString() != "" {
+		t.Fatalf("default forwarding path should not require service account: %q", model.ServiceAccountEmail.ValueString())
+	}
 	if !strings.Contains(model.StartupScript.ValueString(), "nft add rule ip nat postrouting ip saddr 10.91.0.0/24 masquerade") {
 		t.Fatalf("default path should keep nftables forwarding startup script: %s", model.StartupScript.ValueString())
 	}
@@ -36,6 +39,7 @@ func TestGCPAgentHABootstrapRendersConfigAndUserData(t *testing.T) {
 	model.EnableAgentHA = types.BoolValue(true)
 	model.BetterNATVersion = types.StringValue("v0.1.0")
 	model.FirestoreDatabaseID = types.StringValue("(default)")
+	model.ServiceAccountEmail = types.StringValue("betternat-runtime@shared-resources-alt.iam.gserviceaccount.com")
 	privateCIDRs := []string{"10.91.0.0/24"}
 
 	inputs := gcpInputs(model, privateCIDRs)
@@ -55,6 +59,9 @@ func TestGCPAgentHABootstrapRendersConfigAndUserData(t *testing.T) {
 	}
 	if !strings.Contains(model.AgentBinaryURL.ValueString(), "betternat-agent_v0.1.0_linux_amd64") {
 		t.Fatalf("unexpected derived agent artifact: %s", model.AgentBinaryURL.ValueString())
+	}
+	if inputs.ServiceAccountEmail != "betternat-runtime@shared-resources-alt.iam.gserviceaccount.com" {
+		t.Fatalf("service account should be passed to GCE inputs: %s", inputs.ServiceAccountEmail)
 	}
 	if model.AgentBinarySHA256.ValueString() == "" || model.CLIBinarySHA256.ValueString() == "" {
 		t.Fatalf("expected derived artifact checksums: agent=%q cli=%q", model.AgentBinarySHA256.ValueString(), model.CLIBinarySHA256.ValueString())
@@ -81,6 +88,7 @@ func TestGCPAgentHABootstrapRendersConfigAndUserData(t *testing.T) {
 func TestGCPAgentHABootstrapRequiresArtifacts(t *testing.T) {
 	model := baseGCPGatewayModel()
 	model.EnableAgentHA = types.BoolValue(true)
+	model.ServiceAccountEmail = types.StringValue("betternat-runtime@shared-resources-alt.iam.gserviceaccount.com")
 	privateCIDRs := []string{"10.91.0.0/24"}
 
 	inputs := gcpInputs(model, privateCIDRs)
@@ -89,6 +97,22 @@ func TestGCPAgentHABootstrapRequiresArtifacts(t *testing.T) {
 		t.Fatal("expected missing artifact error")
 	}
 	if !strings.Contains(err.Error(), "enable_agent_ha requires betternat_version") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestGCPAgentHABootstrapRequiresServiceAccount(t *testing.T) {
+	model := baseGCPGatewayModel()
+	model.EnableAgentHA = types.BoolValue(true)
+	model.BetterNATVersion = types.StringValue("v0.1.0")
+	privateCIDRs := []string{"10.91.0.0/24"}
+
+	inputs := gcpInputs(model, privateCIDRs)
+	err := enrichGCPAgentBootstrap(&model, &inputs, privateCIDRs)
+	if err == nil {
+		t.Fatal("expected missing service account error")
+	}
+	if !strings.Contains(err.Error(), "enable_agent_ha requires service_account_email") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -109,6 +133,7 @@ func baseGCPGatewayModel() GCPGatewayResourceModel {
 		ImageProject:        types.StringNull(),
 		ImageFamily:         types.StringNull(),
 		GatewayCount:        types.Int64Null(),
+		ServiceAccountEmail: types.StringNull(),
 		EnableAgentHA:       types.BoolNull(),
 		FirestoreDatabaseID: types.StringNull(),
 	}

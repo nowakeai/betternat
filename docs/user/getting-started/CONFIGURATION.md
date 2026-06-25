@@ -256,14 +256,19 @@ resource "betternat_gcp_gateway" "egress" {
   private_cidrs = ["10.91.0.0/24"]
 
   enable_agent_ha       = true
+  service_account_email = "betternat-runtime@shared-resources-alt.iam.gserviceaccount.com"
   firestore_database_id = "(default)"
   betternat_version     = "v0.1.0"
 }
 ```
 
-When `enable_agent_ha = true`, the provider renders `agent_config_json`,
-`agent_config_hash`, `peer_api_auth_token`, runtime artifact URLs/checksums,
-and `startup_script` for a Firestore-backed, route-only agent HA smoke.
+When `enable_agent_ha = true`, `service_account_email` is required and is
+attached to the gateway VMs. The service account must be granted enough access
+to read/write the Firestore gateway coordination records, describe/delete/create
+the configured static route, read route operation status, and read instance
+metadata. The provider renders `agent_config_json`, `agent_config_hash`,
+`peer_api_auth_token`, runtime artifact URLs/checksums, and `startup_script`
+for a Firestore-backed, route-only agent HA smoke.
 Explicit `agent_binary_url`, `agent_binary_sha256`, `cli_binary_url`, and
 `cli_binary_sha256` overrides are supported for local mirrors and unreleased
 test builds. This path is still experimental until live two-agent route

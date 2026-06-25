@@ -43,6 +43,7 @@ type GCPGatewayResourceModel struct {
 	ImageFamily         types.String `tfsdk:"image_family"`
 	GatewayCount        types.Int64  `tfsdk:"gateway_count"`
 	PrivateCIDRs        types.List   `tfsdk:"private_cidrs"`
+	ServiceAccountEmail types.String `tfsdk:"service_account_email"`
 	EnableAgentHA       types.Bool   `tfsdk:"enable_agent_ha"`
 	BetterNATVersion    types.String `tfsdk:"betternat_version"`
 	AgentBinaryURL      types.String `tfsdk:"agent_binary_url"`
@@ -132,6 +133,11 @@ func (r *GCPGatewayResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				ElementType:         types.StringType,
 				Required:            true,
 				MarkdownDescription: "Private CIDR ranges to masquerade on gateway instances.",
+			},
+			"service_account_email": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Runtime service account email attached to GCP gateway VMs. Required when enable_agent_ha is true; the service account must have Firestore coordination and Compute route permissions for the configured project and route.",
 			},
 			"enable_agent_ha": schema.BoolAttribute{
 				Optional:            true,
@@ -291,21 +297,22 @@ func gcpInputs(model GCPGatewayResourceModel, privateCIDRs []string) gcpinstall.
 	routeName := stringDefault(model.RouteName, name+"-default-via-gateway")
 	enableAgentHA := boolDefault(model.EnableAgentHA, false)
 	inputs := gcpinstall.Inputs{
-		Name:           name,
-		ProjectID:      model.ProjectID.ValueString(),
-		Region:         model.Region.ValueString(),
-		Zone:           model.Zone.ValueString(),
-		Network:        model.Network.ValueString(),
-		Subnetwork:     model.Subnetwork.ValueString(),
-		ClientTag:      model.ClientTag.ValueString(),
-		RouteName:      routeName,
-		RoutePriority:  int64Default(model.RoutePriority, 800),
-		RouteDestRange: stringDefault(model.RouteDestRange, "0.0.0.0/0"),
-		MachineType:    stringDefault(model.MachineType, "e2-small"),
-		ImageProject:   stringDefault(model.ImageProject, "debian-cloud"),
-		ImageFamily:    stringDefault(model.ImageFamily, "debian-12"),
-		GatewayCount:   int64Default(model.GatewayCount, 2),
-		PrivateCIDRs:   privateCIDRs,
+		Name:                name,
+		ProjectID:           model.ProjectID.ValueString(),
+		Region:              model.Region.ValueString(),
+		Zone:                model.Zone.ValueString(),
+		Network:             model.Network.ValueString(),
+		Subnetwork:          model.Subnetwork.ValueString(),
+		ClientTag:           model.ClientTag.ValueString(),
+		RouteName:           routeName,
+		RoutePriority:       int64Default(model.RoutePriority, 800),
+		RouteDestRange:      stringDefault(model.RouteDestRange, "0.0.0.0/0"),
+		MachineType:         stringDefault(model.MachineType, "e2-small"),
+		ImageProject:        stringDefault(model.ImageProject, "debian-cloud"),
+		ImageFamily:         stringDefault(model.ImageFamily, "debian-12"),
+		GatewayCount:        int64Default(model.GatewayCount, 2),
+		PrivateCIDRs:        privateCIDRs,
+		ServiceAccountEmail: stringDefault(model.ServiceAccountEmail, ""),
 		Labels: map[string]string{
 			"betternat_name": sanitizeGCPLabel(name),
 			"betternat":      "true",
@@ -343,6 +350,7 @@ func applyGCPComputedPlan(model *GCPGatewayResourceModel, inputs gcpinstall.Inpu
 	model.ImageProject = types.StringValue(inputs.ImageProject)
 	model.ImageFamily = types.StringValue(inputs.ImageFamily)
 	model.GatewayCount = types.Int64Value(inputs.GatewayCount)
+	model.ServiceAccountEmail = types.StringValue(inputs.ServiceAccountEmail)
 	model.EnableAgentHA = types.BoolValue(boolDefault(model.EnableAgentHA, false))
 	model.FirestoreDatabaseID = types.StringValue(stringDefault(model.FirestoreDatabaseID, "(default)"))
 	model.StartupScript = types.StringValue(inputs.StartupScript)
@@ -353,6 +361,9 @@ func enrichGCPAgentBootstrap(model *GCPGatewayResourceModel, inputs *gcpinstall.
 		model.AgentConfigJSON = types.StringValue("")
 		model.AgentConfigHash = types.StringValue("")
 		return nil
+	}
+	if stringDefault(model.ServiceAccountEmail, "") == "" {
+		return fmt.Errorf("enable_agent_ha requires service_account_email with Firestore and Compute route permissions")
 	}
 	artifacts, err := resolveGCPBootstrapArtifacts(model)
 	if err != nil {

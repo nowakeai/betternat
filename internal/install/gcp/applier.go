@@ -10,25 +10,26 @@ import (
 )
 
 type Inputs struct {
-	Name              string
-	ProjectID         string
-	Region            string
-	Zone              string
-	Network           string
-	Subnetwork        string
-	ClientTag         string
-	RouteName         string
-	RoutePriority     int64
-	RouteDestRange    string
-	MachineType       string
-	ImageProject      string
-	ImageFamily       string
-	GatewayCount      int64
-	PrivateCIDRs      []string
-	Labels            map[string]string
-	StartupScript     string
-	DeletionTimeout   time.Duration
-	OperationPollTime time.Duration
+	Name                string
+	ProjectID           string
+	Region              string
+	Zone                string
+	Network             string
+	Subnetwork          string
+	ClientTag           string
+	RouteName           string
+	RoutePriority       int64
+	RouteDestRange      string
+	MachineType         string
+	ImageProject        string
+	ImageFamily         string
+	GatewayCount        int64
+	PrivateCIDRs        []string
+	Labels              map[string]string
+	ServiceAccountEmail string
+	StartupScript       string
+	DeletionTimeout     time.Duration
+	OperationPollTime   time.Duration
 }
 
 type Result struct {
@@ -117,6 +118,15 @@ func (a Applier) Read(ctx context.Context, inputs Inputs) (ReadResult, error) {
 }
 
 func (a Applier) createInstance(ctx context.Context, inputs Inputs, name string) error {
+	inst := gatewayInstance(inputs, name)
+	op, err := a.Compute.Instances.Insert(inputs.ProjectID, inputs.Zone, inst).Context(ctx).Do()
+	if err != nil {
+		return err
+	}
+	return a.waitZoneOperation(ctx, inputs, op.Name)
+}
+
+func gatewayInstance(inputs Inputs, name string) *compute.Instance {
 	inst := &compute.Instance{
 		Name:         name,
 		CanIpForward: true,
@@ -143,11 +153,13 @@ func (a Applier) createInstance(ctx context.Context, inputs Inputs, name string)
 			Value: strPtr(valueOr(inputs.StartupScript, GatewayStartupScript(StartupScriptInputs{PrivateCIDRs: inputs.PrivateCIDRs}))),
 		}}},
 	}
-	op, err := a.Compute.Instances.Insert(inputs.ProjectID, inputs.Zone, inst).Context(ctx).Do()
-	if err != nil {
-		return err
+	if inputs.ServiceAccountEmail != "" {
+		inst.ServiceAccounts = []*compute.ServiceAccount{{
+			Email:  inputs.ServiceAccountEmail,
+			Scopes: []string{"https://www.googleapis.com/auth/cloud-platform"},
+		}}
 	}
-	return a.waitZoneOperation(ctx, inputs, op.Name)
+	return inst
 }
 
 func (a Applier) createRoute(ctx context.Context, inputs Inputs, gatewayName string) error {
