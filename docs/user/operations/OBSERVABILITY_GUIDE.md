@@ -29,7 +29,7 @@ BetterNAT is designed to answer these questions:
 
 ### Terraform State And Outputs
 
-The `betternat_gateway` resource records deployment state that is useful for runbooks and dashboards:
+The `betternat_aws_gateway` resource records deployment state that is useful for runbooks and dashboards:
 
 - `status`
 - `control_plane_status_json`
@@ -111,7 +111,7 @@ scrape_configs:
 ```
 
 In production, prefer EC2 service discovery filtered by the tags you pass to
-`betternat_gateway`, or generate scrape targets from Terraform outputs and ASG
+`betternat_aws_gateway`, or generate scrape targets from Terraform outputs and ASG
 membership.
 
 Starter Prometheus alert rules are available at:

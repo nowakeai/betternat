@@ -131,7 +131,7 @@ Implementation note for the current Go provider/applier split:
 Example target UX:
 
 ```hcl
-resource "betternat_gateway" "egress" {
+resource "betternat_aws_gateway" "egress" {
   name   = "prod-egress"
   cloud  = "aws"
   region = "us-west-2"

@@ -97,7 +97,7 @@ If the previous target is missing or unknown, BetterNAT will not silently destro
 The relevant resource fields are:
 
 ```hcl
-resource "betternat_gateway" "egress" {
+resource "betternat_aws_gateway" "egress" {
   rollback_on_destroy              = true
   allow_destroy_without_rollback   = false
 }
@@ -186,7 +186,7 @@ Do not immediately set `allow_destroy_without_rollback = true`.
 First inspect the route tables:
 
 ```sh
-terraform -chdir=<your-config-dir> state show betternat_gateway.egress
+terraform -chdir=<your-config-dir> state show betternat_aws_gateway.egress
 
 aws ec2 describe-route-tables \
   --profile "$AWS_PROFILE" \

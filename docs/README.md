@@ -34,7 +34,8 @@ Read them in this order for the first full pass:
 - [user/operations/OPERATIONS_GUIDE.md](user/operations/OPERATIONS_GUIDE.md) — Day-2 operations: CLI, metrics, alerts, AWS checks, SSM access, troubleshooting, and cleanup.
 - [user/getting-started/EKS_TERRAFORM_MODULE_INTEGRATION.md](user/getting-started/EKS_TERRAFORM_MODULE_INTEGRATION.md) — Module-level `nat_backend` switch for existing EKS/networking Terraform repos.
 - [user/getting-started/EXISTING_VPC_INSTALL.md](user/getting-started/EXISTING_VPC_INSTALL.md) — Existing-VPC install and route ownership warnings.
-- [user/getting-started/CONFIGURATION.md](user/getting-started/CONFIGURATION.md) — `betternat_gateway` Terraform input reference and runtime configuration notes.
+- [user/getting-started/CONFIGURATION.md](user/getting-started/CONFIGURATION.md) — `betternat_aws_gateway` Terraform input reference and runtime configuration notes.
+- [user/reference/PROVIDER_DATA_SOURCES.md](user/reference/PROVIDER_DATA_SOURCES.md) — BetterNAT provider data sources for runtime artifact metadata and gateway status reads.
 - [user/reference/IAM_POLICY.md](user/reference/IAM_POLICY.md) — Terraform execution and gateway runtime IAM requirements.
 - [user/reference/SECURITY_HARDENING.md](user/reference/SECURITY_HARDENING.md) — Current security posture, IAM/network/bootstrap hardening, artifact integrity, and production checklist.
 - [user/operations/OBSERVABILITY_GUIDE.md](user/operations/OBSERVABILITY_GUIDE.md) — Prometheus metrics, CLI checks, AWS cross-checks, alerts, attribution scope, and current observability limits.
@@ -63,6 +64,7 @@ These are maintainer-facing release documents.
 - [release/ARTIFACT_SIGNING_DECISION.md](release/ARTIFACT_SIGNING_DECISION.md) — Alpha checksum-only decision and production signing target.
 - [release/CLOUDFORMATION_DELIVERY_DECISION.md](release/CLOUDFORMATION_DELIVERY_DECISION.md) — Decision to defer CloudFormation while Terraform remains the supported install path.
 - [release/TERRAFORM_PROVIDER_DISTRIBUTION_PLAN.md](release/TERRAFORM_PROVIDER_DISTRIBUTION_PLAN.md) — Split-repo provider publishing plan, Registry release model, versioning, and OpenTofu compatibility.
+- [release/TERRAFORM_SURFACE_RESET_IMPLEMENTATION_PLAN.md](release/TERRAFORM_SURFACE_RESET_IMPLEMENTATION_PLAN.md) — Implementation tracker for the provider/module split, Terraform surface reset, and GCP alpha path.
 
 ## Testing
 
@@ -72,6 +74,7 @@ These are executable plans and runbooks, not product docs.
 - [testing/AWS_SUPPLEMENTAL_TEST_PLAN.md](testing/AWS_SUPPLEMENTAL_TEST_PLAN.md) — Low-cost supplemental AWS tests and deferred expensive work.
 - [testing/AWS_SUPPLEMENTAL_RUNBOOK.md](testing/AWS_SUPPLEMENTAL_RUNBOOK.md) — Execution checklist for the low-cost AWS supplemental test pass.
 - [testing/LOW_COST_SOAK_RUNBOOK.md](testing/LOW_COST_SOAK_RUNBOOK.md) — Low-cost soak runbook with periodic egress probes, agent restarts, LoxiLB restart checks, and handover evidence collection.
+- [testing/GCP_SPIKE_PLAN.md](testing/GCP_SPIKE_PLAN.md) — Disposable GCP validation plan before any GCP alpha provider implementation.
 
 ## Development
 
@@ -115,6 +118,8 @@ Read these first when revisiting product or architecture direction:
 - [research/045-ga-release-artifact-governance-review.md](research/045-ga-release-artifact-governance-review.md) — GA release artifact governance review for checksums, notes, compatibility, SemVer, pins, and signing decision.
 - [research/046-provider-alpha8-ga-soak-results.md](research/046-provider-alpha8-ga-soak-results.md) — Provider alpha8 Terraform Registry soak with runtime alpha6, restart/handover events, ASG lifecycle finding, destroy, and residual scan.
 - [research/047-runtime-alpha8-asg-lifecycle-validation.md](research/047-runtime-alpha8-asg-lifecycle-validation.md) — Runtime alpha8 ASG lifecycle validation through provider artifact overrides, completed durable handover, client probe, and cleanup evidence.
+- [research/048-provider-module-boundary-plan.md](research/048-provider-module-boundary-plan.md) — Provider/module responsibility split, AWS module migration path, and multi-cloud naming decision.
+- [research/049-gcp-alpha-boundary.md](research/049-gcp-alpha-boundary.md) — GCP alpha scope boundary, business signal, and spike gate.
 
 ## Supporting Research
 

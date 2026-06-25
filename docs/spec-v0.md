@@ -70,7 +70,7 @@ terraform-provider-betternat
 Primary resource:
 
 ```hcl
-resource "betternat_gateway" "egress" {
+resource "betternat_aws_gateway" "egress" {
   name   = "prod-egress"
   cloud  = "aws"
   region = "us-west-2"

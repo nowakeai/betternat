@@ -4,7 +4,7 @@ Date: 2026-06-21
 
 ## Terraform Provider Inputs
 
-Use `betternat_gateway` to deploy the AWS gateway stack.
+Use `betternat_aws_gateway` to deploy the AWS gateway stack.
 
 Provider version is specified in Terraform/OpenTofu `required_providers`, not on the resource itself:
 
@@ -32,7 +32,6 @@ the provider is registered in the OpenTofu Registry.
 | Name | Description |
 | --- | --- |
 | `name` | Gateway name. Used in resource names and HA group identity. |
-| `cloud` | Optional cloud selector. Defaults to `aws`; BetterNAT currently supports AWS. |
 | `region` | AWS region. |
 | `vpc_id` | Target VPC ID. |
 | `public_subnet_ids` | Map of AZ name to public subnet ID. |
@@ -169,10 +168,37 @@ Internal/sensitive computed values include `agent_config_json`,
 and `provider_infrastructure_revision`. Treat them as provider state, not as
 operator inputs.
 
+## Provider Data Sources
+
+Use `betternat_runtime_artifacts` to inspect the provider's built-in runtime
+artifact manifest:
+
+```hcl
+data "betternat_runtime_artifacts" "current" {
+  version = "v0.1.0"
+  os      = "linux"
+  arch    = "arm64"
+}
+```
+
+Use `betternat_aws_gateway_status` for read-only AWS control-plane status when
+you already have the provider-generated install plan:
+
+```hcl
+data "betternat_aws_gateway_status" "egress" {
+  name              = betternat_aws_gateway.egress.name
+  region            = betternat_aws_gateway.egress.region
+  install_plan_json = betternat_aws_gateway.egress.install_plan_json
+}
+```
+
+`betternat_gcp_gateway_status` is reserved for the GCP alpha and currently
+returns a clear not-implemented diagnostic.
+
 ## Update Behavior
 
 The provider updates only `min_size`, `desired_capacity`, and `max_size` in
-place. Most other input changes require replacing the `betternat_gateway`
+place. Most other input changes require replacing the `betternat_aws_gateway`
 resource.
 Use the [Upgrade And Replacement Guide](../operations/UPGRADE_REPLACEMENT_GUIDE.md)
 before changing runtime, AMI, subnet, route, datapath, EIP, HA timing, tag, or

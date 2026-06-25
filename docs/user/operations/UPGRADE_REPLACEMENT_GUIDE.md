@@ -226,7 +226,7 @@ This is deliberate. A silent in-place mutation could leave private routes, EIP a
 For disposable or non-critical environments, replace the resource explicitly:
 
 ```sh
-terraform apply -replace=betternat_gateway.egress
+terraform apply -replace=betternat_aws_gateway.egress
 ```
 
 Use this only when you accept disruption. Active flows may reset, and new flows may fail until the replacement is ready and routes converge.
@@ -270,12 +270,12 @@ High-level flow:
 Example naming:
 
 ```hcl
-resource "betternat_gateway" "egress_v1" {
+resource "betternat_aws_gateway" "egress_v1" {
   name = "prod-egress-v1"
   # old runtime or AMI
 }
 
-resource "betternat_gateway" "egress_v2" {
+resource "betternat_aws_gateway" "egress_v2" {
   name = "prod-egress-v2"
   # new runtime or AMI
 }

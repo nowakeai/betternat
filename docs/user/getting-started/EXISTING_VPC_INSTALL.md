@@ -51,7 +51,7 @@ template, ASG, and owns the private route target.
 The important migration rule:
 
 - before: Terraform owns the private default route with `nat_gateway_id`,
-- after: `betternat_gateway` owns that route table's default route so
+- after: `betternat_aws_gateway` owns that route table's default route so
   `betternat-agent` can move it during failover.
 
 Do not keep a separate `aws_route` resource managing the same `0.0.0.0/0`
@@ -89,7 +89,7 @@ Current scope:
 ## Terraform Shape
 
 ```hcl
-resource "betternat_gateway" "egress" {
+resource "betternat_aws_gateway" "egress" {
   name   = "prod-egress-a"
   region = var.region
   vpc_id = var.vpc_id
@@ -159,7 +159,7 @@ terraform state list | grep 'aws_route'
 
 It is fine for Terraform to have other route resources. The thing to avoid is a
 separate `aws_route` that still manages the same private route table
-`0.0.0.0/0` entry after `betternat_gateway` is active.
+`0.0.0.0/0` entry after `betternat_aws_gateway` is active.
 
 ## Plan Review
 
@@ -171,7 +171,7 @@ terraform plan
 
 Review the plan for these points:
 
-- `betternat_gateway` will be created,
+- `betternat_aws_gateway` will be created,
 - the private default route will become BetterNAT-owned,
 - no separate `aws_route` will continue managing the same default route,
 - the previous NAT Gateway is not destroyed in the first production cutover,

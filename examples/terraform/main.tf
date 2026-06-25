@@ -9,7 +9,7 @@ terraform {
 
 provider "betternat" {}
 
-resource "betternat_gateway" "egress" {
+resource "betternat_aws_gateway" "egress" {
   name   = "prod-egress"
   region = "us-west-2"
 
@@ -49,9 +49,9 @@ resource "betternat_gateway" "egress" {
 }
 
 output "agent_config_hash" {
-  value = betternat_gateway.egress.agent_config_hash
+  value = betternat_aws_gateway.egress.agent_config_hash
 }
 
 output "managed_route_table_ids" {
-  value = betternat_gateway.egress.managed_route_table_ids
+  value = betternat_aws_gateway.egress.managed_route_table_ids
 }

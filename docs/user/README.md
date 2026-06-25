@@ -29,7 +29,9 @@ expensive, use this order:
 - [EKS Terraform Module Integration](getting-started/EKS_TERRAFORM_MODULE_INTEGRATION.md) —
   Module-level `nat_backend` switch for existing EKS/networking Terraform repos.
 - [Configuration](getting-started/CONFIGURATION.md) — Terraform
-  `betternat_gateway` input reference and runtime configuration notes.
+  `betternat_aws_gateway` input reference and runtime configuration notes.
+- [Provider Data Sources](reference/PROVIDER_DATA_SOURCES.md) — Runtime
+  artifact metadata and gateway status reads.
 
 ## Operations
 

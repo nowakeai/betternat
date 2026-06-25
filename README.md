@@ -90,7 +90,7 @@ The BetterNAT target shape looks like this after you have completed the
 disposable VPC test and are ready to plan an existing-VPC migration:
 
 ```hcl
-resource "betternat_gateway" "egress" {
+resource "betternat_aws_gateway" "egress" {
   name   = "prod-egress-a"
   region = "us-west-2"
   vpc_id = aws_vpc.main.id
@@ -139,7 +139,7 @@ Then follow:
 
 - [Quick Start](docs/user/getting-started/QUICK_START.md) for release artifact setup, disposable VPC apply, verification, and destroy.
 - [Existing VPC Install](docs/user/getting-started/EXISTING_VPC_INSTALL.md) only after the disposable run, when you are ready to test against real route tables.
-- [Configuration](docs/user/getting-started/CONFIGURATION.md) for all `betternat_gateway` fields.
+- [Configuration](docs/user/getting-started/CONFIGURATION.md) for all `betternat_aws_gateway` fields.
 
 BetterNAT uses LoxiLB as the local datapath inside each node; see the [LoxiLB overview](https://github.com/loxilb-io/loxilb/assets/75648333/87da0183-1a65-493f-b6fe-5bc738ba5468) and [standalone mode docs](https://github.com/loxilb-io/loxilbdocs/blob/main/docs/standalone.md).
 
