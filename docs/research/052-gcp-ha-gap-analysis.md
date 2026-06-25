@@ -194,6 +194,12 @@ the first GCP spike plan:
   node because two gateways may both SNAT, repair routes, or report active. GCP
   tests must inject stale lease generations, delayed Compute operations, stale
   registry records, and restarted old actives.
+- Clock skew. Firestore lease comparisons use agent-supplied timestamps, so
+  small node clock differences must be handled conservatively. The Firestore
+  lease decision layer now applies a 2 second skew allowance: a different owner
+  cannot acquire during that allowance after `expires_at`, while the current
+  fenced owner may renew or transfer. Local unit tests cover this decision
+  boundary; live GCE clock-skew injection is still required.
 - Asymmetric routing and conntrack reset behavior. Route-only failover changes
   the next hop for new flows, but existing flows may be pinned to old conntrack
   state or reset. This needs explicit measurement for TCP, UDP, DNS, and long
@@ -419,9 +425,9 @@ Release transaction:
 
 The transaction can use Firestore server commit semantics for atomicity, but
 lease expiry comparisons still depend on timestamp values supplied by the
-agent. The implementation should explicitly budget for clock skew and prefer
-short renewal intervals with a TTL that leaves enough margin for GCP API
-latency.
+agent. The implementation applies a 2 second skew allowance in Firestore lease
+decision logic and should still prefer short renewal intervals with a TTL that
+leaves enough margin for GCP API latency.
 
 ## GCP Route HA Differences
 

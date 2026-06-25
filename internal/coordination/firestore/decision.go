@@ -17,6 +17,8 @@ const (
 	handoverPrefix     = "handover#"
 )
 
+const leaseClockSkewAllowance = 2 * time.Second
+
 type leaseDocument struct {
 	RecordType      string    `firestore:"record_type"`
 	GatewayID       string    `firestore:"gateway_id"`
@@ -31,7 +33,7 @@ func acquireLease(current leaseDocument, exists bool, gatewayID string, haGroupI
 	if owner == "" {
 		return leaseDocument{}, fmt.Errorf("lease owner is required")
 	}
-	if exists && current.OwnerInstanceID != "" && current.OwnerInstanceID != owner && now.Before(current.ExpiresAt) {
+	if exists && current.OwnerInstanceID != "" && current.OwnerInstanceID != owner && leaseStillLive(current.ExpiresAt, now) {
 		return leaseDocument{}, fmt.Errorf("lease is held by %q until %s", current.OwnerInstanceID, current.ExpiresAt.UTC().Format(time.RFC3339))
 	}
 	if current.Generation == math.MaxInt64 {
@@ -55,7 +57,7 @@ func renewLease(current leaseDocument, record lease.Record, now time.Time, ttl t
 	if !sameOwnerAndGeneration(current, record) {
 		return leaseDocument{}, fmt.Errorf("lease fencing check failed")
 	}
-	if !now.Before(current.ExpiresAt) {
+	if !leaseStillLive(current.ExpiresAt, now) {
 		return leaseDocument{}, fmt.Errorf("lease expired at %s", current.ExpiresAt.UTC().Format(time.RFC3339))
 	}
 	current.ExpiresAt = now.Add(ttl)
@@ -73,7 +75,7 @@ func transferLease(current leaseDocument, record lease.Record, newOwner string, 
 	if !sameOwnerAndGeneration(current, record) {
 		return leaseDocument{}, fmt.Errorf("lease fencing check failed")
 	}
-	if !now.Before(current.ExpiresAt) {
+	if !leaseStillLive(current.ExpiresAt, now) {
 		return leaseDocument{}, fmt.Errorf("lease expired at %s", current.ExpiresAt.UTC().Format(time.RFC3339))
 	}
 	if current.Generation == math.MaxInt64 {
@@ -99,6 +101,10 @@ func releaseLease(current leaseDocument, record lease.Record) error {
 func sameOwnerAndGeneration(current leaseDocument, record lease.Record) bool {
 	generation, ok := generationToFirestore(record.Generation)
 	return ok && current.OwnerInstanceID == record.OwnerInstanceID && current.Generation == generation
+}
+
+func leaseStillLive(expiresAt time.Time, now time.Time) bool {
+	return now.Before(expiresAt.Add(leaseClockSkewAllowance))
 }
 
 func leaseRecordFromDocument(doc leaseDocument) lease.Record {

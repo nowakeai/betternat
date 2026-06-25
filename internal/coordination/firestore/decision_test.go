@@ -56,6 +56,22 @@ func TestAcquireTakesExpiredLeaseAndBumpsGeneration(t *testing.T) {
 	}
 }
 
+func TestAcquireRejectsDifferentOwnerWithinClockSkewAllowance(t *testing.T) {
+	now := time.Unix(121, 0)
+	current := leaseDocument{
+		GatewayID:       "gw-a",
+		HAGroupID:       "ha-a",
+		OwnerInstanceID: "i-a",
+		Generation:      7,
+		ExpiresAt:       time.Unix(120, 0),
+	}
+
+	_, err := acquireLease(current, true, "gw-a", "ha-a", "i-b", now, 10*time.Second)
+	if err == nil || !strings.Contains(err.Error(), "lease is held") {
+		t.Fatalf("expected held lease within skew allowance, got %v", err)
+	}
+}
+
 func TestRenewRequiresOwnerGenerationFence(t *testing.T) {
 	now := time.Unix(100, 0)
 	current := leaseDocument{
@@ -78,8 +94,25 @@ func TestRenewRequiresOwnerGenerationFence(t *testing.T) {
 	}
 }
 
-func TestRenewRejectsExpiredLease(t *testing.T) {
+func TestRenewAllowsCurrentOwnerWithinClockSkewAllowance(t *testing.T) {
 	now := time.Unix(120, 0)
+	current := leaseDocument{
+		OwnerInstanceID: "i-a",
+		Generation:      7,
+		ExpiresAt:       time.Unix(120, 0),
+	}
+
+	doc, err := renewLease(current, leaseRecord("ha-a", "i-a", 7, 120), now, 10*time.Second)
+	if err != nil {
+		t.Fatalf("renew within skew allowance: %v", err)
+	}
+	if doc.ExpiresAt.Unix() != 130 || doc.UpdatedAt.Unix() != 120 {
+		t.Fatalf("unexpected renewed lease: %#v", doc)
+	}
+}
+
+func TestRenewRejectsExpiredLeaseBeyondClockSkewAllowance(t *testing.T) {
+	now := time.Unix(123, 0)
 	current := leaseDocument{
 		OwnerInstanceID: "i-a",
 		Generation:      7,
@@ -110,6 +143,23 @@ func TestTransferRequiresFenceAndMovesOwnership(t *testing.T) {
 		t.Fatalf("transfer fenced lease: %v", err)
 	}
 	if doc.OwnerInstanceID != "i-b" || doc.Generation != 8 || doc.ExpiresAt.Unix() != 110 {
+		t.Fatalf("unexpected transferred lease: %#v", doc)
+	}
+}
+
+func TestTransferAllowsCurrentOwnerWithinClockSkewAllowance(t *testing.T) {
+	now := time.Unix(121, 0)
+	current := leaseDocument{
+		OwnerInstanceID: "i-a",
+		Generation:      7,
+		ExpiresAt:       time.Unix(120, 0),
+	}
+
+	doc, err := transferLease(current, leaseRecord("ha-a", "i-a", 7, 120), "i-b", now, 10*time.Second)
+	if err != nil {
+		t.Fatalf("transfer within skew allowance: %v", err)
+	}
+	if doc.OwnerInstanceID != "i-b" || doc.Generation != 8 || doc.ExpiresAt.Unix() != 131 {
 		t.Fatalf("unexpected transferred lease: %#v", doc)
 	}
 }

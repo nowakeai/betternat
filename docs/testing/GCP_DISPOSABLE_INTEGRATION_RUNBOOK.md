@@ -401,8 +401,8 @@ At minimum, run one controlled failure in each category:
 - make the standby registry stale and verify proactive handover refuses it,
 - restart the old active after passive failover and verify it does not repair the
   route back without reacquiring the current lease generation,
-- skew one node's clock within the expected tolerance and verify lease renewal
-  and takeover behavior remain conservative,
+- skew one node's clock within the expected 2 second Firestore lease tolerance
+  and verify lease renewal and takeover behavior remain conservative,
 - interrupt route operation polling and verify final route state is checked
   before success.
 

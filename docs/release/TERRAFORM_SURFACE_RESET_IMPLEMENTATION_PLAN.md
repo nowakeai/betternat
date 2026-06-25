@@ -739,6 +739,11 @@ Append dated notes here during implementation.
   `internal/cloud/gcp` now attempts to restore the previous route snapshot.
   Local tests cover restore after delete-operation, insert, and insert-operation
   failures; live GCE route-operation failure injection remains open.
+- Added a conservative 2 second Firestore lease clock-skew allowance for GCP HA
+  fencing. Different owners cannot acquire during the skew window after
+  `expires_at`, while the current fenced owner can still renew or transfer.
+  Local Firestore decision tests cover acquire, renew, and transfer boundaries;
+  live GCE clock-skew injection remains open.
 - Re-locked the global no-nftables-fallback decision across architecture,
   development, testing, and historical research docs. This is a BetterNAT-wide
   product rule, not a GCP exception: LoxiLB is the supported datapath, existing
