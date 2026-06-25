@@ -138,6 +138,7 @@ Read these first when revisiting product or architecture direction:
 - [research/059-gcp-protocol-failover-results.md](research/059-gcp-protocol-failover-results.md) — Live GCP route-only protocol failover validation for TCP, HTTPS, UDP DNS, long download, public-IP switch, and cleanup.
 - [research/060-gcp-failure-injection-results.md](research/060-gcp-failure-injection-results.md) — Live GCP failure-injection validation proving active gateway degradation when Firestore/Compute API access is unavailable.
 - [research/061-gcp-stable-public-identity-decision.md](research/061-gcp-stable-public-identity-decision.md) — Decision that GCP alpha remains route-only/non-stable until access-config handover is designed and live-validated.
+- [research/062-gcp-capacity-repair-decision.md](research/062-gcp-capacity-repair-decision.md) — Decision that GCP alpha may use unmanaged VMs, while GA should use MIG-backed capacity repair unless a later ADR changes that direction.
 
 ## Supporting Research
 

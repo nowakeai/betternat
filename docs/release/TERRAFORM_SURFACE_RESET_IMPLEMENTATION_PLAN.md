@@ -288,8 +288,8 @@ Tasks:
 - [x] Validate TCP, UDP, DNS, and long-download behavior across route-only
   failover; do not rely only on short HTTP source-IP probes.
 - [x] Validate destroy/rollback after an agent-owned route movement.
-- [ ] Decide GCP capacity repair model: unmanaged instances for alpha only or
-  MIG-backed replacement before GA.
+- [x] Decide GCP capacity repair model: unmanaged instances for alpha only;
+  MIG-backed replacement is the expected GA path unless a later ADR changes it.
 - [x] Destroy all resources and scan residuals.
 
 Validation evidence:
@@ -717,3 +717,7 @@ Append dated notes here during implementation.
   separate access-config handover design plus live validation before it can be
   claimed for GA. See
   `docs/research/061-gcp-stable-public-identity-decision.md`.
+- Documented the GCP capacity-repair boundary: unmanaged gateway VMs are
+  acceptable for alpha, but GCP GA should use MIG-backed capacity repair unless
+  a later ADR changes the direction. See
+  `docs/research/062-gcp-capacity-repair-decision.md`.

@@ -21,6 +21,10 @@ GCP alpha is route-only and non-stable for public identity. Do not interpret a
 reserved static external IP experiment as supported alpha behavior unless the
 access-config handover design has been implemented and live-validated.
 
+GCP alpha also uses unmanaged gateway VMs. GA capacity repair needs separate
+MIG-backed validation; do not count provider-created unmanaged instances as a
+production repair loop.
+
 Do not run this against a production VPC, existing Cloud NAT migration, or
 production GKE route table.
 
