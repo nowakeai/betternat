@@ -519,6 +519,11 @@ Append dated notes here during implementation.
   deleting and recreating the route with a `nextHopInstance`, verifies route
   targets by reading Compute routes, and explicitly rejects shared public
   identity operations until a GCP stable public IP strategy is proven.
+- Wired the agent runtime selection path for `cloud=gcp`: GCP HA validation now
+  accepts `ha.lease.backend=firestore`, uses Firestore for lease/registry/
+  handover coordination, uses `internal/cloud/gcp` for route mutation, and
+  rejects shared public identity. Live GCE activation/handover validation is
+  still pending.
 - Opened implementation PRs:
   - main repo: `https://github.com/nowakeai/betternat/pull/1`
   - split provider repo:

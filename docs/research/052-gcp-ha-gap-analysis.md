@@ -352,7 +352,10 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
   unexpired lease. The reusable integration test exists, but
   `shared-resources-alt` database creation is currently blocked by IAM for
   `renjie@altresear.ch`.
-- [ ] Agent on GCE mutates routes only after lease verification.
+- [x] Agent runtime can construct Firestore coordination and a GCP route
+  provider for `cloud=gcp`.
+- [ ] Agent on GCE mutates routes only after lease verification in live
+  validation.
 - [x] GCP `cloud.Provider` route replace/describe implementation exists for
   tagged static routes with `nextHopInstance`.
 - [ ] Passive failover after active crash works.

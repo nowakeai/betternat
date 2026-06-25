@@ -213,9 +213,11 @@ data "betternat_gcp_gateway_status" "egress" {
 It manages provider-owned GCE gateway VMs with `canIpForward=true`, an nftables
 masquerade startup script, and one tagged default route to the active gateway.
 
-It does not yet provide BetterNAT agent lease coordination, LoxiLB-on-GCE
-validation, stable public IP handover, GKE migration safety, or production HA
-guarantees.
+The runtime now has an implementation path for Firestore-backed lease
+coordination and GCP tagged-route mutation, but it has not yet passed live GCE
+HA validation. Treat the resource as alpha until active/passive failover,
+proactive handover, LoxiLB-on-GCE, GKE migration safety, IAM, and observability
+gates are complete.
 
 Minimal shape:
 
@@ -236,6 +238,39 @@ resource "betternat_gcp_gateway" "egress" {
 
 Private client VMs must have the configured `client_tag` and no broader route
 with a higher priority that bypasses the BetterNAT route.
+
+Experimental GCP agent HA config uses Firestore coordination and route-only
+public identity:
+
+```yaml
+cloud: gcp
+region: us-west2
+gcp:
+  project_id: shared-resources-alt
+  zone: us-west2-a
+  network: lab-vpc
+  client_tag: lab-private-client
+  route_priority: 800
+  firestore_database_id: betternat-test
+ha:
+  enabled: true
+  lease:
+    backend: firestore
+    key: lab-egress-us-west2-a
+  route_failover:
+    mode: replace_route
+    route_table_ids:
+      - lab-egress-default-via-gateway
+    destination_cidr: 0.0.0.0/0
+    target_type: instance
+  public_identity: {}
+coordination:
+  backend: firestore
+```
+
+For GCP, `route_table_ids` currently means GCP static route names. Shared public
+identity is intentionally unsupported until a stable GCP public IP handover
+strategy is proven.
 
 ## Update Behavior
 

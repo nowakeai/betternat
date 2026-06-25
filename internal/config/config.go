@@ -7,6 +7,7 @@ type Config struct {
 	HAGroupID     string              `json:"ha_group_id" yaml:"ha_group_id"`
 	Cloud         string              `json:"cloud" yaml:"cloud"`
 	Region        string              `json:"region" yaml:"region"`
+	GCP           GCPConfig           `json:"gcp" yaml:"gcp"`
 	Local         LocalConfig         `json:"local" yaml:"local"`
 	Datapath      DatapathConfig      `json:"datapath" yaml:"datapath"`
 	HA            HAConfig            `json:"ha" yaml:"ha"`
@@ -21,6 +22,15 @@ type LocalConfig struct {
 	InstanceID       string `json:"instance_id,omitempty" yaml:"instance_id,omitempty"`
 	AvailabilityZone string `json:"availability_zone" yaml:"availability_zone"`
 	PrimaryInterface string `json:"primary_interface" yaml:"primary_interface"`
+}
+
+type GCPConfig struct {
+	ProjectID           string `json:"project_id" yaml:"project_id"`
+	Zone                string `json:"zone" yaml:"zone"`
+	Network             string `json:"network" yaml:"network"`
+	ClientTag           string `json:"client_tag" yaml:"client_tag"`
+	RoutePriority       int64  `json:"route_priority" yaml:"route_priority"`
+	FirestoreDatabaseID string `json:"firestore_database_id" yaml:"firestore_database_id"`
 }
 
 type DatapathConfig struct {

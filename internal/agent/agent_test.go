@@ -644,6 +644,46 @@ func TestRuntimeResolvesAutoSharedEIP(t *testing.T) {
 	}
 }
 
+func TestValidateHAConfigAcceptsGCPFirestoreRouteOnly(t *testing.T) {
+	cfg, err := config.Load(strings.NewReader(validGCPHAConfigJSON()))
+	if err != nil {
+		t.Fatalf("load gcp config: %v", err)
+	}
+	cfg.Local.NodeID = "gce-a"
+
+	if err := validateHAConfig(cfg); err != nil {
+		t.Fatalf("validate gcp ha config: %v", err)
+	}
+}
+
+func TestValidateHAConfigRejectsGCPDynamoDBLease(t *testing.T) {
+	cfg, err := config.Load(strings.NewReader(validGCPHAConfigJSON()))
+	if err != nil {
+		t.Fatalf("load gcp config: %v", err)
+	}
+	cfg.Local.NodeID = "gce-a"
+	cfg.HA.Lease.Backend = "dynamodb"
+
+	err = validateHAConfig(cfg)
+	if err == nil || !strings.Contains(err.Error(), "cloud=gcp") {
+		t.Fatalf("expected gcp lease backend validation error, got %v", err)
+	}
+}
+
+func TestValidateHAConfigRejectsGCPSharedPublicIdentity(t *testing.T) {
+	cfg, err := config.Load(strings.NewReader(validGCPHAConfigJSON()))
+	if err != nil {
+		t.Fatalf("load gcp config: %v", err)
+	}
+	cfg.Local.NodeID = "gce-a"
+	cfg.HA.PublicIdentity.Mode = "shared_eip"
+
+	err = validateHAConfig(cfg)
+	if err == nil || !strings.Contains(err.Error(), "cloud=gcp") {
+		t.Fatalf("expected gcp public identity validation error, got %v", err)
+	}
+}
+
 func TestRuntimeCompletesLifecycleActionAfterTerminationEvent(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "agent.json")
@@ -1009,6 +1049,54 @@ func validHAConfigJSON() string {
 	      "mode": "shared_eip",
 	      "allocation_id": "eipalloc-123"
 	    }
+	  },
+	  "observability": {},
+	  "rollback": {}
+	}`
+}
+
+func validGCPHAConfigJSON() string {
+	return `{
+	  "version": "v0",
+	  "gateway_id": "prod-egress",
+	  "ha_group_id": "prod-egress-a",
+	  "cloud": "gcp",
+	  "region": "us-west2",
+	  "gcp": {
+	    "project_id": "shared-resources-alt",
+	    "zone": "us-west2-a",
+	    "network": "prod-vpc",
+	    "client_tag": "private-client",
+	    "route_priority": 800,
+	    "firestore_database_id": "betternat-test"
+	  },
+	  "local": {"node_id":"gce-a","primary_interface": "ens4"},
+	  "datapath": {
+	    "engine": "nftables",
+	    "fallback_engine": "nftables",
+	    "private_cidrs": ["10.0.0.0/8"]
+	  },
+	  "ha": {
+	    "enabled": true,
+	    "lease": {
+	      "backend": "firestore",
+	      "key": "prod-egress-a",
+	      "ttl_seconds": 10,
+	      "renew_interval_seconds": 3
+	    },
+	    "route_failover": {
+	      "mode": "replace_route",
+	      "route_table_ids": ["prod-default-via-gateway"],
+	      "destination_cidr": "0.0.0.0/0",
+	      "target_type": "instance"
+	    },
+	    "public_identity": {}
+	  },
+	  "coordination": {
+	    "backend": "firestore",
+	    "registry_refresh_interval_seconds": 2,
+	    "registry_ttl_seconds": 20,
+	    "handover_ttl_seconds": 3600
 	  },
 	  "observability": {},
 	  "rollback": {}

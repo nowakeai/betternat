@@ -67,6 +67,39 @@ rollback: {}
 	}
 }
 
+func TestLoadGCPConfig(t *testing.T) {
+	cfg, err := Load(strings.NewReader(`
+version: v0
+gateway_id: prod-egress
+ha_group_id: prod-egress-a
+cloud: gcp
+region: us-west2
+gcp:
+  project_id: shared-resources-alt
+  zone: us-west2-a
+  network: prod-vpc
+  client_tag: private-client
+  route_priority: 800
+  firestore_database_id: betternat-test
+local:
+  node_id: gce-a
+  primary_interface: ens4
+datapath:
+  engine: nftables
+  private_cidrs:
+    - 10.0.0.0/8
+ha: {}
+observability: {}
+rollback: {}
+`))
+	if err != nil {
+		t.Fatalf("load gcp config: %v", err)
+	}
+	if cfg.GCP.ProjectID != "shared-resources-alt" || cfg.GCP.Zone != "us-west2-a" || cfg.GCP.FirestoreDatabaseID != "betternat-test" {
+		t.Fatalf("unexpected gcp config: %#v", cfg.GCP)
+	}
+}
+
 func TestLoadRejectsUnknownField(t *testing.T) {
 	_, err := Load(strings.NewReader(`{
 	  "version": "v0",
