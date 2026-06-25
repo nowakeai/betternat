@@ -26,6 +26,24 @@ Always pass the project explicitly:
 gcloud --project shared-resources-alt ...
 ```
 
+Run the read-only preflight before creating resources:
+
+```sh
+scripts/gcp-ha-preflight.sh --project shared-resources-alt --database "(default)"
+```
+
+When validating provider-owned runtime IAM, include:
+
+```sh
+BETTERNAT_GCP_MANAGE_RUNTIME_IAM=1 \
+  scripts/gcp-ha-preflight.sh --project shared-resources-alt --database "(default)"
+```
+
+The preflight checks enabled APIs, Firestore database presence, and the current
+gcloud identity's permissions for Compute route/instance operations, Firestore
+coordination records, service-account use, project IAM bindings, and optional
+custom-role lifecycle. It does not create or mutate resources.
+
 ## Topology
 
 - One disposable VPC.

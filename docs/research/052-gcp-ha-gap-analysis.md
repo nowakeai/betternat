@@ -537,8 +537,8 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
   fencing decisions.
 - [ ] Live Firestore spike proves two contenders cannot both acquire an
   unexpired lease. The reusable integration test exists, but
-  `shared-resources-alt` database creation is currently blocked by IAM for
-  `renjie@altresear.ch`.
+  `shared-resources-alt` has no Firestore database and database creation is
+  currently blocked by IAM for `renjie@altresear.ch`.
 - [x] Agent runtime can construct Firestore coordination and a GCP route
   provider for `cloud=gcp`.
 - [x] Provider can render experimental GCP agent HA config and bootstrap user
@@ -549,6 +549,11 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
   VMs for agent HA smoke.
 - [x] Provider exposes the GCP runtime IAM permission contract for validation
   custom roles.
+- [x] Provider has opt-in runtime IAM custom-role and binding lifecycle behind
+  `manage_runtime_iam`.
+- [ ] Live `manage_runtime_iam` validation. Current `shared-resources-alt`
+  preflight for `renjie@altresear.ch` is missing `iam.roles.create`,
+  `iam.roles.update`, and `iam.roles.delete`.
 - [ ] Agent on GCE mutates routes only after lease verification in live
   validation.
 - [x] GCP `cloud.Provider` route replace/describe implementation exists for

@@ -315,6 +315,8 @@ Tasks:
 - [x] Add opt-in provider-owned GCP runtime custom role and service-account
   binding lifecycle behind `manage_runtime_iam`.
 - [x] Add GCP startup-script and model tests.
+- [x] Add read-only GCP HA preflight for APIs, Firestore database presence, and
+  IAM permissions.
 - [ ] Add disposable GCP integration runbook.
 
 Validation:
@@ -553,6 +555,13 @@ Append dated notes here during implementation.
   handover coordination, uses `internal/cloud/gcp` for route mutation, and
   rejects shared public identity. Live GCE activation/handover validation is
   still pending.
+- Added `scripts/gcp-ha-preflight.sh` for read-only GCP HA preflight. Current
+  `shared-resources-alt` results for `renjie@altresear.ch`:
+  - base HA smoke is blocked because the project has no Firestore database and
+    the account lacks `datastore.databases.create`,
+  - provider-owned runtime IAM smoke with `manage_runtime_iam = true` is also
+    blocked by missing `iam.roles.create`, `iam.roles.update`, and
+    `iam.roles.delete`.
 - Opened implementation PRs:
   - main repo: `https://github.com/nowakeai/betternat/pull/1`
   - split provider repo:
