@@ -479,6 +479,13 @@ Append dated notes here during implementation.
   route target, private client egress returned active gateway IP
   `34.168.92.39`, `terraform destroy` removed provider-owned resources, and
   residual scans were empty after deleting precreated VPC/client resources.
+- Ran an extended unpublished Terraform provider GCP handover smoke with run ID
+  `bnat-gcp-ho-20260625051732`: provider-created route initially targeted
+  `gw-a` and client egress returned `34.168.92.39`; the route was manually
+  moved to `gw-b` and client egress returned `8.231.221.166`;
+  `terraform apply -refresh-only` updated both resource and data source route
+  targets to `gw-b`; `terraform destroy` still removed provider-owned gateway
+  VMs and route, and final residual scans were empty.
 - Opened implementation PRs:
   - main repo: `https://github.com/nowakeai/betternat/pull/1`
   - split provider repo:

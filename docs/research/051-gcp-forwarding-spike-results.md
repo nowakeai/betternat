@@ -176,6 +176,60 @@ to query the Registry for unpublished version `0.2.0` and failed. Running
 `terraform apply` directly with `TF_CLI_CONFIG_FILE` and the dev override
 worked as intended.
 
+## Terraform Provider Handover Smoke
+
+A third unpublished local-provider smoke validated provider-created resources
+under an out-of-band route handover, which is closer to the future agent
+control-plane model.
+
+- Run ID: `bnat-gcp-ho-20260625051732`
+- Provider install mode: Terraform CLI `dev_overrides` pointing at a local
+  `terraform-provider-betternat` binary built from this branch.
+- Precreated with `gcloud`: disposable VPC, subnet, internal firewall rule, and
+  private client VM without a public IP.
+- Managed by `betternat_gcp_gateway`: two gateway VMs and the tagged default
+  route.
+
+Initial `terraform apply` outputs:
+
+```text
+egress_public_ips = {
+  "bnat-gcp-ho-20260625051732-gw-a" = "34.168.92.39"
+  "bnat-gcp-ho-20260625051732-gw-b" = "8.231.221.166"
+}
+route_target = "bnat-gcp-ho-20260625051732-gw-a"
+status_route_target = "bnat-gcp-ho-20260625051732-gw-a"
+```
+
+Initial client egress:
+
+```text
+BETTERNAT_GCP_HO_EGRESS_IP=34.168.92.39
+BETTERNAT_GCP_HO_VERIFY_OK 2026-06-25T05:20:07+00:00
+```
+
+The route was then deleted and recreated with next hop
+`bnat-gcp-ho-20260625051732-gw-b`.
+
+Post-cutover client egress:
+
+```text
+BETTERNAT_GCP_HO_EGRESS_IP=8.231.221.166
+BETTERNAT_GCP_HO_VERIFY_OK 2026-06-25T05:21:33+00:00
+```
+
+`terraform apply -refresh-only` detected the out-of-band change:
+
+```text
+route_target = "bnat-gcp-ho-20260625051732-gw-b"
+status_route_target = "bnat-gcp-ho-20260625051732-gw-b"
+```
+
+`terraform destroy` then removed the provider-owned gateway VMs and route even
+after the route target had moved to `gw-b`. The precreated client, firewall,
+subnet, and VPC were then deleted with `gcloud`. Residual scans for instances,
+routes, firewall rules, subnets, networks, and addresses were empty.
+
 ## Decision
 
 Proceed with a narrow GCP alpha provider resource for the verified topology:
