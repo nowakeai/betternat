@@ -18,6 +18,7 @@ import (
 	"github.com/nowakeai/betternat/internal/buildinfo"
 	"github.com/nowakeai/betternat/internal/cloud"
 	awscloud "github.com/nowakeai/betternat/internal/cloud/aws"
+	gcpcloud "github.com/nowakeai/betternat/internal/cloud/gcp"
 	"github.com/nowakeai/betternat/internal/config"
 	"github.com/nowakeai/betternat/internal/datapath"
 	"github.com/nowakeai/betternat/internal/datapath/loxilb"
@@ -187,16 +188,29 @@ func (r Runtime) Run(ctx context.Context, opts Options) error {
 }
 
 func (r Runtime) prepareLocalInstance(ctx context.Context, cfg config.Config) (config.Config, error) {
-	if cfg.Cloud != "aws" || cfg.Local.NodeID != "auto" {
+	if cfg.Local.NodeID != "auto" {
 		return cfg, nil
 	}
 	resolve := r.ResolveInstanceID
-	if resolve == nil {
-		resolve = awscloud.ResolveLocalInstanceID
+	switch cfg.Cloud {
+	case "aws":
+		if resolve == nil {
+			resolve = awscloud.ResolveLocalInstanceID
+		}
+	case "gcp":
+		if resolve == nil {
+			resolve = gcpcloud.ResolveLocalInstanceID
+		}
+	default:
+		return cfg, nil
 	}
 	instanceID, err := resolve(ctx, cfg.Region)
 	if err != nil {
 		return config.Config{}, err
+	}
+	cfg.Local.NodeID = instanceID
+	if cfg.Cloud != "aws" {
+		return cfg, nil
 	}
 	preparer := r.InstancePreparer
 	if preparer == nil {
@@ -208,7 +222,6 @@ func (r Runtime) prepareLocalInstance(ctx context.Context, cfg config.Config) (c
 	if err := preparer.DisableSourceDestCheck(ctx, instanceID); err != nil {
 		return config.Config{}, err
 	}
-	cfg.Local.NodeID = instanceID
 	if cfg.HA.PublicIdentity.Mode == "shared_eip" && cfg.HA.PublicIdentity.AllocationID == "auto" {
 		resolveEIP := r.ResolveSharedEIP
 		if resolveEIP == nil {

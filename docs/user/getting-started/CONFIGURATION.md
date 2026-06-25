@@ -270,6 +270,10 @@ test builds. This path is still experimental until live two-agent route
 fencing, passive failover, proactive handover, LoxiLB-on-GCE, IAM, and cleanup
 evidence are complete.
 
+The rendered GCP agent config leaves `local.node_id = "auto"`. At runtime the
+agent resolves that value from GCE metadata to the local instance name, which is
+the same identifier used as the GCP static route `nextHopInstance` target.
+
 Experimental GCP agent HA config uses Firestore coordination and route-only
 public identity:
 

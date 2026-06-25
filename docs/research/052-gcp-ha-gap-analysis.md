@@ -419,6 +419,10 @@ Firestore-backed GCP agent config, runtime artifact checksums, peer API token,
 and cloud-init user data when `enable_agent_ha = true`. That is a prerequisite
 for live HA smoke, not proof that live GCE HA is complete.
 
+The agent runtime can also resolve GCP `local.node_id = "auto"` through GCE
+metadata. This is required because GCP route-only HA uses the instance name as
+the `nextHopInstance` route target.
+
 ### 10. Agent Packaging And Bootstrap
 
 GCP HA requires the same appliance bootstrap quality as AWS:
@@ -471,6 +475,8 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
   provider for `cloud=gcp`.
 - [x] Provider can render experimental GCP agent HA config and bootstrap user
   data behind an explicit switch.
+- [x] Agent can resolve GCE instance name from metadata for `local.node_id =
+  "auto"`.
 - [ ] Agent on GCE mutates routes only after lease verification in live
   validation.
 - [x] GCP `cloud.Provider` route replace/describe implementation exists for
