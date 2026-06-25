@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	compute "google.golang.org/api/compute/v1"
 )
 
 func TestGatewayStartupScriptConfiguresForwardingAndMasquerade(t *testing.T) {
@@ -42,6 +44,9 @@ func TestGatewayInstanceAttachesRuntimeServiceAccount(t *testing.T) {
 	if len(inst.ServiceAccounts[0].Scopes) != 1 || inst.ServiceAccounts[0].Scopes[0] != "https://www.googleapis.com/auth/cloud-platform" {
 		t.Fatalf("unexpected service account scopes: %#v", inst.ServiceAccounts[0].Scopes)
 	}
+	if !hasTag(inst.Tags, "prod-egress-gateway") || !hasTag(inst.Tags, "prod-egress-gw-a") {
+		t.Fatalf("expected stable and per-instance gateway tags: %#v", inst.Tags)
+	}
 }
 
 func TestGatewayInstanceTemplateMatchesGatewayBootstrap(t *testing.T) {
@@ -72,6 +77,12 @@ func TestGatewayInstanceTemplateMatchesGatewayBootstrap(t *testing.T) {
 				t.Fatalf("template should not include empty network tags: %#v", props.Tags)
 			}
 		}
+	}
+	if !hasTag(props.Tags, "prod-egress-gateway") {
+		t.Fatalf("template should include stable gateway tag: %#v", props.Tags)
+	}
+	if hasTag(props.Tags, "prod-egress-gw-a") {
+		t.Fatalf("template should not include unmanaged per-instance tag: %#v", props.Tags)
 	}
 	if len(props.ServiceAccounts) != 1 || props.ServiceAccounts[0].Email == "" {
 		t.Fatalf("missing template service account: %#v", props.ServiceAccounts)
@@ -204,4 +215,16 @@ func validInputs() Inputs {
 		PrivateCIDRs:      []string{"10.0.0.0/8"},
 		OperationPollTime: time.Nanosecond,
 	}
+}
+
+func hasTag(tags *compute.Tags, want string) bool {
+	if tags == nil {
+		return false
+	}
+	for _, tag := range tags.Items {
+		if tag == want {
+			return true
+		}
+	}
+	return false
 }

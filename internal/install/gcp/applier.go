@@ -181,7 +181,7 @@ func gatewayInstance(inputs Inputs, name string) *compute.Instance {
 		CanIpForward: true,
 		MachineType:  zoneLink(inputs.ProjectID, inputs.Zone, "machineTypes", valueOr(inputs.MachineType, "e2-small")),
 		Labels:       inputs.Labels,
-		Tags:         &compute.Tags{Items: []string{name}},
+		Tags:         &compute.Tags{Items: gatewayNetworkTags(inputs, name)},
 		Disks: []*compute.AttachedDisk{{
 			AutoDelete: true,
 			Boot:       true,
@@ -220,6 +220,7 @@ func gatewayInstanceTemplate(inputs Inputs) *compute.InstanceTemplate {
 			CanIpForward:      true,
 			MachineType:       valueOr(inputs.MachineType, "e2-small"),
 			Labels:            inputs.Labels,
+			Tags:              &compute.Tags{Items: gatewayNetworkTags(inputs, "")},
 			Disks:             instance.Disks,
 			NetworkInterfaces: instance.NetworkInterfaces,
 			Metadata:          instance.Metadata,
@@ -409,6 +410,14 @@ func gatewayNames(name string, count int64) []string {
 		names = append(names, fmt.Sprintf("%s-gw-%c", name, 'a'+rune(i)))
 	}
 	return names
+}
+
+func gatewayNetworkTags(inputs Inputs, instanceName string) []string {
+	tags := []string{inputs.Name + "-gateway"}
+	if strings.TrimSpace(instanceName) != "" {
+		tags = append(tags, instanceName)
+	}
+	return tags
 }
 
 func capacityRepairMode(inputs Inputs) string {
