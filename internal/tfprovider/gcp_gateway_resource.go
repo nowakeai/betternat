@@ -27,42 +27,44 @@ var _ resource.Resource = (*GCPGatewayResource)(nil)
 type GCPGatewayResource struct{}
 
 type GCPGatewayResourceModel struct {
-	ID                    types.String `tfsdk:"id"`
-	Name                  types.String `tfsdk:"name"`
-	ProjectID             types.String `tfsdk:"project_id"`
-	Region                types.String `tfsdk:"region"`
-	Zone                  types.String `tfsdk:"zone"`
-	Network               types.String `tfsdk:"network"`
-	Subnetwork            types.String `tfsdk:"subnetwork"`
-	ClientTag             types.String `tfsdk:"client_tag"`
-	RouteName             types.String `tfsdk:"route_name"`
-	RoutePriority         types.Int64  `tfsdk:"route_priority"`
-	RouteDestRange        types.String `tfsdk:"route_destination_cidr"`
-	MachineType           types.String `tfsdk:"machine_type"`
-	ImageProject          types.String `tfsdk:"image_project"`
-	ImageFamily           types.String `tfsdk:"image_family"`
-	GatewayCount          types.Int64  `tfsdk:"gateway_count"`
-	PrivateCIDRs          types.List   `tfsdk:"private_cidrs"`
-	ServiceAccountEmail   types.String `tfsdk:"service_account_email"`
-	RuntimeIAMPermissions types.List   `tfsdk:"runtime_iam_permissions"`
-	ManageRuntimeIAM      types.Bool   `tfsdk:"manage_runtime_iam"`
-	EnableAgentHA         types.Bool   `tfsdk:"enable_agent_ha"`
-	BetterNATVersion      types.String `tfsdk:"betternat_version"`
-	AgentBinaryURL        types.String `tfsdk:"agent_binary_url"`
-	AgentBinarySHA256     types.String `tfsdk:"agent_binary_sha256"`
-	CLIBinaryURL          types.String `tfsdk:"cli_binary_url"`
-	CLIBinarySHA256       types.String `tfsdk:"cli_binary_sha256"`
-	LoxiCMDBinaryURL      types.String `tfsdk:"loxicmd_binary_url"`
-	LoxiCMDBinarySHA256   types.String `tfsdk:"loxicmd_binary_sha256"`
-	FirestoreDatabaseID   types.String `tfsdk:"firestore_database_id"`
-	PeerAPIAuthToken      types.String `tfsdk:"peer_api_auth_token"`
-	AgentConfigJSON       types.String `tfsdk:"agent_config_json"`
-	AgentConfigHash       types.String `tfsdk:"agent_config_hash"`
-	StartupScript         types.String `tfsdk:"startup_script"`
-	GatewayStatuses       types.Map    `tfsdk:"gateway_statuses"`
-	EgressPublicIPs       types.Map    `tfsdk:"egress_public_ips"`
-	RouteTarget           types.String `tfsdk:"route_target"`
-	Status                types.String `tfsdk:"status"`
+	ID                          types.String `tfsdk:"id"`
+	Name                        types.String `tfsdk:"name"`
+	ProjectID                   types.String `tfsdk:"project_id"`
+	Region                      types.String `tfsdk:"region"`
+	Zone                        types.String `tfsdk:"zone"`
+	Network                     types.String `tfsdk:"network"`
+	Subnetwork                  types.String `tfsdk:"subnetwork"`
+	ClientTag                   types.String `tfsdk:"client_tag"`
+	RouteName                   types.String `tfsdk:"route_name"`
+	RoutePriority               types.Int64  `tfsdk:"route_priority"`
+	RouteDestRange              types.String `tfsdk:"route_destination_cidr"`
+	MachineType                 types.String `tfsdk:"machine_type"`
+	ImageProject                types.String `tfsdk:"image_project"`
+	ImageFamily                 types.String `tfsdk:"image_family"`
+	GatewayCount                types.Int64  `tfsdk:"gateway_count"`
+	PrivateCIDRs                types.List   `tfsdk:"private_cidrs"`
+	ServiceAccountEmail         types.String `tfsdk:"service_account_email"`
+	RuntimeServiceAccountID     types.String `tfsdk:"runtime_service_account_id"`
+	ManageRuntimeServiceAccount types.Bool   `tfsdk:"manage_runtime_service_account"`
+	RuntimeIAMPermissions       types.List   `tfsdk:"runtime_iam_permissions"`
+	ManageRuntimeIAM            types.Bool   `tfsdk:"manage_runtime_iam"`
+	EnableAgentHA               types.Bool   `tfsdk:"enable_agent_ha"`
+	BetterNATVersion            types.String `tfsdk:"betternat_version"`
+	AgentBinaryURL              types.String `tfsdk:"agent_binary_url"`
+	AgentBinarySHA256           types.String `tfsdk:"agent_binary_sha256"`
+	CLIBinaryURL                types.String `tfsdk:"cli_binary_url"`
+	CLIBinarySHA256             types.String `tfsdk:"cli_binary_sha256"`
+	LoxiCMDBinaryURL            types.String `tfsdk:"loxicmd_binary_url"`
+	LoxiCMDBinarySHA256         types.String `tfsdk:"loxicmd_binary_sha256"`
+	FirestoreDatabaseID         types.String `tfsdk:"firestore_database_id"`
+	PeerAPIAuthToken            types.String `tfsdk:"peer_api_auth_token"`
+	AgentConfigJSON             types.String `tfsdk:"agent_config_json"`
+	AgentConfigHash             types.String `tfsdk:"agent_config_hash"`
+	StartupScript               types.String `tfsdk:"startup_script"`
+	GatewayStatuses             types.Map    `tfsdk:"gateway_statuses"`
+	EgressPublicIPs             types.Map    `tfsdk:"egress_public_ips"`
+	RouteTarget                 types.String `tfsdk:"route_target"`
+	Status                      types.String `tfsdk:"status"`
 }
 
 func NewGCPGatewayResource() resource.Resource {
@@ -139,7 +141,18 @@ func (r *GCPGatewayResource) Schema(_ context.Context, _ resource.SchemaRequest,
 			"service_account_email": schema.StringAttribute{
 				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "Runtime service account email attached to GCP gateway VMs. Required when enable_agent_ha is true; the service account must have Firestore coordination and Compute route permissions for the configured project and route.",
+				MarkdownDescription: "Runtime service account email attached to GCP gateway VMs. Required when enable_agent_ha is true unless manage_runtime_service_account derives it from runtime_service_account_id.",
+			},
+			"runtime_service_account_id": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Project-local service account ID used when manage_runtime_service_account is true. Defaults to a sanitized name-derived ID.",
+			},
+			"manage_runtime_service_account": schema.BoolAttribute{
+				Optional:            true,
+				Computed:            true,
+				Default:             booldefault.StaticBool(false),
+				MarkdownDescription: "Experimental. When true with enable_agent_ha, the provider creates and deletes the runtime service account used by gateway VMs. Leave false when an infra-admin stack owns the service account.",
 			},
 			"runtime_iam_permissions": schema.ListAttribute{
 				ElementType:         types.StringType,
@@ -228,7 +241,14 @@ func (r *GCPGatewayResource) Create(ctx context.Context, req resource.CreateRequ
 		resp.Diagnostics.AddError("Configure GCP gateway", err.Error())
 		return
 	}
+	if err := applyGCPRuntimeServiceAccount(ctx, &plan); err != nil {
+		resp.Diagnostics.AddError("Configure GCP runtime service account", err.Error())
+		return
+	}
 	if err := applyGCPRuntimeIAM(ctx, &plan); err != nil {
+		if cleanupErr := cleanupGCPRuntimeServiceAccount(ctx, &plan); cleanupErr != nil {
+			err = fmt.Errorf("%w; cleanup GCP runtime service account after failed IAM setup: %v", err, cleanupErr)
+		}
 		resp.Diagnostics.AddError("Configure GCP runtime IAM", err.Error())
 		return
 	}
@@ -236,6 +256,9 @@ func (r *GCPGatewayResource) Create(ctx context.Context, req resource.CreateRequ
 	if err != nil {
 		if cleanupErr := cleanupGCPRuntimeIAM(ctx, &plan); cleanupErr != nil {
 			err = fmt.Errorf("%w; cleanup GCP runtime IAM after failed create: %v", err, cleanupErr)
+		}
+		if cleanupErr := cleanupGCPRuntimeServiceAccount(ctx, &plan); cleanupErr != nil {
+			err = fmt.Errorf("%w; cleanup GCP runtime service account after failed create: %v", err, cleanupErr)
 		}
 		resp.Diagnostics.AddError("Create GCP gateway", err.Error())
 		return
@@ -297,6 +320,10 @@ func (r *GCPGatewayResource) Delete(ctx context.Context, req resource.DeleteRequ
 	}
 	if err := cleanupGCPRuntimeIAM(ctx, &state); err != nil {
 		resp.Diagnostics.AddError("Delete GCP runtime IAM", err.Error())
+		return
+	}
+	if err := cleanupGCPRuntimeServiceAccount(ctx, &state); err != nil {
+		resp.Diagnostics.AddError("Delete GCP runtime service account", err.Error())
 	}
 }
 
@@ -308,6 +335,9 @@ func gcpApplierAndInputs(ctx context.Context, model *GCPGatewayResourceModel) (g
 	service, err := gcompute.NewService(ctx)
 	if err != nil {
 		return gcpinstall.Applier{}, gcpinstall.Inputs{}, fmt.Errorf("create GCP compute service: %w", err)
+	}
+	if err := prepareGCPRuntimeServiceAccountPlan(model); err != nil {
+		return gcpinstall.Applier{}, gcpinstall.Inputs{}, err
 	}
 	inputs := gcpInputs(*model, privateCIDRs)
 	if err := enrichGCPAgentBootstrap(model, &inputs, privateCIDRs); err != nil {
@@ -375,11 +405,90 @@ func applyGCPComputedPlan(model *GCPGatewayResourceModel, inputs gcpinstall.Inpu
 	model.ImageFamily = types.StringValue(inputs.ImageFamily)
 	model.GatewayCount = types.Int64Value(inputs.GatewayCount)
 	model.ServiceAccountEmail = types.StringValue(inputs.ServiceAccountEmail)
+	model.RuntimeServiceAccountID = types.StringValue(stringDefault(model.RuntimeServiceAccountID, ""))
+	model.ManageRuntimeServiceAccount = types.BoolValue(boolDefault(model.ManageRuntimeServiceAccount, false))
 	model.RuntimeIAMPermissions = mustStringList(gcpinstall.RuntimeIAMPermissions())
 	model.ManageRuntimeIAM = types.BoolValue(boolDefault(model.ManageRuntimeIAM, false))
 	model.EnableAgentHA = types.BoolValue(boolDefault(model.EnableAgentHA, false))
 	model.FirestoreDatabaseID = types.StringValue(stringDefault(model.FirestoreDatabaseID, "(default)"))
 	model.StartupScript = types.StringValue(inputs.StartupScript)
+}
+
+func prepareGCPRuntimeServiceAccountPlan(model *GCPGatewayResourceModel) error {
+	if !boolDefault(model.ManageRuntimeServiceAccount, false) {
+		if model.RuntimeServiceAccountID.IsNull() || model.RuntimeServiceAccountID.IsUnknown() {
+			model.RuntimeServiceAccountID = types.StringValue("")
+		}
+		return nil
+	}
+	if !boolDefault(model.EnableAgentHA, false) {
+		return fmt.Errorf("manage_runtime_service_account requires enable_agent_ha")
+	}
+	accountID := stringDefault(model.RuntimeServiceAccountID, "")
+	if accountID == "" {
+		accountID = defaultGCPRuntimeServiceAccountID(model.Name.ValueString())
+	}
+	inputs := gcpinstall.RuntimeServiceAccountInputs{
+		ProjectID: model.ProjectID.ValueString(),
+		AccountID: accountID,
+	}
+	if err := inputs.Validate(); err != nil {
+		return err
+	}
+	model.RuntimeServiceAccountID = types.StringValue(accountID)
+	if stringDefault(model.ServiceAccountEmail, "") == "" {
+		model.ServiceAccountEmail = types.StringValue(inputs.Email())
+	}
+	return nil
+}
+
+func applyGCPRuntimeServiceAccount(ctx context.Context, model *GCPGatewayResourceModel) error {
+	if !boolDefault(model.ManageRuntimeServiceAccount, false) {
+		return nil
+	}
+	manager, inputs, err := gcpRuntimeServiceAccountManagerAndInputs(ctx, model)
+	if err != nil {
+		return err
+	}
+	_, err = manager.Apply(ctx, inputs)
+	return err
+}
+
+func cleanupGCPRuntimeServiceAccount(ctx context.Context, model *GCPGatewayResourceModel) error {
+	if !boolDefault(model.ManageRuntimeServiceAccount, false) {
+		return nil
+	}
+	manager, inputs, err := gcpRuntimeServiceAccountManagerAndInputs(ctx, model)
+	if err != nil {
+		return err
+	}
+	return manager.Cleanup(ctx, inputs)
+}
+
+func gcpRuntimeServiceAccountManagerAndInputs(ctx context.Context, model *GCPGatewayResourceModel) (gcpinstall.RuntimeServiceAccountManager, gcpinstall.RuntimeServiceAccountInputs, error) {
+	inputs, err := gcpRuntimeServiceAccountInputs(model)
+	if err != nil {
+		return gcpinstall.RuntimeServiceAccountManager{}, gcpinstall.RuntimeServiceAccountInputs{}, err
+	}
+	api, err := gcpinstall.NewRuntimeServiceAccountAPI(ctx)
+	if err != nil {
+		return gcpinstall.RuntimeServiceAccountManager{}, gcpinstall.RuntimeServiceAccountInputs{}, err
+	}
+	return gcpinstall.RuntimeServiceAccountManager{API: api}, inputs, nil
+}
+
+func gcpRuntimeServiceAccountInputs(model *GCPGatewayResourceModel) (gcpinstall.RuntimeServiceAccountInputs, error) {
+	if !boolDefault(model.ManageRuntimeServiceAccount, false) {
+		return gcpinstall.RuntimeServiceAccountInputs{}, nil
+	}
+	inputs := gcpinstall.RuntimeServiceAccountInputs{
+		ProjectID: model.ProjectID.ValueString(),
+		AccountID: stringDefault(model.RuntimeServiceAccountID, ""),
+	}
+	if err := inputs.Validate(); err != nil {
+		return gcpinstall.RuntimeServiceAccountInputs{}, err
+	}
+	return inputs, nil
 }
 
 func applyGCPRuntimeIAM(ctx context.Context, model *GCPGatewayResourceModel) error {
@@ -431,6 +540,10 @@ func gcpRuntimeIAMInputs(model *GCPGatewayResourceModel) (gcpinstall.RuntimeIAMI
 		return gcpinstall.RuntimeIAMInputs{}, err
 	}
 	return inputs, nil
+}
+
+func defaultGCPRuntimeServiceAccountID(name string) string {
+	return sanitizeGCPServiceAccountID(name + "-runtime")
 }
 
 func enrichGCPAgentBootstrap(model *GCPGatewayResourceModel, inputs *gcpinstall.Inputs, privateCIDRs []string) error {
@@ -586,6 +699,38 @@ func sanitizeGCPLabel(value string) string {
 	}
 	if len(out) > 63 {
 		out = out[:63]
+	}
+	return string(out)
+}
+
+func sanitizeGCPServiceAccountID(value string) string {
+	out := make([]rune, 0, len(value))
+	for _, r := range value {
+		if r >= 'A' && r <= 'Z' {
+			r += 'a' - 'A'
+		}
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+			out = append(out, r)
+		} else {
+			out = append(out, '-')
+		}
+	}
+	for len(out) > 0 && out[0] == '-' {
+		out = out[1:]
+	}
+	if len(out) == 0 || out[0] < 'a' || out[0] > 'z' {
+		out = append([]rune{'b'}, out...)
+	}
+	if len(out) > 30 {
+		out = out[:30]
+	}
+	for len(out) > 0 && out[len(out)-1] == '-' {
+		out = out[:len(out)-1]
+	}
+	if len(out) < 6 {
+		for len(out) < 6 {
+			out = append(out, '0')
+		}
 	}
 	return string(out)
 }

@@ -151,6 +151,14 @@ experimental `enable_agent_ha = true` path does.
 When `enable_agent_ha = true`, set:
 
 ```hcl
+manage_runtime_service_account = true
+manage_runtime_iam             = true
+```
+
+Alternatively, leave `manage_runtime_service_account = false` and provide an
+existing service account:
+
+```hcl
 service_account_email = "betternat-runtime@PROJECT_ID.iam.gserviceaccount.com"
 manage_runtime_iam    = true
 ```
@@ -188,14 +196,30 @@ serviceAccount:SERVICE_ACCOUNT_EMAIL
 
 Use this only when the Terraform execution identity is intentionally allowed to
 manage project custom roles and project IAM policy bindings. Leave
-`manage_runtime_iam = false` when an infra-admin stack owns IAM. The provider
-does not create the service account itself.
+`manage_runtime_iam = false` when an infra-admin stack owns IAM.
+
+When `manage_runtime_service_account = true`, the provider also creates and
+deletes the runtime service account. The Terraform execution identity then
+needs:
+
+| Permission | Why |
+| --- | --- |
+| `iam.serviceAccounts.create` | Create the runtime service account. |
+| `iam.serviceAccounts.delete` | Remove the provider-owned runtime service account on destroy. |
+| `iam.serviceAccounts.get` | Check whether the runtime service account already exists. |
+| `iam.serviceAccounts.actAs` | Attach the runtime service account to gateway VMs. |
+
+Leave `manage_runtime_service_account = false` when service-account lifecycle is
+owned by another Terraform stack or infra-admin workflow.
 
 Current GCP limitations:
 
 - provider-owned GCP custom role and IAM binding lifecycle exists behind the
   explicit `manage_runtime_iam` switch, but still needs live validation in the
   GCP HA smoke,
+- provider-owned runtime service-account lifecycle exists behind
+  `manage_runtime_service_account`, but still needs live validation in the GCP
+  HA smoke,
 - Firestore database creation may require project-owner or App Engine/Firestore
   admin permissions outside the gateway runtime role,
 - route-only GCP HA does not provide stable public egress IP failover yet.

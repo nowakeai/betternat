@@ -483,9 +483,10 @@ metadata. This is required because GCP route-only HA uses the instance name as
 the `nextHopInstance` route target.
 
 The GCP resource can attach an explicit runtime `service_account_email` to
-gateway VMs. The experimental agent HA path requires this field so live smoke
-does not depend on the broad and environment-specific Compute Engine default
-service account.
+gateway VMs. The experimental agent HA path can also create a provider-owned
+runtime service account when `manage_runtime_service_account = true`, so live
+smoke does not depend on the broad and environment-specific Compute Engine
+default service account.
 The provider also exposes the runtime permission contract as computed
 `runtime_iam_permissions`. It can manage the project-level BetterNAT runtime
 custom role and service-account binding when `manage_runtime_iam = true`; that
@@ -547,6 +548,8 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
   "auto"`.
 - [x] Provider can attach an explicit runtime service account to GCE gateway
   VMs for agent HA smoke.
+- [x] Provider has opt-in runtime service-account lifecycle behind
+  `manage_runtime_service_account`.
 - [x] Provider exposes the GCP runtime IAM permission contract for validation
   custom roles.
 - [x] Provider has opt-in runtime IAM custom-role and binding lifecycle behind
@@ -579,8 +582,8 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
 
 - Least-privilege IAM documented and tested. The current implementation can
   attach an explicit runtime service account, exposes the runtime permission
-  contract, and has opt-in provider-owned custom role and IAM binding
-  lifecycle. Live GCP validation is still pending.
+  contract, and has opt-in provider-owned service-account, custom role, and IAM
+  binding lifecycle. Live GCP validation is still pending.
 - Multi-zone behavior documented and tested.
 - GKE/private-node install path tested in a disposable project.
 - Observability and support bundle include GCP-specific HA evidence.

@@ -30,6 +30,9 @@ func TestGCPInputsDefaultToForwardingStartupScript(t *testing.T) {
 	if model.ServiceAccountEmail.ValueString() != "" {
 		t.Fatalf("default forwarding path should not require service account: %q", model.ServiceAccountEmail.ValueString())
 	}
+	if model.ManageRuntimeServiceAccount.ValueBool() {
+		t.Fatal("runtime service account management should default to disabled")
+	}
 	if model.ManageRuntimeIAM.ValueBool() {
 		t.Fatal("runtime IAM management should default to disabled")
 	}
@@ -137,6 +140,77 @@ func TestGCPAgentHABootstrapRequiresServiceAccount(t *testing.T) {
 	}
 }
 
+func TestGCPManagedRuntimeServiceAccountDerivesEmail(t *testing.T) {
+	model := baseGCPGatewayModel()
+	model.EnableAgentHA = types.BoolValue(true)
+	model.ManageRuntimeServiceAccount = types.BoolValue(true)
+	model.BetterNATVersion = types.StringValue("v0.1.0")
+	privateCIDRs := []string{"10.91.0.0/24"}
+
+	if err := prepareGCPRuntimeServiceAccountPlan(&model); err != nil {
+		t.Fatalf("prepare runtime service account: %v", err)
+	}
+	if model.RuntimeServiceAccountID.ValueString() != "bnat-gcp-runtime" {
+		t.Fatalf("unexpected runtime service account id: %s", model.RuntimeServiceAccountID.ValueString())
+	}
+	if model.ServiceAccountEmail.ValueString() != "bnat-gcp-runtime@shared-resources-alt.iam.gserviceaccount.com" {
+		t.Fatalf("unexpected derived service account email: %s", model.ServiceAccountEmail.ValueString())
+	}
+
+	inputs := gcpInputs(model, privateCIDRs)
+	if err := enrichGCPAgentBootstrap(&model, &inputs, privateCIDRs); err != nil {
+		t.Fatalf("enrich bootstrap with managed service account: %v", err)
+	}
+	if inputs.ServiceAccountEmail != "bnat-gcp-runtime@shared-resources-alt.iam.gserviceaccount.com" {
+		t.Fatalf("service account should be passed to inputs: %s", inputs.ServiceAccountEmail)
+	}
+}
+
+func TestGCPManagedRuntimeServiceAccountRequiresAgentHA(t *testing.T) {
+	model := baseGCPGatewayModel()
+	model.ManageRuntimeServiceAccount = types.BoolValue(true)
+
+	err := prepareGCPRuntimeServiceAccountPlan(&model)
+	if err == nil {
+		t.Fatal("expected manage_runtime_service_account without agent HA to fail")
+	}
+	if !strings.Contains(err.Error(), "manage_runtime_service_account requires enable_agent_ha") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestGCPRuntimeServiceAccountInputs(t *testing.T) {
+	model := baseGCPGatewayModel()
+	model.EnableAgentHA = types.BoolValue(true)
+	model.ManageRuntimeServiceAccount = types.BoolValue(true)
+	if err := prepareGCPRuntimeServiceAccountPlan(&model); err != nil {
+		t.Fatalf("prepare runtime service account: %v", err)
+	}
+
+	inputs, err := gcpRuntimeServiceAccountInputs(&model)
+	if err != nil {
+		t.Fatalf("runtime service account inputs: %v", err)
+	}
+	if inputs.ProjectID != "shared-resources-alt" || inputs.AccountID != "bnat-gcp-runtime" {
+		t.Fatalf("unexpected runtime service account inputs: %#v", inputs)
+	}
+}
+
+func TestSanitizeGCPServiceAccountID(t *testing.T) {
+	cases := map[string]string{
+		"BNAT_GCP":                         "bnat-gcp-runtime",
+		"123":                              "b123-runtime",
+		"this-name-is-definitely-too-long": "this-name-is-definitely-too-lo",
+		"---":                              "runtime",
+		"prod.egress":                      "prod-egress-runtime",
+	}
+	for input, want := range cases {
+		if got := defaultGCPRuntimeServiceAccountID(input); got != want {
+			t.Fatalf("default service account id for %q = %q, want %q", input, got, want)
+		}
+	}
+}
+
 func TestGCPRuntimeIAMInputsRequireAgentHA(t *testing.T) {
 	model := baseGCPGatewayModel()
 	model.ManageRuntimeIAM = types.BoolValue(true)
@@ -185,23 +259,25 @@ func TestGCPRuntimeIAMInputsRequireServiceAccount(t *testing.T) {
 
 func baseGCPGatewayModel() GCPGatewayResourceModel {
 	return GCPGatewayResourceModel{
-		Name:                types.StringValue("bnat-gcp"),
-		ProjectID:           types.StringValue("shared-resources-alt"),
-		Region:              types.StringValue("us-west1"),
-		Zone:                types.StringValue("us-west1-a"),
-		Network:             types.StringValue("bnat-net"),
-		Subnetwork:          types.StringValue("bnat-subnet"),
-		ClientTag:           types.StringValue("bnat-client"),
-		RouteName:           types.StringNull(),
-		RoutePriority:       types.Int64Null(),
-		RouteDestRange:      types.StringNull(),
-		MachineType:         types.StringNull(),
-		ImageProject:        types.StringNull(),
-		ImageFamily:         types.StringNull(),
-		GatewayCount:        types.Int64Null(),
-		ServiceAccountEmail: types.StringNull(),
-		ManageRuntimeIAM:    types.BoolNull(),
-		EnableAgentHA:       types.BoolNull(),
-		FirestoreDatabaseID: types.StringNull(),
+		Name:                        types.StringValue("bnat-gcp"),
+		ProjectID:                   types.StringValue("shared-resources-alt"),
+		Region:                      types.StringValue("us-west1"),
+		Zone:                        types.StringValue("us-west1-a"),
+		Network:                     types.StringValue("bnat-net"),
+		Subnetwork:                  types.StringValue("bnat-subnet"),
+		ClientTag:                   types.StringValue("bnat-client"),
+		RouteName:                   types.StringNull(),
+		RoutePriority:               types.Int64Null(),
+		RouteDestRange:              types.StringNull(),
+		MachineType:                 types.StringNull(),
+		ImageProject:                types.StringNull(),
+		ImageFamily:                 types.StringNull(),
+		GatewayCount:                types.Int64Null(),
+		ServiceAccountEmail:         types.StringNull(),
+		RuntimeServiceAccountID:     types.StringNull(),
+		ManageRuntimeServiceAccount: types.BoolNull(),
+		ManageRuntimeIAM:            types.BoolNull(),
+		EnableAgentHA:               types.BoolNull(),
+		FirestoreDatabaseID:         types.StringNull(),
 	}
 }

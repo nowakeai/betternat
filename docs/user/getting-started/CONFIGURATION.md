@@ -258,27 +258,31 @@ resource "betternat_gcp_gateway" "egress" {
 
   private_cidrs = ["10.91.0.0/24"]
 
-  enable_agent_ha       = true
-  service_account_email = "betternat-runtime@shared-resources-alt.iam.gserviceaccount.com"
-  manage_runtime_iam    = true
-  firestore_database_id = "(default)"
-  betternat_version     = "v0.1.0"
+  enable_agent_ha                = true
+  manage_runtime_service_account = true
+  manage_runtime_iam             = true
+  firestore_database_id          = "(default)"
+  betternat_version              = "v0.1.0"
 }
 ```
 
-When `enable_agent_ha = true`, `service_account_email` is required and is
-attached to the gateway VMs. The service account must be granted enough access
-to read/write the Firestore gateway coordination records, describe/delete/create
-the configured static route, read route operation status, and read instance
-metadata. The provider renders `agent_config_json`, `agent_config_hash`,
-`peer_api_auth_token`, runtime artifact URLs/checksums, and `startup_script`
-for a Firestore-backed, route-only agent HA smoke.
+When `enable_agent_ha = true`, either set `service_account_email` explicitly or
+set `manage_runtime_service_account = true` so the provider derives and creates
+a runtime service account. The service account is attached to the gateway VMs
+and must be granted enough access to read/write the Firestore gateway
+coordination records, describe/delete/create the configured static route, read
+route operation status, and read instance metadata. The provider renders
+`agent_config_json`, `agent_config_hash`, `peer_api_auth_token`, runtime
+artifact URLs/checksums, and `startup_script` for a Firestore-backed,
+route-only agent HA smoke.
 The required permission list is exposed as computed
 `runtime_iam_permissions`; see [IAM Policy](../reference/IAM_POLICY.md#gcp-alpha-runtime-service-account).
 Set `manage_runtime_iam = true` to let this resource create or update the
 project-level BetterNAT runtime custom role and bind `service_account_email` to
 it. Leave it false when IAM is managed by a separate Terraform stack or an
 infra-admin workflow.
+Set `runtime_service_account_id` only when the derived service-account ID is not
+acceptable for the project.
 Explicit `agent_binary_url`, `agent_binary_sha256`, `cli_binary_url`, and
 `cli_binary_sha256` overrides are supported for local mirrors and unreleased
 test builds. This path is still experimental until live two-agent route
