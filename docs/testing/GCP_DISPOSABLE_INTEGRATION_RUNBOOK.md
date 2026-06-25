@@ -13,6 +13,10 @@ agent-owned HA: Firestore lease fencing, route mutation safety, passive
 failover, proactive handover, datapath reconciliation, observability evidence,
 and deterministic cleanup.
 
+Use LoxiLB for datapath evidence. BetterNAT has no nftables product fallback on
+GCP, AWS, or future clouds. Legacy nftables code may remain in the repository,
+but this runbook must not use it to pass a failed LoxiLB datapath or HA gate.
+
 Do not run this against a production VPC, existing Cloud NAT migration, or
 production GKE route table.
 
@@ -395,6 +399,22 @@ At minimum, run one controlled failure in each category:
   before success.
 
 Record exact command, expected failure, actual failure, and recovery action.
+
+For the active Firestore/Compute API loss case, use the reusable local
+iptables-based smoke against a disposable fixture:
+
+```sh
+scripts/gcp-failure-injection-smoke.sh \
+  --project "$BETTERNAT_GCP_PROJECT" \
+  --zone "$BETTERNAT_GCP_ZONE" \
+  --name "$BETTERNAT_GCP_NAME" \
+  --ssh-mode external \
+  --wait 90 \
+  --output-dir "tmp/${BETTERNAT_GCP_NAME}/failure-smoke"
+```
+
+The smoke inserts and removes a local `OUTPUT tcp/443 REJECT` rule on the
+active gateway. Do not run it on a shared or production gateway.
 
 ## Destroy And Residual Scan
 

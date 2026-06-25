@@ -14,7 +14,7 @@ BetterNAT should prefer mature libraries and official SDKs over custom implement
 - Terraform Plugin Framework for Terraform provider behavior.
 - LoxiLB for the primary datapath.
 - LoxiLB as the supported datapath. nftables code is legacy/diagnostic only
-  while retained and must not be expanded into a product fallback.
+  while retained and must not be expanded into a product fallback for any cloud.
 - Standard library packages for small, obvious logic.
 
 ## Before Adding A Dependency
@@ -65,7 +65,7 @@ If a dependency command fails because the sandbox cannot reach a local proxy, re
 Custom datapath or cloud protocol implementations are high-risk. Prefer existing mature components first:
 
 - use LoxiLB before custom eBPF datapath work,
-- do not add a second fallback datapath by default; treat LoxiLB failures as
-  product blockers or explicit architecture decisions,
+- do not add a second fallback datapath; treat LoxiLB failures as product
+  blockers or explicit architecture decisions,
 - use AWS SDK before shelling out to `aws`,
 - use provider interfaces and fakes for tests rather than mocking external binaries with fragile text fixtures.

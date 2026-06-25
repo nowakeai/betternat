@@ -250,7 +250,8 @@ Scope:
 - One or two gateway VMs with `canIpForward=true`.
 - Static route from private subnet egress to the active gateway VM.
 - LoxiLB datapath only for cloud HA acceptance; do not pass any cloud alpha or
-  GA gate using nftables.
+  GA gate using nftables. This is the global BetterNAT product rule, not a
+  GCP-specific exception.
 - Firestore transaction lease backend.
 - Optional reserved static external IP test.
 
@@ -701,3 +702,9 @@ Append dated notes here during implementation.
   public-IP switch from `34.20.164.68` to `34.94.153.80`, and final residual
   scan passed. Evidence is recorded in
   `docs/research/059-gcp-protocol-failover-results.md`.
+- Ran disposable GCP failure-injection validation in `smooth-calling-490406-d9`
+  with run ID `bnat-gcp-fail-20260625120735`. A local `OUTPUT tcp/443 REJECT`
+  on the active gateway forced Firestore/Compute API loss; the active reported
+  `DEGRADED` instead of `ACTIVE`, standby acquired generation `2`, route target
+  moved to `gw-b`, final doctor checks passed, and residual scan passed.
+  Evidence is recorded in `docs/research/060-gcp-failure-injection-results.md`.

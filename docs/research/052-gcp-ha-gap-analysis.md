@@ -727,10 +727,9 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
   unexpired lease owner exists. Live GCE route mutation and handover evidence
   passed in `docs/research/054-gcp-agent-ha-smoke-results.md` and
   `docs/research/056-gcp-proactive-handover-results.md`.
-- [ ] Agent degrades instead of reporting active when Firestore or Compute route
-  verification is unavailable. Local supervisor tests now cover degradation
-  when a previously active node cannot read the lease backend and when active
-  ownership verification fails, but live GCE evidence is still required.
+- [x] Agent degrades instead of reporting active when Firestore or Compute route
+  verification is unavailable. Local supervisor tests and live GCE failure
+  injection passed; see `docs/research/060-gcp-failure-injection-results.md`.
 - [x] Provider destroy remains safe after out-of-band route movement.
 
 ### P1: Datapath And Public Identity

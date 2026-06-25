@@ -46,6 +46,11 @@ Assumptions: `$0.045/GB` NAT Gateway processing, `$0.045/hour` for one NAT Gatew
 - Advanced provider resource surface through `nowakeai/betternat`.
 - Rollback-oriented route ownership model for existing VPC adoption.
 
+Datapath boundary: LoxiLB is the supported BetterNAT datapath. BetterNAT does
+not have a product nftables fallback on AWS, GCP, or future clouds. Legacy
+nftables/nf_conntrack code may remain in the repository while it is phased out,
+but it is not an operator recovery path or release acceptance substitute.
+
 ## Quick Start
 
 Use the BetterNAT AWS Terraform module:

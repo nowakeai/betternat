@@ -10,7 +10,8 @@ Current baseline:
 
 ```text
 Primary datapath: LoxiLB standalone egress SNAT
-Fallback datapath: none. nftables is not a product fallback; existing code may
+Fallback datapath: none. This is a global BetterNAT product decision, not a
+GCP-specific exception. nftables is not a product fallback; existing code may
 remain temporarily as legacy diagnostic code while it is phased out
 Cloud target: AWS
 Runtime control plane: betternat-agent
@@ -37,7 +38,8 @@ v0 MUST provide:
 
 - AWS private subnet egress through self-owned EC2 nodes.
 - LoxiLB-based egress SNAT as the primary datapath.
-- No product fallback datapath; LoxiLB is required for supported deployments.
+- No product fallback datapath on AWS, GCP, or future clouds; LoxiLB is required
+  for supported deployments.
 - Terraform-managed install and lifecycle.
 - Active/standby HA for new connections.
 - Stable public egress IP for new connections after failover when `stable_egress_ip = true`.
@@ -306,6 +308,10 @@ nftables/nf_conntrack code may remain temporarily for existing diagnostics and
 tests, but it is not part of the v0 product contract. It MUST NOT be expanded as
 a fallback mode, required by release acceptance, or used to pass a deployment
 where LoxiLB is not ready. Future cleanup can remove this code gradually.
+
+This is not a GCP-only restriction. New provider work, Terraform UX, release
+gates, and smoke tests MUST validate LoxiLB directly instead of adding an
+nftables fallback path.
 
 ## HA State Machine
 

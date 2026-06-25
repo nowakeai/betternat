@@ -15,7 +15,8 @@ This repository is BetterNAT: a self-owned, observable, highly available egress 
 
 - Language: Go.
 - Primary datapath: LoxiLB standalone egress SNAT.
-- Fallback datapath: none. Existing Linux nftables/nf_conntrack code may remain
+- Fallback datapath: none. This is a global BetterNAT product decision, not a
+  GCP-specific exception. Existing Linux nftables/nf_conntrack code may remain
   temporarily as legacy diagnostics while it is phased out.
 - Runtime HA: `betternat-agent` with lease/fencing, EIP association, route replacement, and verification.
 - Terraform provider: creates/records gateway infrastructure and renders agent config/user data.
@@ -27,8 +28,11 @@ This repository is BetterNAT: a self-owned, observable, highly available egress 
 - Prefer mature existing components over custom implementations when the component fits the product boundary.
 - Prefer current supported dependency versions unless there is a concrete compatibility, stability, or security reason to pin older versions.
 - Keep LoxiLB as the primary datapath investment unless new evidence invalidates the spike results.
-- Do not treat nftables/nf_conntrack as a product fallback. Existing code can
-  remain temporarily for legacy diagnostics and gradual cleanup.
+- Do not treat nftables/nf_conntrack as a product fallback, release fallback,
+  cloud fallback, or acceptance substitute. Existing code can remain
+  temporarily for legacy diagnostics and gradual cleanup.
+- Do not re-propose nftables fallback work unless the product decision is
+  explicitly reopened in a new architecture decision record.
 - Do not expose unnecessary implementation detail in top-level product copy. Advanced technical detail belongs in architecture, operator, and benchmark docs.
 - Optimize for a Terraform-first product experience that feels close to configuring a managed NAT gateway.
 - Keep AWS first, but avoid hard-coding AWS concepts into core interfaces when a provider-neutral shape is practical.
@@ -65,7 +69,7 @@ This repository is BetterNAT: a self-owned, observable, highly available egress 
 - `internal/agent`: runtime reconcile loop and metrics serving.
 - `internal/datapath/loxilb`: LoxiLB wrapper and parsers.
 - `internal/datapath/nftables`: legacy nftables diagnostic wrapper and parsers
-  retained temporarily; do not add new fallback behavior.
+  retained temporarily; do not add or depend on fallback behavior.
 - `internal/ha`: failover orchestration.
 - `internal/install/aws`: AWS install applier used by the Terraform provider.
 - `internal/tfprovider`: Terraform provider resource model.

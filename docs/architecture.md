@@ -12,7 +12,8 @@ The product is now LoxiLB-first:
 
 ```text
 Primary datapath: LoxiLB standalone egress SNAT
-Fallback datapath: none. nftables is not a product fallback; existing code may
+Fallback datapath: none. This is a global BetterNAT product decision, not a
+GCP-specific exception. nftables is not a product fallback; existing code may
 remain temporarily as legacy diagnostic code while it is phased out
 Cloud target: AWS first
 Install UX: Terraform provider first
@@ -228,6 +229,11 @@ BetterNAT does not have a product fallback datapath. LoxiLB is the supported
 datapath for AWS, GCP, and future clouds. If LoxiLB fails a cloud, kernel, or
 packaging acceptance test, that is a product blocker or an explicit architecture
 decision, not a reason to pass the release through nftables.
+
+This decision is intentionally global. Do not add AWS-only, GCP-only, or
+future-cloud nftables fallback behavior, Terraform fields, documentation, or
+acceptance tests. Existing legacy code can be kept until cleanup is convenient,
+but new work must validate LoxiLB directly.
 
 Existing nftables/nf_conntrack code may remain temporarily to avoid risky
 removal and to preserve historical diagnostics while the codebase is simplified.

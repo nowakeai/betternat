@@ -41,6 +41,8 @@ Prefer:
 - normalized BetterNAT metrics over raw implementation detail,
 - LoxiLB as the supported datapath, without adding or expanding nftables
   fallback behavior.
+- direct LoxiLB validation for AWS, GCP, and future-cloud work; nftables is not
+  a fallback, acceptance substitute, or topic to re-propose without a new ADR.
 
 Avoid:
 

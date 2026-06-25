@@ -14,7 +14,9 @@ This directory is split by audience and document lifecycle.
 Older research may describe nftables-first, nftables fallback, or
 custom-eBPF-first thinking. Treat those as history when they conflict with the
 current architecture and spec. Current BetterNAT has no product fallback
-datapath; LoxiLB readiness is a release gate.
+datapath on AWS, GCP, or future clouds; LoxiLB readiness is a release gate.
+Do not reintroduce nftables fallback UX, tests, or release acceptance paths
+without a new architecture decision record.
 
 ## Start Here
 
@@ -134,6 +136,7 @@ Read these first when revisiting product or architecture direction:
 - [research/057-gcp-loxilb-restart-results.md](research/057-gcp-loxilb-restart-results.md) — Live GCP LoxiLB datapath counter, restart replay, support bundle, and cleanup validation.
 - [research/058-gcp-provider-lifecycle-results.md](research/058-gcp-provider-lifecycle-results.md) — Live GCP provider-owned runtime IAM, service-account, Firestore database lifecycle validation and per-gateway role fix.
 - [research/059-gcp-protocol-failover-results.md](research/059-gcp-protocol-failover-results.md) — Live GCP route-only protocol failover validation for TCP, HTTPS, UDP DNS, long download, public-IP switch, and cleanup.
+- [research/060-gcp-failure-injection-results.md](research/060-gcp-failure-injection-results.md) — Live GCP failure-injection validation proving active gateway degradation when Firestore/Compute API access is unavailable.
 
 ## Supporting Research
 

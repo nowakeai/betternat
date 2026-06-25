@@ -64,7 +64,8 @@ resources.
 - One or two gateway VMs with `canIpForward=true`.
 - A static default route from the private subnet tag to the active gateway VM.
 - LoxiLB datapath only. If LoxiLB forwarding does not work, that is a GCP
-  blocker, not a reason to pass with nftables.
+  blocker, not a reason to pass with nftables. This follows the global
+  BetterNAT rule: no nftables product fallback on any cloud.
 - Firestore transaction or GCS generation-precondition lease backend candidate.
 - Optional reserved static external IP handover test.
 
@@ -133,8 +134,8 @@ Inject at least one failure in each dangerous phase before promotion:
 - Route mutation timing.
 - Handover/new-flow recovery timing.
 - Public IP behavior before and after route replacement.
-- LoxiLB datapath and conntrack counters. nftables is not a GCP acceptance
-  path.
+- LoxiLB datapath and conntrack counters. nftables is not a GCP acceptance path,
+  and it is not an acceptance path for AWS or future clouds either.
 - Lease backend transaction behavior.
 - Firestore lease generation before and after passive failover.
 - Firestore handover records for proactive handover.
