@@ -269,6 +269,8 @@ the configured static route, read route operation status, and read instance
 metadata. The provider renders `agent_config_json`, `agent_config_hash`,
 `peer_api_auth_token`, runtime artifact URLs/checksums, and `startup_script`
 for a Firestore-backed, route-only agent HA smoke.
+The required permission list is exposed as computed
+`runtime_iam_permissions`; see [IAM Policy](../reference/IAM_POLICY.md#gcp-alpha-runtime-service-account).
 Explicit `agent_binary_url`, `agent_binary_sha256`, `cli_binary_url`, and
 `cli_binary_sha256` overrides are supported for local mirrors and unreleased
 test builds. This path is still experimental until live two-agent route

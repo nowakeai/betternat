@@ -1,6 +1,7 @@
 package tfprovider
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -29,9 +30,25 @@ func TestGCPInputsDefaultToForwardingStartupScript(t *testing.T) {
 	if model.ServiceAccountEmail.ValueString() != "" {
 		t.Fatalf("default forwarding path should not require service account: %q", model.ServiceAccountEmail.ValueString())
 	}
+	perms, err := listStrings(context.Background(), model.RuntimeIAMPermissions)
+	if err != nil {
+		t.Fatalf("runtime iam permissions: %v", err)
+	}
+	if !stringSliceContains(perms, "compute.routes.create") || !stringSliceContains(perms, "datastore.entities.update") {
+		t.Fatalf("runtime iam permissions missing route/firestore actions: %#v", perms)
+	}
 	if !strings.Contains(model.StartupScript.ValueString(), "nft add rule ip nat postrouting ip saddr 10.91.0.0/24 masquerade") {
 		t.Fatalf("default path should keep nftables forwarding startup script: %s", model.StartupScript.ValueString())
 	}
+}
+
+func stringSliceContains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestGCPAgentHABootstrapRendersConfigAndUserData(t *testing.T) {

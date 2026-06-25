@@ -427,6 +427,9 @@ The GCP resource can attach an explicit runtime `service_account_email` to
 gateway VMs. The experimental agent HA path requires this field so live smoke
 does not depend on the broad and environment-specific Compute Engine default
 service account.
+The provider also exposes the runtime permission contract as computed
+`runtime_iam_permissions`; provider-owned custom role and binding lifecycle are
+still pending.
 
 ### 10. Agent Packaging And Bootstrap
 
@@ -484,6 +487,8 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
   "auto"`.
 - [x] Provider can attach an explicit runtime service account to GCE gateway
   VMs for agent HA smoke.
+- [x] Provider exposes the GCP runtime IAM permission contract for validation
+  custom roles.
 - [ ] Agent on GCE mutates routes only after lease verification in live
   validation.
 - [x] GCP `cloud.Provider` route replace/describe implementation exists for
@@ -508,8 +513,9 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
 ### P2: Production Fit
 
 - Least-privilege IAM documented and tested. The current implementation can
-  attach an explicit runtime service account, but provider-owned custom role and
-  IAM binding lifecycle are still pending.
+  attach an explicit runtime service account and exposes the runtime permission
+  contract, but provider-owned custom role and IAM binding lifecycle are still
+  pending.
 - Multi-zone behavior documented and tested.
 - GKE/private-node install path tested in a disposable project.
 - Observability and support bundle include GCP-specific HA evidence.

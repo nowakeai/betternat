@@ -27,40 +27,41 @@ var _ resource.Resource = (*GCPGatewayResource)(nil)
 type GCPGatewayResource struct{}
 
 type GCPGatewayResourceModel struct {
-	ID                  types.String `tfsdk:"id"`
-	Name                types.String `tfsdk:"name"`
-	ProjectID           types.String `tfsdk:"project_id"`
-	Region              types.String `tfsdk:"region"`
-	Zone                types.String `tfsdk:"zone"`
-	Network             types.String `tfsdk:"network"`
-	Subnetwork          types.String `tfsdk:"subnetwork"`
-	ClientTag           types.String `tfsdk:"client_tag"`
-	RouteName           types.String `tfsdk:"route_name"`
-	RoutePriority       types.Int64  `tfsdk:"route_priority"`
-	RouteDestRange      types.String `tfsdk:"route_destination_cidr"`
-	MachineType         types.String `tfsdk:"machine_type"`
-	ImageProject        types.String `tfsdk:"image_project"`
-	ImageFamily         types.String `tfsdk:"image_family"`
-	GatewayCount        types.Int64  `tfsdk:"gateway_count"`
-	PrivateCIDRs        types.List   `tfsdk:"private_cidrs"`
-	ServiceAccountEmail types.String `tfsdk:"service_account_email"`
-	EnableAgentHA       types.Bool   `tfsdk:"enable_agent_ha"`
-	BetterNATVersion    types.String `tfsdk:"betternat_version"`
-	AgentBinaryURL      types.String `tfsdk:"agent_binary_url"`
-	AgentBinarySHA256   types.String `tfsdk:"agent_binary_sha256"`
-	CLIBinaryURL        types.String `tfsdk:"cli_binary_url"`
-	CLIBinarySHA256     types.String `tfsdk:"cli_binary_sha256"`
-	LoxiCMDBinaryURL    types.String `tfsdk:"loxicmd_binary_url"`
-	LoxiCMDBinarySHA256 types.String `tfsdk:"loxicmd_binary_sha256"`
-	FirestoreDatabaseID types.String `tfsdk:"firestore_database_id"`
-	PeerAPIAuthToken    types.String `tfsdk:"peer_api_auth_token"`
-	AgentConfigJSON     types.String `tfsdk:"agent_config_json"`
-	AgentConfigHash     types.String `tfsdk:"agent_config_hash"`
-	StartupScript       types.String `tfsdk:"startup_script"`
-	GatewayStatuses     types.Map    `tfsdk:"gateway_statuses"`
-	EgressPublicIPs     types.Map    `tfsdk:"egress_public_ips"`
-	RouteTarget         types.String `tfsdk:"route_target"`
-	Status              types.String `tfsdk:"status"`
+	ID                    types.String `tfsdk:"id"`
+	Name                  types.String `tfsdk:"name"`
+	ProjectID             types.String `tfsdk:"project_id"`
+	Region                types.String `tfsdk:"region"`
+	Zone                  types.String `tfsdk:"zone"`
+	Network               types.String `tfsdk:"network"`
+	Subnetwork            types.String `tfsdk:"subnetwork"`
+	ClientTag             types.String `tfsdk:"client_tag"`
+	RouteName             types.String `tfsdk:"route_name"`
+	RoutePriority         types.Int64  `tfsdk:"route_priority"`
+	RouteDestRange        types.String `tfsdk:"route_destination_cidr"`
+	MachineType           types.String `tfsdk:"machine_type"`
+	ImageProject          types.String `tfsdk:"image_project"`
+	ImageFamily           types.String `tfsdk:"image_family"`
+	GatewayCount          types.Int64  `tfsdk:"gateway_count"`
+	PrivateCIDRs          types.List   `tfsdk:"private_cidrs"`
+	ServiceAccountEmail   types.String `tfsdk:"service_account_email"`
+	RuntimeIAMPermissions types.List   `tfsdk:"runtime_iam_permissions"`
+	EnableAgentHA         types.Bool   `tfsdk:"enable_agent_ha"`
+	BetterNATVersion      types.String `tfsdk:"betternat_version"`
+	AgentBinaryURL        types.String `tfsdk:"agent_binary_url"`
+	AgentBinarySHA256     types.String `tfsdk:"agent_binary_sha256"`
+	CLIBinaryURL          types.String `tfsdk:"cli_binary_url"`
+	CLIBinarySHA256       types.String `tfsdk:"cli_binary_sha256"`
+	LoxiCMDBinaryURL      types.String `tfsdk:"loxicmd_binary_url"`
+	LoxiCMDBinarySHA256   types.String `tfsdk:"loxicmd_binary_sha256"`
+	FirestoreDatabaseID   types.String `tfsdk:"firestore_database_id"`
+	PeerAPIAuthToken      types.String `tfsdk:"peer_api_auth_token"`
+	AgentConfigJSON       types.String `tfsdk:"agent_config_json"`
+	AgentConfigHash       types.String `tfsdk:"agent_config_hash"`
+	StartupScript         types.String `tfsdk:"startup_script"`
+	GatewayStatuses       types.Map    `tfsdk:"gateway_statuses"`
+	EgressPublicIPs       types.Map    `tfsdk:"egress_public_ips"`
+	RouteTarget           types.String `tfsdk:"route_target"`
+	Status                types.String `tfsdk:"status"`
 }
 
 func NewGCPGatewayResource() resource.Resource {
@@ -138,6 +139,11 @@ func (r *GCPGatewayResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional:            true,
 				Computed:            true,
 				MarkdownDescription: "Runtime service account email attached to GCP gateway VMs. Required when enable_agent_ha is true; the service account must have Firestore coordination and Compute route permissions for the configured project and route.",
+			},
+			"runtime_iam_permissions": schema.ListAttribute{
+				ElementType:         types.StringType,
+				Computed:            true,
+				MarkdownDescription: "Permissions required by the experimental GCP agent HA runtime service account.",
 			},
 			"enable_agent_ha": schema.BoolAttribute{
 				Optional:            true,
@@ -351,6 +357,7 @@ func applyGCPComputedPlan(model *GCPGatewayResourceModel, inputs gcpinstall.Inpu
 	model.ImageFamily = types.StringValue(inputs.ImageFamily)
 	model.GatewayCount = types.Int64Value(inputs.GatewayCount)
 	model.ServiceAccountEmail = types.StringValue(inputs.ServiceAccountEmail)
+	model.RuntimeIAMPermissions = mustStringList(gcpinstall.RuntimeIAMPermissions())
 	model.EnableAgentHA = types.BoolValue(boolDefault(model.EnableAgentHA, false))
 	model.FirestoreDatabaseID = types.StringValue(stringDefault(model.FirestoreDatabaseID, "(default)"))
 	model.StartupScript = types.StringValue(inputs.StartupScript)

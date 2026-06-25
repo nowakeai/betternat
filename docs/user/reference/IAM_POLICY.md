@@ -4,10 +4,10 @@ Date: 2026-06-24
 
 ## Purpose
 
-This document describes the AWS IAM permissions needed by the BetterNAT
-Terraform install path.
+This document describes the cloud IAM permissions needed by BetterNAT Terraform
+install paths and gateway runtimes.
 
-There are two IAM surfaces:
+There are two AWS IAM surfaces:
 
 - Terraform execution identity: creates and destroys the BetterNAT infrastructure.
 - Gateway runtime role: attached to BetterNAT EC2 nodes and used by `betternat-agent`.
@@ -141,3 +141,46 @@ If a required permission is denied:
 
 Use [Security Hardening](SECURITY_HARDENING.md) for broader security posture,
 network exposure, artifact integrity, and production hardening checklist.
+
+## GCP Alpha Runtime Service Account
+
+`betternat_gcp_gateway` is still an experimental alpha resource. The default
+forwarding path does not require a dedicated runtime service account, but the
+experimental `enable_agent_ha = true` path does.
+
+When `enable_agent_ha = true`, set:
+
+```hcl
+service_account_email = "betternat-runtime@PROJECT_ID.iam.gserviceaccount.com"
+```
+
+Attach the following permissions to that service account, ideally through a
+project custom role scoped to the validation project:
+
+| Permission | Why |
+| --- | --- |
+| `compute.globalOperations.get` | Wait for route delete/create operations. |
+| `compute.instances.get` | Read gateway instance metadata during route validation and diagnostics. |
+| `compute.instances.use` | Use a gateway instance as a static route `nextHopInstance`. |
+| `compute.networks.get` | Read the configured VPC network referenced by route creation. |
+| `compute.routes.create` | Move route ownership to the active gateway by creating the replacement static route. |
+| `compute.routes.delete` | Delete the old static route before recreating it for the new owner. |
+| `compute.routes.get` | Verify the current route target. |
+| `datastore.databases.get` | Open the configured Firestore Native database. |
+| `datastore.entities.create` | Create lease, registry, and handover documents. |
+| `datastore.entities.delete` | Release leases and clean local registry/handover documents. |
+| `datastore.entities.get` | Read the current lease, agent registry, and handover records. |
+| `datastore.entities.list` | List fresh agent and handover records. |
+| `datastore.entities.update` | Renew/transfer leases and update registry/handover records. |
+
+The provider exposes the same list as
+`betternat_gcp_gateway.runtime_iam_permissions` so validation stacks can render
+custom roles from the provider's runtime contract.
+
+Current GCP limitations:
+
+- provider-owned GCP custom role and IAM binding lifecycle is not implemented
+  yet,
+- Firestore database creation may require project-owner or App Engine/Firestore
+  admin permissions outside the gateway runtime role,
+- route-only GCP HA does not provide stable public egress IP failover yet.

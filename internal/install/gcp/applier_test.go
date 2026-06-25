@@ -1,6 +1,7 @@
 package gcp
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -39,6 +40,28 @@ func TestGatewayInstanceAttachesRuntimeServiceAccount(t *testing.T) {
 	}
 	if len(inst.ServiceAccounts[0].Scopes) != 1 || inst.ServiceAccounts[0].Scopes[0] != "https://www.googleapis.com/auth/cloud-platform" {
 		t.Fatalf("unexpected service account scopes: %#v", inst.ServiceAccounts[0].Scopes)
+	}
+}
+
+func TestRuntimeIAMPermissions(t *testing.T) {
+	got := RuntimeIAMPermissions()
+	want := []string{
+		"compute.globalOperations.get",
+		"compute.instances.get",
+		"compute.instances.use",
+		"compute.networks.get",
+		"compute.routes.create",
+		"compute.routes.delete",
+		"compute.routes.get",
+		"datastore.databases.get",
+		"datastore.entities.create",
+		"datastore.entities.delete",
+		"datastore.entities.get",
+		"datastore.entities.list",
+		"datastore.entities.update",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected runtime IAM permissions:\ngot:  %#v\nwant: %#v", got, want)
 	}
 }
 
