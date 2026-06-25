@@ -325,6 +325,9 @@ Tasks:
 - [x] Add GCP startup-script and model tests.
 - [x] Add read-only GCP HA preflight for APIs, Firestore database presence, and
   IAM permissions.
+- [x] Add GCP-aware `betternat doctor --live` checks for Firestore lease,
+  configured route, route-only public identity, Prometheus, and source-IP
+  probe.
 - [x] Add disposable GCP integration runbook.
 
 Validation:
@@ -602,6 +605,12 @@ Append dated notes here during implementation.
   datapath readiness, supportability, and cleanup. Single-node forwarding,
   manual route replacement, provider status reads, and bootstrap rendering are
   substrate evidence only.
+- Added GCP support to `betternat doctor --live`: static HA validation now
+  accepts `cloud=gcp` with `ha.lease.backend=firestore`, and the live path can
+  check local datapath, Firestore lease owner/generation, configured GCP route
+  targets, route-only public identity status, Prometheus, and source-IP probes.
+  Local unit tests cover the GCP diagnostic path; live GCE evidence is still
+  pending.
 - Opened implementation PRs:
   - main repo: `https://github.com/nowakeai/betternat/pull/1`
   - split provider repo:

@@ -650,6 +650,10 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
   validation.
 - [x] GCP `cloud.Provider` route replace/describe implementation exists for
   tagged static routes with `nextHopInstance`.
+- [x] `betternat doctor --live` supports `cloud=gcp` for local datapath,
+  Firestore lease, configured GCP route, route-only public identity,
+  Prometheus, and outbound source-IP probe checks. Live GCE evidence is still
+  required.
 - [ ] Passive failover after active crash works.
 - [ ] Proactive handover works.
 - [ ] Route mutation cannot occur without a current lease generation. The
@@ -680,10 +684,11 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
   binding lifecycle. Live GCP validation is still pending.
 - Multi-zone behavior documented and tested.
 - GKE/private-node install path tested in a disposable project.
-- Observability and support bundle include GCP-specific HA evidence. Local
-  support bundle collection now includes GCP metadata, Firestore database list,
-  and configured route describe attempts; live GCE bundle evidence is still
-  pending.
+- Observability and support bundle include GCP-specific HA evidence. Local live
+  doctor now reads Firestore lease state and configured GCP routes for
+  `cloud=gcp`; support bundle collection includes GCP metadata, Firestore
+  database list, and configured route describe attempts. Live GCE evidence is
+  still pending.
 - Cleanup and residual scans include Firestore records and service accounts.
   `scripts/gcp-residual-scan.sh` now provides a read-only residual gate for
   Compute instances, routes, firewall rules, addresses, service accounts, and

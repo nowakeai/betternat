@@ -88,7 +88,7 @@ Current behavior:
 - `status` reads the local daemon by default, uses cached registry and metrics data, and prints fleet, active/standby, version, IP, lease, cache freshness, peer control, registry age, and traffic summary data.
 - `status --watch` refreshes the same view until interrupted. Use `--output json` for newline-delimited machine-readable snapshots.
 - `doctor` performs static/config-level checks.
-- `doctor --live` adds local datapath, IAM runtime permission simulation, lease, route, EIP, source/destination check, Prometheus, and outbound source-IP probe checks where configured. In registry-backed installs, ASG discovery is skipped; use `status` for fleet health.
+- `doctor --live` adds local datapath, lease, route, public identity, Prometheus, and outbound source-IP probe checks where configured. On AWS it also checks IAM runtime permission simulation, ASG health where applicable, EIP ownership, and EC2 source/destination check. On GCP it checks Firestore lease ownership, configured tagged static routes, Prometheus, and route-only public identity status.
 - `failover status` prints configured HA/failover settings.
 - `datapath status` prints configured datapath settings.
 - `datapath ready` performs live local datapath checks through LoxiLB.
@@ -103,7 +103,8 @@ Important:
 - Gateway-local commands read `/etc/betternat/agent.json` by default. Use
   `--config <path>` only for debugging a non-default config.
 - The CLI does not currently connect to a central BetterNAT API.
-- The CLI now has a live doctor path for AWS IAM/DynamoDB/route/EIP/datapath/Prometheus checks, but it is still node-local. Fleet-level visibility comes from the coordination registry and per-agent metrics.
+- The CLI live doctor path is cloud-aware for AWS and GCP, but it is still node-local. Fleet-level visibility comes from the coordination registry and per-agent metrics.
+- GCP live doctor is route-only today. It does not validate stable shared public identity because GCP stable public-IP handover is not yet supported.
 
 ## Monitoring Entry Point
 
@@ -218,7 +219,9 @@ The bundle includes:
 - LoxiLB inspection output,
 - local `ip addr`, `ip route`, and nftables snapshots.
 
-When the agent config uses `cloud=gcp`, the bundle also attempts to collect
+When the agent config uses `cloud=gcp`, `doctor --live` reads the Firestore
+lease, verifies configured GCP route objects through Compute, and reports the
+route-only public identity status. The support bundle also attempts to collect
 GCE metadata identity, the configured project's Firestore database list, and
 the configured GCP route objects. These checks are best-effort: missing
 `gcloud`, missing local metadata access, or missing read permissions are
@@ -368,7 +371,7 @@ Do not manually delete route tables or EIPs before Terraform destroy unless reco
 
 These are known gaps to track:
 
-- `doctor --live` is node-local. Run it on each gateway node or pair it with Prometheus/AWS CLI for fleet-wide review.
+- `doctor --live` is node-local. Run it on each gateway node or pair it with Prometheus and cloud-provider CLI/API checks for fleet-wide review.
 - No central CLI command yet aggregates every HA group across AWS accounts, DynamoDB, ASG, datapath, and metrics.
 - Proactive `betternat handover start` exists, but there is no complete planned
   drain or rolling-upgrade workflow yet.

@@ -16,8 +16,10 @@ import (
 	"github.com/nowakeai/betternat/internal/buildinfo"
 	"github.com/nowakeai/betternat/internal/cloud"
 	awscloud "github.com/nowakeai/betternat/internal/cloud/aws"
+	gcpcloud "github.com/nowakeai/betternat/internal/cloud/gcp"
 	"github.com/nowakeai/betternat/internal/config"
 	dynamodbcoord "github.com/nowakeai/betternat/internal/coordination/dynamodb"
+	firestorecoord "github.com/nowakeai/betternat/internal/coordination/firestore"
 	"github.com/nowakeai/betternat/internal/cost"
 	"github.com/nowakeai/betternat/internal/datapath"
 	"github.com/nowakeai/betternat/internal/datapath/loxilb"
@@ -436,6 +438,15 @@ var (
 	newLiveCloudProvider = func(ctx context.Context, region string) (liveCloudProvider, error) {
 		return awscloud.New(ctx, region)
 	}
+	newLiveGCPCloudProvider = func(ctx context.Context, cfg config.Config) (cloud.Provider, error) {
+		return gcpcloud.New(ctx, gcpcloud.Config{
+			ProjectID:     cfg.GCP.ProjectID,
+			Zone:          doctorGCPZone(cfg),
+			Network:       cfg.GCP.Network,
+			ClientTag:     cfg.GCP.ClientTag,
+			RoutePriority: cfg.GCP.RoutePriority,
+		})
+	}
 	newLiveASGInspector = func(ctx context.Context, region string) (doctor.ASGInspector, error) {
 		return awscloud.NewASGProvider(ctx, region)
 	}
@@ -449,7 +460,11 @@ var (
 	newLiveLeaseManager = func(ctx context.Context, region string, table string, haGroupID string, ttl time.Duration) (lease.Manager, error) {
 		return dynamodblease.New(ctx, region, table, haGroupID, ttl)
 	}
+	newLiveFirestoreLeaseManager = func(ctx context.Context, cfg config.Config) (lease.Manager, error) {
+		return firestorecoord.New(ctx, cfg.GCP.ProjectID, cfg.GCP.FirestoreDatabaseID, cfg.GatewayID, doctorLeaseKey(cfg), doctorLeaseTTL(cfg))
+	}
 	resolveLocalInstanceID      = awscloud.ResolveLocalInstanceID
+	resolveGCPLocalInstanceID   = gcpcloud.ResolveLocalInstanceID
 	resolveCurrentRoleARN       = awsiamcheck.ResolveCurrentRoleARN
 	resolveSharedEIPAllocation  = awscloud.ResolveSharedEIPAllocationID
 	liveDoctorPrometheusClient  doctor.HTTPClient
@@ -465,17 +480,28 @@ func liveDoctorCheckers(ctx context.Context, cfg config.Config) ([]doctor.Checke
 
 	localInstanceID := cfg.Local.NodeID
 	if localInstanceID == "auto" {
-		localInstanceID, err = resolveLocalInstanceID(ctx, cfg.Region)
+		resolver := resolveLocalInstanceID
+		if cfg.Cloud == "gcp" {
+			resolver = resolveGCPLocalInstanceID
+		}
+		localInstanceID, err = resolver(ctx, cfg.Region)
 		if err != nil {
 			checkers = append(checkers, doctor.StaticErrorChecker{Name: "local_instance", Message: err.Error()})
 		}
 	}
 
-	if cfg.Cloud != "aws" {
-		checkers = append(checkers, doctor.StaticWarningChecker{Name: "cloud", Message: "live doctor currently supports cloud=aws only"})
+	switch cfg.Cloud {
+	case "aws":
+		return appendAWSLiveDoctorCheckers(ctx, cfg, checkers, localInstanceID)
+	case "gcp":
+		return appendGCPLiveDoctorCheckers(ctx, cfg, checkers)
+	default:
+		checkers = append(checkers, doctor.StaticWarningChecker{Name: "cloud", Message: fmt.Sprintf("live doctor does not support cloud=%s", cfg.Cloud)})
 		return checkers, nil
 	}
+}
 
+func appendAWSLiveDoctorCheckers(ctx context.Context, cfg config.Config, checkers []doctor.Checker, localInstanceID string) ([]doctor.Checker, error) {
 	cloudProvider, err := newLiveCloudProvider(ctx, cfg.Region)
 	if err != nil {
 		checkers = append(checkers, doctor.StaticErrorChecker{Name: "cloud", Message: err.Error()})
@@ -575,6 +601,60 @@ func liveDoctorCheckers(ctx context.Context, cfg config.Config) ([]doctor.Checke
 	return checkers, nil
 }
 
+func appendGCPLiveDoctorCheckers(ctx context.Context, cfg config.Config, checkers []doctor.Checker) ([]doctor.Checker, error) {
+	cloudProvider, err := newLiveGCPCloudProvider(ctx, cfg)
+	if err != nil {
+		checkers = append(checkers, doctor.StaticErrorChecker{Name: "cloud", Message: err.Error()})
+		return checkers, nil
+	}
+
+	expectedOwner := ""
+	if cfg.HA.Enabled && cfg.HA.Lease.Backend == "firestore" {
+		leaseManager, err := newLiveFirestoreLeaseManager(ctx, cfg)
+		if err != nil {
+			checkers = append(checkers, doctor.StaticErrorChecker{Name: "lease_setup", Message: err.Error()})
+		} else {
+			record, err := leaseManager.Current(ctx)
+			if err != nil {
+				checkers = append(checkers, doctor.LeaseChecker{Lease: leaseManager})
+			} else {
+				expectedOwner = record.OwnerInstanceID
+				checkers = append(checkers, doctor.StaticOKChecker{Name: "lease", Message: fmt.Sprintf("lease owner %s generation %d", record.OwnerInstanceID, record.Generation)})
+			}
+		}
+	}
+
+	for _, routeName := range cfg.HA.RouteFailover.RouteTableIDs {
+		checkers = append(checkers, doctor.RouteChecker{
+			Cloud:           cloudProvider,
+			RouteTableID:    routeName,
+			DestinationCIDR: cfg.HA.RouteFailover.DestinationCIDR,
+			ExpectedTarget:  expectedOwner,
+		})
+	}
+
+	if cfg.HA.PublicIdentity.Mode == "" {
+		checkers = append(checkers, doctor.StaticOKChecker{Name: "public_identity", Message: "GCP route-only HA has no shared public identity configured"})
+	} else {
+		checkers = append(checkers, doctor.StaticWarningChecker{Name: "public_identity", Message: "GCP live doctor supports route-only HA; shared public identity is unsupported"})
+	}
+
+	checkers = append(checkers, doctor.PrometheusChecker{
+		URL:    prometheusURL(cfg),
+		Client: liveDoctorPrometheusClient,
+	})
+
+	if cfg.Observability.OutboundProbe.Enabled {
+		checkers = append(checkers, doctor.SourceIPProbeChecker{Probe: probe.SourceIPProbe{
+			URL:        cfg.Observability.OutboundProbe.URL,
+			ExpectedIP: cfg.Observability.OutboundProbe.ExpectedIP,
+			Client:     liveDoctorSourceProbeClient,
+		}})
+	}
+
+	return checkers, nil
+}
+
 func prometheusURL(cfg config.Config) string {
 	port := cfg.Observability.Prometheus.ListenPort
 	if port == 0 {
@@ -610,6 +690,16 @@ func liveDoctorLeaseManager(ctx context.Context, cfg config.Config) (lease.Manag
 		return dynamodbcoord.New(ctx, cfg.Region, cfg.Coordination.Table, doctorLeaseKey(cfg), doctorLeaseTTL(cfg))
 	}
 	return newLiveLeaseManager(ctx, cfg.Region, cfg.HA.Lease.Table, doctorLeaseKey(cfg), doctorLeaseTTL(cfg))
+}
+
+func doctorGCPZone(cfg config.Config) string {
+	if cfg.GCP.Zone != "" {
+		return cfg.GCP.Zone
+	}
+	if cfg.Local.AvailabilityZone != "" && cfg.Local.AvailabilityZone != "auto" {
+		return cfg.Local.AvailabilityZone
+	}
+	return ""
 }
 
 func doctorLeaseTTL(cfg config.Config) time.Duration {

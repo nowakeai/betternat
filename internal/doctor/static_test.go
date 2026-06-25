@@ -27,6 +27,32 @@ func TestStaticHAConfigCheckerRequiresDynamoDB(t *testing.T) {
 	}
 }
 
+func TestStaticHAConfigCheckerAcceptsGCPFirestore(t *testing.T) {
+	cfg := validStaticConfig()
+	cfg.Cloud = "gcp"
+	cfg.Region = "us-west2"
+	cfg.GCP = config.GCPConfig{ProjectID: "shared-resources-alt", Zone: "us-west2-a", Network: "default", ClientTag: "betternat-client"}
+	cfg.HA.Lease = config.LeaseConfig{Backend: "firestore", Key: "prod-egress-a"}
+	cfg.HA.PublicIdentity = config.PublicIdentityConfig{}
+	result := StaticHAConfigChecker{Config: cfg}.Check(context.Background())
+	if result.Status != StatusOK {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+}
+
+func TestStaticHAConfigCheckerRejectsGCPPublicIdentity(t *testing.T) {
+	cfg := validStaticConfig()
+	cfg.Cloud = "gcp"
+	cfg.Region = "us-west2"
+	cfg.GCP = config.GCPConfig{ProjectID: "shared-resources-alt", Zone: "us-west2-a", Network: "default", ClientTag: "betternat-client"}
+	cfg.HA.Lease = config.LeaseConfig{Backend: "firestore", Key: "prod-egress-a"}
+	cfg.HA.PublicIdentity = config.PublicIdentityConfig{Mode: "shared_eip", AllocationID: "eipalloc-123"}
+	result := StaticHAConfigChecker{Config: cfg}.Check(context.Background())
+	if result.Status != StatusCritical {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+}
+
 func validStaticConfig() config.Config {
 	return config.Config{
 		Version:   "v0",
