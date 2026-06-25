@@ -17,8 +17,8 @@ import (
 
 	"github.com/nowakeai/betternat/internal/agentapi"
 	"github.com/nowakeai/betternat/internal/config"
+	"github.com/nowakeai/betternat/internal/coordination"
 	dynamodbcoord "github.com/nowakeai/betternat/internal/coordination/dynamodb"
-	"github.com/nowakeai/betternat/internal/lease"
 )
 
 type handoverOptions struct {
@@ -31,12 +31,6 @@ type handoverOptions struct {
 	limit        int
 	status       string
 	includeStale bool
-}
-
-type handoverStoreReader interface {
-	GetHandover(context.Context, string) (dynamodbcoord.HandoverRecord, error)
-	ListHandovers(context.Context) ([]dynamodbcoord.HandoverRecord, error)
-	Current(context.Context) (lease.Record, error)
 }
 
 type handoverRecordOutput struct {
@@ -53,7 +47,7 @@ type handoverRecordOutput struct {
 	ExpiresAt       time.Time `json:"expires_at,omitempty"`
 }
 
-var newHandoverStoreReader = func(ctx context.Context, cfg config.Config) (handoverStoreReader, error) {
+var newHandoverStoreReader = func(ctx context.Context, cfg config.Config) (coordination.HandoverReader, error) {
 	return dynamodbcoord.New(ctx, cfg.Region, cfg.Coordination.Table, doctorLeaseKey(cfg), doctorLeaseTTL(cfg))
 }
 
@@ -184,7 +178,7 @@ func runHandoverInspect(ctx context.Context, opts handoverOptions, requestID str
 	return renderHandoverRecord(out, opts.output, record)
 }
 
-func openHandoverStore(ctx context.Context, configPath string) (handoverStoreReader, error) {
+func openHandoverStore(ctx context.Context, configPath string) (coordination.HandoverReader, error) {
 	cfg, err := config.LoadFile(configPath)
 	if err != nil {
 		return nil, err
@@ -195,11 +189,11 @@ func openHandoverStore(ctx context.Context, configPath string) (handoverStoreRea
 	return newHandoverStoreReader(ctx, cfg)
 }
 
-func filterHandoverRecords(records []dynamodbcoord.HandoverRecord, status string) []dynamodbcoord.HandoverRecord {
+func filterHandoverRecords(records []coordination.HandoverRecord, status string) []coordination.HandoverRecord {
 	if status == "" {
 		return records
 	}
-	filtered := make([]dynamodbcoord.HandoverRecord, 0, len(records))
+	filtered := make([]coordination.HandoverRecord, 0, len(records))
 	for _, record := range records {
 		if record.Status == status {
 			filtered = append(filtered, record)
@@ -208,12 +202,12 @@ func filterHandoverRecords(records []dynamodbcoord.HandoverRecord, status string
 	return filtered
 }
 
-func filterCurrentHandoverRecords(ctx context.Context, store handoverStoreReader, records []dynamodbcoord.HandoverRecord) []dynamodbcoord.HandoverRecord {
+func filterCurrentHandoverRecords(ctx context.Context, store coordination.HandoverReader, records []coordination.HandoverRecord) []coordination.HandoverRecord {
 	current, err := store.Current(ctx)
 	if err != nil || current.Generation == 0 {
 		return records
 	}
-	filtered := make([]dynamodbcoord.HandoverRecord, 0, len(records))
+	filtered := make([]coordination.HandoverRecord, 0, len(records))
 	for _, record := range records {
 		if record.LeaseGeneration < current.Generation && !handoverTerminalStatus(record.Status) {
 			continue
@@ -232,7 +226,7 @@ func handoverTerminalStatus(status string) bool {
 	}
 }
 
-func renderHandoverRecords(out io.Writer, format outputFormat, records []dynamodbcoord.HandoverRecord) error {
+func renderHandoverRecords(out io.Writer, format outputFormat, records []coordination.HandoverRecord) error {
 	rows := make([]handoverRecordOutput, 0, len(records))
 	for _, record := range records {
 		rows = append(rows, handoverRecordView(record))
@@ -263,14 +257,14 @@ func renderHandoverRecords(out io.Writer, format outputFormat, records []dynamod
 	return nil
 }
 
-func renderHandoverRecord(out io.Writer, format outputFormat, record dynamodbcoord.HandoverRecord) error {
+func renderHandoverRecord(out io.Writer, format outputFormat, record coordination.HandoverRecord) error {
 	if format == outputJSON {
 		return json.NewEncoder(out).Encode(handoverRecordView(record))
 	}
-	return renderHandoverRecords(out, format, []dynamodbcoord.HandoverRecord{record})
+	return renderHandoverRecords(out, format, []coordination.HandoverRecord{record})
 }
 
-func handoverRecordView(record dynamodbcoord.HandoverRecord) handoverRecordOutput {
+func handoverRecordView(record coordination.HandoverRecord) handoverRecordOutput {
 	return handoverRecordOutput{
 		RequestID:       record.RequestID,
 		Status:          record.Status,
@@ -286,14 +280,14 @@ func handoverRecordView(record dynamodbcoord.HandoverRecord) handoverRecordOutpu
 	}
 }
 
-func handoverRecordSourceNode(record dynamodbcoord.HandoverRecord) string {
+func handoverRecordSourceNode(record coordination.HandoverRecord) string {
 	if record.SourceNodeID != "" {
 		return record.SourceNodeID
 	}
 	return record.SourceInstanceID
 }
 
-func handoverRecordTargetNode(record dynamodbcoord.HandoverRecord) string {
+func handoverRecordTargetNode(record coordination.HandoverRecord) string {
 	if record.TargetNodeID != "" {
 		return record.TargetNodeID
 	}

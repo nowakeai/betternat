@@ -20,6 +20,7 @@ import (
 	"github.com/nowakeai/betternat/internal/buildinfo"
 	awscloud "github.com/nowakeai/betternat/internal/cloud/aws"
 	"github.com/nowakeai/betternat/internal/config"
+	"github.com/nowakeai/betternat/internal/coordination"
 	dynamodbcoord "github.com/nowakeai/betternat/internal/coordination/dynamodb"
 	"github.com/nowakeai/betternat/internal/datapath"
 	"github.com/nowakeai/betternat/internal/ha"
@@ -35,9 +36,9 @@ const (
 )
 
 type handoverStore interface {
-	CreateHandover(context.Context, dynamodbcoord.HandoverRecord, time.Duration) (dynamodbcoord.HandoverRecord, error)
-	UpdateHandover(context.Context, dynamodbcoord.HandoverRecord, time.Duration) (dynamodbcoord.HandoverRecord, error)
-	GetHandover(context.Context, string) (dynamodbcoord.HandoverRecord, error)
+	CreateHandover(context.Context, coordination.HandoverRecord, time.Duration) (coordination.HandoverRecord, error)
+	UpdateHandover(context.Context, coordination.HandoverRecord, time.Duration) (coordination.HandoverRecord, error)
+	GetHandover(context.Context, string) (coordination.HandoverRecord, error)
 	Current(context.Context) (lease.Record, error)
 }
 
@@ -90,7 +91,7 @@ func (c *controlStatusCache) get() agentapi.StatusResponse {
 	return status
 }
 
-func (c *controlStatusCache) refresh(ctx context.Context, cfg config.Config, registry *dynamodbcoord.Backend, engine datapath.Engine, haStatus interface{ Snapshot() ha.StatusSnapshot }, metricsAddress string) {
+func (c *controlStatusCache) refresh(ctx context.Context, cfg config.Config, registry coordination.AgentReader, engine datapath.Engine, haStatus interface{ Snapshot() ha.StatusSnapshot }, metricsAddress string) {
 	now := time.Now()
 	status := agentapi.StatusResponse{
 		SchemaVersion:    "v1",
@@ -130,7 +131,7 @@ func (c *controlStatusCache) refresh(ctx context.Context, cfg config.Config, reg
 	c.mu.Unlock()
 }
 
-func (c *controlStatusCache) refreshRegistryStatus(ctx context.Context, cfg config.Config, registry *dynamodbcoord.Backend, leaseRecord lease.Record, status *agentapi.StatusResponse, now time.Time) {
+func (c *controlStatusCache) refreshRegistryStatus(ctx context.Context, cfg config.Config, registry coordination.AgentReader, leaseRecord lease.Record, status *agentapi.StatusResponse, now time.Time) {
 	current, err := registry.Current(ctx)
 	if err != nil {
 		status.Warnings = append(status.Warnings, "registry lease: "+err.Error())
@@ -242,7 +243,7 @@ func (c *controlStatusCache) rates(key string, metrics controlMetrics, now time.
 	return controlRateMbps(previous.RXBytes, metrics.RXBytes, elapsed), controlRateMbps(previous.TXBytes, metrics.TXBytes, elapsed)
 }
 
-func runControlStatusRefresher(ctx context.Context, cache *controlStatusCache, cfg config.Config, registry *dynamodbcoord.Backend, engine datapath.Engine, haStatus interface{ Snapshot() ha.StatusSnapshot }, metricsAddress string) {
+func runControlStatusRefresher(ctx context.Context, cache *controlStatusCache, cfg config.Config, registry coordination.AgentReader, engine datapath.Engine, haStatus interface{ Snapshot() ha.StatusSnapshot }, metricsAddress string) {
 	cache.refresh(ctx, cfg, registry, engine, haStatus, metricsAddress)
 	ticker := time.NewTicker(controlRefreshInterval)
 	defer ticker.Stop()
@@ -360,7 +361,7 @@ func newHandoverHandler(cfg config.Config, cache *controlStatusCache, haStatus i
 			}
 			return forwarded
 		}
-		if err := createHandover(ctx, store, dynamodbcoord.HandoverRecord{
+		if err := createHandover(ctx, store, coordination.HandoverRecord{
 			RequestID:       req.RequestID,
 			Status:          "requested",
 			SourceNodeID:    source,
@@ -376,7 +377,7 @@ func newHandoverHandler(cfg config.Config, cache *controlStatusCache, haStatus i
 		target, err := selectHandoverTarget(status, source, requestedTargetNode(req))
 		if err != nil {
 			resp.Error = err.Error()
-			updateHandover(ctx, store, dynamodbcoord.HandoverRecord{
+			updateHandover(ctx, store, coordination.HandoverRecord{
 				RequestID:       req.RequestID,
 				Status:          "rejected",
 				SourceNodeID:    source,
@@ -387,7 +388,7 @@ func newHandoverHandler(cfg config.Config, cache *controlStatusCache, haStatus i
 			return resp
 		}
 		resp.TargetNodeID = target
-		record := dynamodbcoord.HandoverRecord{
+		record := coordination.HandoverRecord{
 			RequestID:       req.RequestID,
 			Status:          "preparing",
 			SourceNodeID:    source,
@@ -471,15 +472,15 @@ func newHandoverPrepareHandler(cfg config.Config, store handoverStore) func(cont
 	}
 }
 
-func existingHandover(ctx context.Context, store handoverStore, requestID string) (dynamodbcoord.HandoverRecord, bool) {
+func existingHandover(ctx context.Context, store handoverStore, requestID string) (coordination.HandoverRecord, bool) {
 	if store == nil || requestID == "" {
-		return dynamodbcoord.HandoverRecord{}, false
+		return coordination.HandoverRecord{}, false
 	}
 	record, err := store.GetHandover(ctx, requestID)
 	return record, err == nil
 }
 
-func createHandover(ctx context.Context, store handoverStore, record dynamodbcoord.HandoverRecord, cfg config.Config) error {
+func createHandover(ctx context.Context, store handoverStore, record coordination.HandoverRecord, cfg config.Config) error {
 	if store == nil {
 		return nil
 	}
@@ -487,7 +488,7 @@ func createHandover(ctx context.Context, store handoverStore, record dynamodbcoo
 	return err
 }
 
-func updateHandover(ctx context.Context, store handoverStore, record dynamodbcoord.HandoverRecord, cfg config.Config) {
+func updateHandover(ctx context.Context, store handoverStore, record coordination.HandoverRecord, cfg config.Config) {
 	if store == nil {
 		return
 	}
@@ -496,7 +497,7 @@ func updateHandover(ctx context.Context, store handoverStore, record dynamodbcoo
 	}
 }
 
-func handoverResponseFromRecord(record dynamodbcoord.HandoverRecord) agentapi.HandoverResponse {
+func handoverResponseFromRecord(record coordination.HandoverRecord) agentapi.HandoverResponse {
 	return agentapi.HandoverResponse{
 		SchemaVersion:   "v1",
 		RequestID:       record.RequestID,
@@ -610,21 +611,21 @@ func statusNodeID(row agentapi.StatusInstance) string {
 	return row.InstanceID
 }
 
-func agentRecordNodeID(record dynamodbcoord.AgentRecord) string {
+func agentRecordNodeID(record coordination.AgentRecord) string {
 	if record.NodeID != "" {
 		return record.NodeID
 	}
 	return record.InstanceID
 }
 
-func handoverRecordSourceNodeID(record dynamodbcoord.HandoverRecord) string {
+func handoverRecordSourceNodeID(record coordination.HandoverRecord) string {
 	if record.SourceNodeID != "" {
 		return record.SourceNodeID
 	}
 	return record.SourceInstanceID
 }
 
-func handoverRecordTargetNodeID(record dynamodbcoord.HandoverRecord) string {
+func handoverRecordTargetNodeID(record coordination.HandoverRecord) string {
 	if record.TargetNodeID != "" {
 		return record.TargetNodeID
 	}
@@ -899,7 +900,7 @@ func roleForInstance(instanceID string, owner string) string {
 	return "standby"
 }
 
-func healthForAgent(agent dynamodbcoord.AgentRecord) string {
+func healthForAgent(agent coordination.AgentRecord) string {
 	if agent.DatapathReady {
 		return "Healthy"
 	}

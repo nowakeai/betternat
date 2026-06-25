@@ -503,6 +503,12 @@ Append dated notes here during implementation.
   `renjie@altresear.ch` could not create a named Firestore database:
   `The caller does not have permission`. Live validation needs an existing
   Firestore Native database or temporary database creation permission.
+- Extracted provider-neutral coordination records and interfaces into
+  `internal/coordination`. Agent registry and handover flows now depend on
+  `coordination.AgentRecord`, `coordination.HandoverRecord`, and reader/store
+  interfaces instead of DynamoDB-specific record types. DynamoDB remains the AWS
+  implementation, but this removes the type-level blocker for Firestore-backed
+  GCP registry and handover support.
 - Opened implementation PRs:
   - main repo: `https://github.com/nowakeai/betternat/pull/1`
   - split provider repo:

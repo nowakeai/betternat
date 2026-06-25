@@ -16,7 +16,7 @@ import (
 	"github.com/nowakeai/betternat/internal/agentapi"
 	"github.com/nowakeai/betternat/internal/cloud"
 	"github.com/nowakeai/betternat/internal/config"
-	dynamodbcoord "github.com/nowakeai/betternat/internal/coordination/dynamodb"
+	"github.com/nowakeai/betternat/internal/coordination"
 	"github.com/nowakeai/betternat/internal/datapath"
 	"github.com/nowakeai/betternat/internal/ha"
 	"github.com/nowakeai/betternat/internal/lease"
@@ -157,46 +157,46 @@ func (r fakeStatusReporter) Snapshot() ha.StatusSnapshot {
 
 type fakeHandoverStore struct {
 	current      lease.Record
-	records      map[string]dynamodbcoord.HandoverRecord
+	records      map[string]coordination.HandoverRecord
 	createErr    error
 	missFirstGet bool
 	getCalls     int
-	created      []dynamodbcoord.HandoverRecord
-	updated      []dynamodbcoord.HandoverRecord
+	created      []coordination.HandoverRecord
+	updated      []coordination.HandoverRecord
 }
 
-func (s *fakeHandoverStore) CreateHandover(_ context.Context, record dynamodbcoord.HandoverRecord, _ time.Duration) (dynamodbcoord.HandoverRecord, error) {
+func (s *fakeHandoverStore) CreateHandover(_ context.Context, record coordination.HandoverRecord, _ time.Duration) (coordination.HandoverRecord, error) {
 	if s.createErr != nil {
-		return dynamodbcoord.HandoverRecord{}, s.createErr
+		return coordination.HandoverRecord{}, s.createErr
 	}
 	if s.records == nil {
-		s.records = map[string]dynamodbcoord.HandoverRecord{}
+		s.records = map[string]coordination.HandoverRecord{}
 	}
 	s.records[record.RequestID] = record
 	s.created = append(s.created, record)
 	return record, nil
 }
 
-func (s *fakeHandoverStore) UpdateHandover(_ context.Context, record dynamodbcoord.HandoverRecord, _ time.Duration) (dynamodbcoord.HandoverRecord, error) {
+func (s *fakeHandoverStore) UpdateHandover(_ context.Context, record coordination.HandoverRecord, _ time.Duration) (coordination.HandoverRecord, error) {
 	if s.records == nil {
-		s.records = map[string]dynamodbcoord.HandoverRecord{}
+		s.records = map[string]coordination.HandoverRecord{}
 	}
 	s.records[record.RequestID] = record
 	s.updated = append(s.updated, record)
 	return record, nil
 }
 
-func (s *fakeHandoverStore) GetHandover(_ context.Context, requestID string) (dynamodbcoord.HandoverRecord, error) {
+func (s *fakeHandoverStore) GetHandover(_ context.Context, requestID string) (coordination.HandoverRecord, error) {
 	s.getCalls++
 	if s.missFirstGet && s.getCalls == 1 {
-		return dynamodbcoord.HandoverRecord{}, os.ErrNotExist
+		return coordination.HandoverRecord{}, os.ErrNotExist
 	}
 	if s.records == nil {
-		return dynamodbcoord.HandoverRecord{}, os.ErrNotExist
+		return coordination.HandoverRecord{}, os.ErrNotExist
 	}
 	record, ok := s.records[requestID]
 	if !ok {
-		return dynamodbcoord.HandoverRecord{}, os.ErrNotExist
+		return coordination.HandoverRecord{}, os.ErrNotExist
 	}
 	return record, nil
 }
@@ -481,7 +481,7 @@ func TestHandoverRequestIDReturnsExistingDurableRecord(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	store := &fakeHandoverStore{records: map[string]dynamodbcoord.HandoverRecord{
+	store := &fakeHandoverStore{records: map[string]coordination.HandoverRecord{
 		"req-1": {
 			RequestID:       "req-1",
 			Status:          "completed",
@@ -518,7 +518,7 @@ func TestHandoverCreateConflictReturnsExistingDurableRecord(t *testing.T) {
 			Generation:      3,
 			ExpiresAt:       time.Now().Add(time.Minute),
 		},
-		records: map[string]dynamodbcoord.HandoverRecord{
+		records: map[string]coordination.HandoverRecord{
 			"req-1": {
 				RequestID:       "req-1",
 				Status:          "committing",

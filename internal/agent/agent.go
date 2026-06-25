@@ -19,6 +19,7 @@ import (
 	"github.com/nowakeai/betternat/internal/cloud"
 	awscloud "github.com/nowakeai/betternat/internal/cloud/aws"
 	"github.com/nowakeai/betternat/internal/config"
+	"github.com/nowakeai/betternat/internal/coordination"
 	dynamodbcoord "github.com/nowakeai/betternat/internal/coordination/dynamodb"
 	"github.com/nowakeai/betternat/internal/datapath"
 	"github.com/nowakeai/betternat/internal/datapath/loxilb"
@@ -266,7 +267,7 @@ func runContinuous(ctx context.Context, cfg config.Config, engine datapath.Engin
 		defer shutdownServer(server)
 		defer listener.Close()
 	}
-	var registry *dynamodbcoord.Backend
+	var registry coordination.Store
 	if coordinationTable(cfg) != "" {
 		var err error
 		registry, err = dynamodbcoord.New(ctx, cfg.Region, coordinationTable(cfg), leaseKey(cfg), registryTTL(cfg))
@@ -640,7 +641,7 @@ const (
 	registryPutTimeout    = 2 * time.Second
 )
 
-func runAgentRegistry(ctx context.Context, registry *dynamodbcoord.Backend, cfg config.Config, engine datapath.Engine, haStatus interface{ Snapshot() ha.StatusSnapshot }, metricsAddress string) {
+func runAgentRegistry(ctx context.Context, registry coordination.AgentRegistry, cfg config.Config, engine datapath.Engine, haStatus interface{ Snapshot() ha.StatusSnapshot }, metricsAddress string) {
 	interval := registryRefreshInterval(cfg)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -656,14 +657,14 @@ func runAgentRegistry(ctx context.Context, registry *dynamodbcoord.Backend, cfg 
 	}
 }
 
-func publishAgentRecord(ctx context.Context, registry *dynamodbcoord.Backend, cfg config.Config, engine datapath.Engine, haStatus interface{ Snapshot() ha.StatusSnapshot }, metricsAddress string) error {
+func publishAgentRecord(ctx context.Context, registry coordination.AgentRegistry, cfg config.Config, engine datapath.Engine, haStatus interface{ Snapshot() ha.StatusSnapshot }, metricsAddress string) error {
 	status := datapathStatusForRegistry(ctx, engine, registryStatusTimeout)
 	snapshot := haStatus.Snapshot()
 	build := buildinfo.Current("betternat-agent")
 	now := time.Now()
 	putCtx, cancel := context.WithTimeout(ctx, registryPutTimeout)
 	defer cancel()
-	return registry.PutAgent(putCtx, dynamodbcoord.AgentRecord{
+	return registry.PutAgent(putCtx, coordination.AgentRecord{
 		GatewayID:           cfg.GatewayID,
 		HAGroupID:           cfg.HAGroupID,
 		NodeID:              cfg.Local.NodeID,

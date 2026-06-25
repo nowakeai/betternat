@@ -19,7 +19,7 @@ import (
 	"github.com/nowakeai/betternat/internal/agentapi"
 	"github.com/nowakeai/betternat/internal/cloud"
 	"github.com/nowakeai/betternat/internal/config"
-	dynamodbcoord "github.com/nowakeai/betternat/internal/coordination/dynamodb"
+	"github.com/nowakeai/betternat/internal/coordination"
 	"github.com/nowakeai/betternat/internal/datapath"
 	"github.com/nowakeai/betternat/internal/doctor"
 	"github.com/nowakeai/betternat/internal/iamcheck"
@@ -254,7 +254,7 @@ func TestRunStatusUsesRegistryWhenConfigured(t *testing.T) {
 		newStatusRegistry = restoreRegistry
 		resolveLocalInstanceID = restoreResolveInstance
 	}()
-	newStatusRegistry = func(context.Context, config.Config) (statusRegistry, error) {
+	newStatusRegistry = func(context.Context, config.Config) (coordination.AgentReader, error) {
 		return fakeStatusRegistry{}, nil
 	}
 	resolveLocalInstanceID = func(context.Context, string) (string, error) {
@@ -437,8 +437,8 @@ func TestRunHandoverHistoryUsesCoordinationRecords(t *testing.T) {
 	}
 	restore := newHandoverStoreReader
 	defer func() { newHandoverStoreReader = restore }()
-	newHandoverStoreReader = func(context.Context, config.Config) (handoverStoreReader, error) {
-		return fakeHandoverReader{currentGeneration: 2, records: []dynamodbcoord.HandoverRecord{
+	newHandoverStoreReader = func(context.Context, config.Config) (coordination.HandoverReader, error) {
+		return fakeHandoverReader{currentGeneration: 2, records: []coordination.HandoverRecord{
 			{
 				RequestID:       "old",
 				Status:          "failed",
@@ -480,8 +480,8 @@ func TestRunHandoverHistoryHidesStaleIntermediateRecords(t *testing.T) {
 	}
 	restore := newHandoverStoreReader
 	defer func() { newHandoverStoreReader = restore }()
-	newHandoverStoreReader = func(context.Context, config.Config) (handoverStoreReader, error) {
-		return fakeHandoverReader{currentGeneration: 3, records: []dynamodbcoord.HandoverRecord{
+	newHandoverStoreReader = func(context.Context, config.Config) (coordination.HandoverReader, error) {
+		return fakeHandoverReader{currentGeneration: 3, records: []coordination.HandoverRecord{
 			{
 				RequestID:       "stale-preparing",
 				Status:          "preparing",
@@ -532,8 +532,8 @@ func TestRunHandoverHistoryDefaultsToTable(t *testing.T) {
 	}
 	restore := newHandoverStoreReader
 	defer func() { newHandoverStoreReader = restore }()
-	newHandoverStoreReader = func(context.Context, config.Config) (handoverStoreReader, error) {
-		return fakeHandoverReader{records: []dynamodbcoord.HandoverRecord{{
+	newHandoverStoreReader = func(context.Context, config.Config) (coordination.HandoverReader, error) {
+		return fakeHandoverReader{records: []coordination.HandoverRecord{{
 			RequestID:       "req-1",
 			Status:          "completed",
 			SourceNodeID:    "i-active",
@@ -567,8 +567,8 @@ func TestRunHandoverInspectUsesCoordinationRecord(t *testing.T) {
 	}
 	restore := newHandoverStoreReader
 	defer func() { newHandoverStoreReader = restore }()
-	newHandoverStoreReader = func(context.Context, config.Config) (handoverStoreReader, error) {
-		return fakeHandoverReader{records: []dynamodbcoord.HandoverRecord{{
+	newHandoverStoreReader = func(context.Context, config.Config) (coordination.HandoverReader, error) {
+		return fakeHandoverReader{records: []coordination.HandoverRecord{{
 			RequestID:       "req-1",
 			Status:          "completed",
 			SourceNodeID:    "i-active",
@@ -726,20 +726,20 @@ type fakeStatusRegistry struct{}
 
 type fakeHandoverReader struct {
 	currentGeneration uint64
-	records           []dynamodbcoord.HandoverRecord
+	records           []coordination.HandoverRecord
 }
 
-func (f fakeHandoverReader) GetHandover(_ context.Context, requestID string) (dynamodbcoord.HandoverRecord, error) {
+func (f fakeHandoverReader) GetHandover(_ context.Context, requestID string) (coordination.HandoverRecord, error) {
 	for _, record := range f.records {
 		if record.RequestID == requestID {
 			return record, nil
 		}
 	}
-	return dynamodbcoord.HandoverRecord{}, os.ErrNotExist
+	return coordination.HandoverRecord{}, os.ErrNotExist
 }
 
-func (f fakeHandoverReader) ListHandovers(context.Context) ([]dynamodbcoord.HandoverRecord, error) {
-	return append([]dynamodbcoord.HandoverRecord(nil), f.records...), nil
+func (f fakeHandoverReader) ListHandovers(context.Context) ([]coordination.HandoverRecord, error) {
+	return append([]coordination.HandoverRecord(nil), f.records...), nil
 }
 
 func (f fakeHandoverReader) Current(context.Context) (lease.Record, error) {
@@ -753,8 +753,8 @@ func (fakeStatusRegistry) Current(context.Context) (lease.Record, error) {
 	return lease.Record{HAGroupID: "prod-egress-a", OwnerInstanceID: "i-active", Generation: 3}, nil
 }
 
-func (fakeStatusRegistry) ListAgents(context.Context) ([]dynamodbcoord.AgentRecord, error) {
-	return []dynamodbcoord.AgentRecord{
+func (fakeStatusRegistry) ListAgents(context.Context) ([]coordination.AgentRecord, error) {
+	return []coordination.AgentRecord{
 		{NodeID: "i-active", PrivateIP: "10.0.1.10", PublicIP: "35.85.131.212", Version: "v-registry", DatapathReady: true, HAState: "active"},
 		{NodeID: "i-standby", PrivateIP: "10.0.1.11", Version: "v-registry", DatapathReady: true, HAState: "standby"},
 	}, nil

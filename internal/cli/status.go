@@ -20,9 +20,9 @@ import (
 
 	"github.com/nowakeai/betternat/internal/agentapi"
 	"github.com/nowakeai/betternat/internal/config"
+	"github.com/nowakeai/betternat/internal/coordination"
 	dynamodbcoord "github.com/nowakeai/betternat/internal/coordination/dynamodb"
 	"github.com/nowakeai/betternat/internal/doctor"
-	"github.com/nowakeai/betternat/internal/lease"
 )
 
 type statusOptions struct {
@@ -87,14 +87,9 @@ type scrapedMetrics struct {
 	TXBytes *uint64
 }
 
-type statusRegistry interface {
-	Current(context.Context) (lease.Record, error)
-	ListAgents(context.Context) ([]dynamodbcoord.AgentRecord, error)
-}
-
 var (
 	statusHTTPClient  doctor.HTTPClient = &http.Client{Timeout: 2 * time.Second}
-	newStatusRegistry                   = func(ctx context.Context, cfg config.Config) (statusRegistry, error) {
+	newStatusRegistry                   = func(ctx context.Context, cfg config.Config) (coordination.AgentReader, error) {
 		return dynamodbcoord.New(ctx, cfg.Region, cfg.Coordination.Table, doctorLeaseKey(cfg), doctorLeaseTTL(cfg))
 	}
 )
@@ -617,7 +612,7 @@ func statusRowNodeID(row statusInstanceRow) string {
 	return row.InstanceID
 }
 
-func statusAgentRecordNodeID(record dynamodbcoord.AgentRecord) string {
+func statusAgentRecordNodeID(record coordination.AgentRecord) string {
 	if record.NodeID != "" {
 		return record.NodeID
 	}
@@ -924,7 +919,7 @@ func controlValue(url string) string {
 	return "ok"
 }
 
-func healthFromAgent(agent dynamodbcoord.AgentRecord) string {
+func healthFromAgent(agent coordination.AgentRecord) string {
 	if agent.DatapathReady {
 		return "Healthy"
 	}

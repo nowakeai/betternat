@@ -382,8 +382,8 @@ coordination validation:
 
 1. Run a live `shared-resources-alt` Firestore contention spike with two or
    more contenders.
-2. Add a provider-neutral coordination record interface if the current
-   DynamoDB-specific registry/handover structs cannot be reused cleanly.
+2. Implement Firestore-backed agent registry and handover records against the
+   provider-neutral coordination interfaces.
 3. Only then wire GCP agent HA to route replacement.
 
 Until then, GCP should remain explicitly marked as non-HA alpha substrate work.
