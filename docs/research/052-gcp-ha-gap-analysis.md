@@ -650,6 +650,10 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
   validation.
 - [x] GCP `cloud.Provider` route replace/describe implementation exists for
   tagged static routes with `nextHopInstance`.
+- [x] GCP route replacement snapshots the previous route and attempts to
+  restore it if replacement insert or insert operation polling fails. This
+  reduces the delete/recreate failure window, but live GCE evidence is still
+  required because GCP route replacement is not atomic.
 - [x] `betternat doctor --live` supports `cloud=gcp` for local datapath,
   Firestore lease, configured GCP route, route-only public identity,
   Prometheus, and outbound source-IP probe checks. Live GCE evidence is still

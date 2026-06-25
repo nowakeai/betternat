@@ -611,6 +611,11 @@ Append dated notes here during implementation.
   targets, route-only public identity status, Prometheus, and source-IP probes.
   Local unit tests cover the GCP diagnostic path; live GCE evidence is still
   pending.
+- Hardened GCP route replacement: `internal/cloud/gcp` now snapshots the
+  previous route before delete/recreate and attempts to restore it when the new
+  route insert or insert operation wait fails. This does not make GCP route
+  replacement atomic, but it reduces the dangerous no-route window that remains
+  before live GCE failure-injection evidence exists.
 - Opened implementation PRs:
   - main repo: `https://github.com/nowakeai/betternat/pull/1`
   - split provider repo:

@@ -57,6 +57,13 @@ func (p *Provider) ReplaceRoute(ctx context.Context, target cloud.RouteTarget) e
 	if err := validateRouteTarget(target); err != nil {
 		return err
 	}
+	previous, err := p.routes.Get(ctx, p.cfg.ProjectID, target.RouteTableID)
+	if err != nil && !isNotFound(err) {
+		return fmt.Errorf("gcp compute get route %q before replace: %w", target.RouteTableID, err)
+	}
+	if err != nil {
+		previous = nil
+	}
 	deleteOp, err := p.routes.Delete(ctx, p.cfg.ProjectID, target.RouteTableID)
 	if err != nil && !isNotFound(err) {
 		return fmt.Errorf("gcp compute delete route %q: %w", target.RouteTableID, err)
@@ -76,12 +83,26 @@ func (p *Provider) ReplaceRoute(ctx context.Context, target cloud.RouteTarget) e
 	}
 	insertOp, err := p.routes.Insert(ctx, p.cfg.ProjectID, route)
 	if err != nil {
-		return fmt.Errorf("gcp compute insert route %q: %w", target.RouteTableID, err)
+		return p.restorePreviousRoute(ctx, target.RouteTableID, previous, fmt.Errorf("gcp compute insert route %q: %w", target.RouteTableID, err))
 	}
 	if err := p.waitGlobalOperation(ctx, operationName(insertOp)); err != nil {
-		return fmt.Errorf("wait for gcp route %q insert: %w", target.RouteTableID, err)
+		return p.restorePreviousRoute(ctx, target.RouteTableID, previous, fmt.Errorf("wait for gcp route %q insert: %w", target.RouteTableID, err))
 	}
 	return nil
+}
+
+func (p *Provider) restorePreviousRoute(ctx context.Context, routeName string, previous *compute.Route, cause error) error {
+	if previous == nil || ctx.Err() != nil {
+		return cause
+	}
+	insertOp, err := p.routes.Insert(ctx, p.cfg.ProjectID, restorableRoute(previous))
+	if err != nil {
+		return fmt.Errorf("%w; failed to restore previous gcp route %q: %v", cause, routeName, err)
+	}
+	if err := p.waitGlobalOperation(ctx, operationName(insertOp)); err != nil {
+		return fmt.Errorf("%w; failed to wait for previous gcp route %q restore: %v", cause, routeName, err)
+	}
+	return fmt.Errorf("%w; previous gcp route %q restored", cause, routeName)
 }
 
 func (p *Provider) DescribeRoute(ctx context.Context, routeName string, destinationCIDR string) (cloud.RouteTarget, error) {
@@ -199,6 +220,26 @@ func routePriority(value int64) int64 {
 		return 800
 	}
 	return value
+}
+
+func restorableRoute(route *compute.Route) *compute.Route {
+	if route == nil {
+		return nil
+	}
+	return &compute.Route{
+		Name:             route.Name,
+		Description:      route.Description,
+		Network:          route.Network,
+		DestRange:        route.DestRange,
+		Priority:         route.Priority,
+		Tags:             append([]string(nil), route.Tags...),
+		NextHopGateway:   route.NextHopGateway,
+		NextHopInstance:  route.NextHopInstance,
+		NextHopIp:        route.NextHopIp,
+		NextHopNetwork:   route.NextHopNetwork,
+		NextHopPeering:   route.NextHopPeering,
+		NextHopVpnTunnel: route.NextHopVpnTunnel,
+	}
 }
 
 func globalLink(projectID, collection, name string) string {

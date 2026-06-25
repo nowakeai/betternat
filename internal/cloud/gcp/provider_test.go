@@ -65,6 +65,64 @@ func TestReplaceRouteIgnoresMissingExistingRoute(t *testing.T) {
 	}
 }
 
+func TestReplaceRouteRestoresPreviousRouteWhenInsertFails(t *testing.T) {
+	previous := &compute.Route{
+		Name:            "prod-default-via-gw",
+		Network:         "projects/test-project/global/networks/test-vpc",
+		DestRange:       "0.0.0.0/0",
+		Priority:        900,
+		Tags:            []string{"private-client"},
+		NextHopInstance: "projects/test-project/zones/us-west2-a/instances/prod-gw-a",
+	}
+	routes := &fakeRoutes{route: previous, insertErrs: []error{errors.New("insert failed"), nil}}
+	ops := &fakeOperations{}
+	provider := NewFromAPI(testConfig(), routes, ops)
+
+	err := provider.ReplaceRoute(context.Background(), cloud.RouteTarget{
+		RouteTableID:    "prod-default-via-gw",
+		DestinationCIDR: "0.0.0.0/0",
+		Target:          "prod-gw-b",
+	})
+	if err == nil || !strings.Contains(err.Error(), "previous gcp route") || !strings.Contains(err.Error(), "restored") {
+		t.Fatalf("expected restored previous route error, got %v", err)
+	}
+	if len(routes.inserts) != 2 {
+		t.Fatalf("expected replacement and restore inserts, got %d", len(routes.inserts))
+	}
+	restored := routes.inserts[1]
+	if restored.NextHopInstance != previous.NextHopInstance || restored.DestRange != previous.DestRange {
+		t.Fatalf("previous route was not restored: %#v", restored)
+	}
+	if got := strings.Join(ops.waited, ","); got != "delete-op,insert-op" {
+		t.Fatalf("unexpected operation waits: %s", got)
+	}
+}
+
+func TestReplaceRouteRestoresPreviousRouteWhenInsertOperationFails(t *testing.T) {
+	previous := &compute.Route{
+		Name:            "prod-default-via-gw",
+		Network:         "projects/test-project/global/networks/test-vpc",
+		DestRange:       "0.0.0.0/0",
+		Priority:        900,
+		NextHopInstance: "projects/test-project/zones/us-west2-a/instances/prod-gw-a",
+	}
+	routes := &fakeRoutes{route: previous}
+	ops := &fakeOperations{operationErrors: map[string]error{"insert-op": errors.New("operation failed")}}
+	provider := NewFromAPI(testConfig(), routes, ops)
+
+	err := provider.ReplaceRoute(context.Background(), cloud.RouteTarget{
+		RouteTableID:    "prod-default-via-gw",
+		DestinationCIDR: "0.0.0.0/0",
+		Target:          "prod-gw-b",
+	})
+	if err == nil || !strings.Contains(err.Error(), "previous gcp route") || !strings.Contains(err.Error(), "restored") {
+		t.Fatalf("expected restored previous route error, got %v", err)
+	}
+	if len(routes.inserts) != 2 {
+		t.Fatalf("expected replacement and restore inserts, got %d", len(routes.inserts))
+	}
+}
+
 func TestDescribeRouteReturnsBaseInstanceName(t *testing.T) {
 	routes := &fakeRoutes{route: &compute.Route{
 		Name:            "prod-default-via-gw",
@@ -115,10 +173,12 @@ func testConfig() Config {
 }
 
 type fakeRoutes struct {
-	route     *compute.Route
-	inserted  *compute.Route
-	deleted   string
-	deleteErr error
+	route      *compute.Route
+	inserted   *compute.Route
+	inserts    []*compute.Route
+	insertErrs []error
+	deleted    string
+	deleteErr  error
 }
 
 func (f *fakeRoutes) Get(context.Context, string, string) (*compute.Route, error) {
@@ -130,6 +190,14 @@ func (f *fakeRoutes) Get(context.Context, string, string) (*compute.Route, error
 
 func (f *fakeRoutes) Insert(_ context.Context, _ string, route *compute.Route) (*compute.Operation, error) {
 	f.inserted = route
+	f.inserts = append(f.inserts, route)
+	if len(f.insertErrs) > 0 {
+		err := f.insertErrs[0]
+		f.insertErrs = f.insertErrs[1:]
+		if err != nil {
+			return nil, err
+		}
+	}
 	return &compute.Operation{Name: "insert-op", Status: "PENDING"}, nil
 }
 
@@ -142,10 +210,17 @@ func (f *fakeRoutes) Delete(_ context.Context, _ string, routeName string) (*com
 }
 
 type fakeOperations struct {
-	waited []string
+	waited          []string
+	operationErrors map[string]error
 }
 
 func (f *fakeOperations) Get(_ context.Context, _ string, name string) (*compute.Operation, error) {
 	f.waited = append(f.waited, name)
+	if err := f.operationErrors[name]; err != nil {
+		delete(f.operationErrors, name)
+		return &compute.Operation{Name: name, Status: "DONE", Error: &compute.OperationError{
+			Errors: []*compute.OperationErrorErrors{{Message: err.Error()}},
+		}}, nil
+	}
 	return &compute.Operation{Name: name, Status: "DONE"}, nil
 }
