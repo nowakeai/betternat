@@ -218,6 +218,12 @@ The bundle includes:
 - LoxiLB inspection output,
 - local `ip addr`, `ip route`, and nftables snapshots.
 
+When the agent config uses `cloud=gcp`, the bundle also attempts to collect
+GCE metadata identity, the configured project's Firestore database list, and
+the configured GCP route objects. These checks are best-effort: missing
+`gcloud`, missing local metadata access, or missing read permissions are
+recorded as command errors inside the bundle.
+
 The command redacts the peer API auth token from the config. Review the archive
 before sharing it outside your organization.
 

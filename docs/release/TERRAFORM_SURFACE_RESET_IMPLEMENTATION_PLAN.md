@@ -582,6 +582,11 @@ Append dated notes here during implementation.
   lease now reports `DEGRADED` instead of attempting takeover when the lease
   backend cannot be read, and active ownership verification failures also keep
   the supervisor out of `ACTIVE`. Live GCE evidence is still pending.
+- Extended `betternat support bundle` for `cloud=gcp`: bundles now attempt
+  best-effort GCE metadata identity, Firestore database list, and configured
+  route describes alongside the existing redacted config, daemon status,
+  handover, metrics, systemd, datapath, and local network snapshots. Live GCE
+  support-bundle evidence is still pending.
 - Opened implementation PRs:
   - main repo: `https://github.com/nowakeai/betternat/pull/1`
   - split provider repo:

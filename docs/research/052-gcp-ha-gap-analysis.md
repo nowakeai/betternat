@@ -520,10 +520,13 @@ The support workflow must collect enough data to debug HA incidents without
 project-owner access:
 
 - Firestore lease, registry, and handover records for the gateway path,
-- route object, operation IDs, and last observed target,
+- route object, operation IDs, and last observed target. The local support
+  bundle now attempts best-effort GCP route describes for configured route
+  names,
 - local datapath status and LoxiLB/nftables counters,
 - agent logs around lease renewals and route operations,
-- redacted service account and metadata identity,
+- redacted service account and metadata identity. The local support bundle now
+  captures GCE metadata identity when `cloud=gcp`,
 - cleanup residual scan output.
 
 ## Revised GCP Gates
@@ -597,7 +600,10 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
   binding lifecycle. Live GCP validation is still pending.
 - Multi-zone behavior documented and tested.
 - GKE/private-node install path tested in a disposable project.
-- Observability and support bundle include GCP-specific HA evidence.
+- Observability and support bundle include GCP-specific HA evidence. Local
+  support bundle collection now includes GCP metadata, Firestore database list,
+  and configured route describe attempts; live GCE bundle evidence is still
+  pending.
 - Cleanup and residual scans include Firestore records and service accounts.
 - Cloud NAT migration and rollback route ownership are documented and tested.
 
