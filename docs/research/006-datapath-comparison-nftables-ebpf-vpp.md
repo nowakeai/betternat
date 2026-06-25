@@ -50,7 +50,7 @@ Do not start with custom eBPF NAT or VPP as the default product path. Both can b
 
 | Option | Best At | Worst At | Fit For BetterNAT |
 | --- | --- | --- | --- |
-| `nftables` + `nf_conntrack` | Correct, boring Linux NAT | Extreme pps / huge connection churn | Best fallback baseline |
+| `nftables` + `nf_conntrack` | Correct, boring Linux NAT | Extreme pps / huge connection churn | Historical baseline; legacy diagnostics only |
 | custom eBPF | Low-overhead observability and targeted fast path | Full stateful NAT correctness | Use for observability first |
 | VPP | Purpose-built high-performance packet processing | Operational simplicity on EC2 | Later performance edition |
 

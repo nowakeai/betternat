@@ -187,9 +187,8 @@ The provider exposes the same list as
 `betternat_gcp_gateway.runtime_iam_permissions` so validation stacks can render
 custom roles from the provider's runtime contract.
 
-When `manage_runtime_iam = true`, `betternat_gcp_gateway` manages the
-project-level custom role `projects/PROJECT_ID/roles/betterNATRuntime` and
-adds an IAM binding for:
+When `manage_runtime_iam = true`, `betternat_gcp_gateway` manages a
+project-level custom role and adds an IAM binding for:
 
 ```text
 serviceAccount:SERVICE_ACCOUNT_EMAIL
@@ -198,6 +197,12 @@ serviceAccount:SERVICE_ACCOUNT_EMAIL
 Use this only when the Terraform execution identity is intentionally allowed to
 manage project custom roles and project IAM policy bindings. Leave
 `manage_runtime_iam = false` when an infra-admin stack owns IAM.
+
+By default, the provider derives `runtime_iam_role_id` from the gateway name so
+provider-owned IAM lifecycle is isolated per gateway. Set it explicitly only
+when a project naming policy requires a different role ID. GCP keeps deleted
+custom roles in a soft-deleted state for a period after destroy; that is normal
+and the provider can recreate or undelete its own role on a later apply.
 
 When `manage_runtime_service_account = true`, the provider also creates and
 deletes the runtime service account. The Terraform execution identity then
@@ -226,16 +231,5 @@ identity then needs:
 Leave `manage_firestore_database = false` when Firestore database lifecycle is
 owned by another Terraform stack or infra-admin workflow.
 
-Current GCP limitations:
-
-- provider-owned GCP custom role and IAM binding lifecycle exists behind the
-  explicit `manage_runtime_iam` switch, but still needs live validation in the
-  GCP HA smoke,
-- provider-owned runtime service-account lifecycle exists behind
-  `manage_runtime_service_account`, but still needs live validation in the GCP
-  HA smoke,
-- provider-owned Firestore database lifecycle exists behind
-  `manage_firestore_database`, but live validation is blocked until the
-  Terraform identity has database create/delete permission or an existing
-  Firestore Native database is provided,
-- route-only GCP HA does not provide stable public egress IP failover yet.
+Current GCP limitation: route-only GCP HA does not provide stable public egress
+IP failover yet.

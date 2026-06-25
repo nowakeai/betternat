@@ -127,9 +127,10 @@ func (r *GatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Default:  stringdefault.StaticString("loxilb"),
 			},
 			"fallback_datapath_engine": schema.StringAttribute{
-				Optional: true,
-				Computed: true,
-				Default:  stringdefault.StaticString("nftables"),
+				MarkdownDescription: "Deprecated legacy compatibility field. Existing nftables code may remain temporarily for diagnostics, but BetterNAT has no supported product fallback datapath and LoxiLB readiness is required.",
+				Optional:            true,
+				Computed:            true,
+				Default:             stringdefault.StaticString("nftables"),
 			},
 			"stable_egress_ip": schema.BoolAttribute{
 				Optional: true,

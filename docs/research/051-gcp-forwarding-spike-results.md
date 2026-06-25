@@ -237,7 +237,7 @@ Proceed with a narrow GCP alpha provider resource for the verified topology:
 
 - provider-owned GCE gateway VMs,
 - `canIpForward=true`,
-- nftables masquerade startup script,
+- historical Linux forwarding startup script for substrate proof only,
 - tagged default route to the active gateway,
 - read-only status from Compute route and instance state,
 - explicit alpha documentation.

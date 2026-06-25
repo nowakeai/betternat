@@ -8,11 +8,15 @@ What should BetterNAT's observability MVP include, and how should it avoid exces
 
 ## Short Answer
 
-Current decision as of 2026-06-20:
+Current decision as of 2026-06-25:
 
-The observability MVP is now LoxiLB-first. v0 should poll LoxiLB firewall counters and conntrack state, normalize them inside `betternat-agent`, and export BetterNAT Prometheus metrics. nftables/conntrack metrics remain fallback-mode metrics. The tested LoxiLB API did not expose `/metrics`, so native LoxiLB scraping is not assumed.
+The observability MVP is now LoxiLB-first. v0 should poll LoxiLB firewall counters and conntrack state, normalize them inside `betternat-agent`, and export BetterNAT Prometheus metrics. nftables/conntrack metrics are legacy diagnostics while that code remains. The tested LoxiLB API did not expose `/metrics`, so native LoxiLB scraping is not assumed.
 
-Superseding architecture: `docs/architecture.md`.
+Superseded fallback note: BetterNAT no longer has a product fallback datapath.
+Existing nftables/nf_conntrack metrics are legacy diagnostics while the code
+remains; they are not a release or operator fallback path. Current source of
+truth: `docs/architecture.md`, `docs/spec-v0.md`, and
+`docs/research/055-no-nftables-fallback-decision.md`.
 
 Observability is one of the core product differentiators. MVP should answer:
 
@@ -422,7 +426,8 @@ v0:
 - interface and datapath metrics.
 - estimated cost total.
 - CIDR/team attribution by LoxiLB firewall counters and conntrack summaries.
-- fallback CIDR/team attribution by nftables counters when `datapath_engine = "nftables"`.
+- legacy diagnostic CIDR/team attribution by nftables counters while that code
+  remains.
 - Grafana overview dashboard.
 - `top owners` using configured CIDRs.
 

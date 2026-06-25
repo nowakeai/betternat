@@ -36,7 +36,7 @@ However, LoxiLB is still only one layer. BetterNAT's primary v0 target is a comp
 Recommendation:
 
 1. Treat LoxiLB as the default datapath target for v0 implementation.
-2. Keep nftables as the required fallback.
+2. Do not add nftables as a required or supported product fallback.
 3. Keep the product-level Terraform provider, cost calculator, security model, and observability UX as BetterNAT-owned.
 4. Do not assume LoxiLB solves generic VPC route failover, FinOps attribution, Terraform provider UX, or AWS least-privilege/security requirements out of the box.
 
@@ -171,7 +171,7 @@ Pros:
 
 - Reuses existing eBPF NAT datapath.
 - Keeps BetterNAT product differentiation.
-- Allows fallback to nftables.
+- Avoids adding a second supported datapath contract.
 
 Cons:
 
@@ -274,7 +274,7 @@ Earlier decision:
 
 Revised decision:
 
-> Use LoxiLB as the primary v0 datapath target. Keep nftables as safe fallback. The standalone AWS spikes validated generic outbound SNAT, DNS/UDP, larger response downloads, and basic EIP + `ReplaceRoute` failover for new connections.
+> Use LoxiLB as the primary v0 datapath target with no product fallback datapath. The standalone AWS spikes validated generic outbound SNAT, DNS/UDP, larger response downloads, and basic EIP + `ReplaceRoute` failover for new connections.
 
 ### HA decision
 

@@ -46,6 +46,7 @@ type GCPGatewayResourceModel struct {
 	ServiceAccountEmail         types.String `tfsdk:"service_account_email"`
 	RuntimeServiceAccountID     types.String `tfsdk:"runtime_service_account_id"`
 	ManageRuntimeServiceAccount types.Bool   `tfsdk:"manage_runtime_service_account"`
+	RuntimeIAMRoleID            types.String `tfsdk:"runtime_iam_role_id"`
 	RuntimeIAMPermissions       types.List   `tfsdk:"runtime_iam_permissions"`
 	ManageRuntimeIAM            types.Bool   `tfsdk:"manage_runtime_iam"`
 	EnableAgentHA               types.Bool   `tfsdk:"enable_agent_ha"`
@@ -79,7 +80,7 @@ func (r *GCPGatewayResource) Metadata(_ context.Context, req resource.MetadataRe
 
 func (r *GCPGatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "BetterNAT GCP alpha gateway resource. By default this manages GCE forwarding gateway VMs and a tagged default route for substrate validation. The experimental enable_agent_ha path renders BetterNAT agent bootstrap for Firestore-backed route-only HA, but live two-agent HA validation and stable public IP handover are still pending.",
+		MarkdownDescription: "BetterNAT GCP alpha gateway resource. By default this manages GCE forwarding gateway VMs and a tagged default route for substrate validation. The experimental enable_agent_ha path renders BetterNAT agent bootstrap for Firestore-backed route-only HA. GCP remains alpha until raw LoxiLB comparison, failure injection, stable public identity, capacity repair, packaging, and release-contract gates are complete.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{Computed: true},
 			"name": schema.StringAttribute{
@@ -165,13 +166,18 @@ func (r *GCPGatewayResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional:            true,
 				Computed:            true,
 				Default:             booldefault.StaticBool(false),
-				MarkdownDescription: "Experimental. When true with enable_agent_ha, the provider creates or updates a project-level BetterNAT runtime custom role and binds service_account_email to it. Leave false when IAM is managed outside this resource.",
+				MarkdownDescription: "Experimental. When true with enable_agent_ha, the provider creates or updates a project-level BetterNAT runtime custom role and binds service_account_email to it. The default role ID is derived from the gateway name. Leave false when IAM is managed outside this resource.",
+			},
+			"runtime_iam_role_id": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Project-local custom role ID used when manage_runtime_iam is true. Defaults to a gateway-name-derived role ID so provider-owned IAM lifecycle is isolated per gateway.",
 			},
 			"enable_agent_ha": schema.BoolAttribute{
 				Optional:            true,
 				Computed:            true,
 				Default:             booldefault.StaticBool(false),
-				MarkdownDescription: "Experimental. When true, renders BetterNAT agent config and cloud-init user data for GCP route-only HA using Firestore coordination. This remains a validation path until live two-agent HA evidence is complete.",
+				MarkdownDescription: "Experimental. When true, renders BetterNAT agent config and cloud-init user data for GCP route-only HA using Firestore coordination. This remains an alpha validation path until the remaining GCP release gates are complete.",
 			},
 			"betternat_version": schema.StringAttribute{
 				Optional:            true,
@@ -368,6 +374,9 @@ func gcpApplierAndInputs(ctx context.Context, model *GCPGatewayResourceModel) (g
 	if err := prepareGCPRuntimeServiceAccountPlan(model); err != nil {
 		return gcpinstall.Applier{}, gcpinstall.Inputs{}, err
 	}
+	if err := prepareGCPRuntimeIAMPlan(model); err != nil {
+		return gcpinstall.Applier{}, gcpinstall.Inputs{}, err
+	}
 	if err := prepareGCPFirestoreDatabasePlan(model); err != nil {
 		return gcpinstall.Applier{}, gcpinstall.Inputs{}, err
 	}
@@ -438,6 +447,7 @@ func applyGCPComputedPlan(model *GCPGatewayResourceModel, inputs gcpinstall.Inpu
 	model.GatewayCount = types.Int64Value(inputs.GatewayCount)
 	model.ServiceAccountEmail = types.StringValue(inputs.ServiceAccountEmail)
 	model.RuntimeServiceAccountID = types.StringValue(stringDefault(model.RuntimeServiceAccountID, ""))
+	model.RuntimeIAMRoleID = types.StringValue(stringDefault(model.RuntimeIAMRoleID, ""))
 	model.ManageRuntimeServiceAccount = types.BoolValue(boolDefault(model.ManageRuntimeServiceAccount, false))
 	model.RuntimeIAMPermissions = mustStringList(gcpinstall.RuntimeIAMPermissions())
 	model.ManageRuntimeIAM = types.BoolValue(boolDefault(model.ManageRuntimeIAM, false))

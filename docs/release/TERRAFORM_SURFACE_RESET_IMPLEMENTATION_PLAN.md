@@ -329,6 +329,8 @@ Tasks:
   binding lifecycle behind `manage_runtime_iam`.
 - [x] Add opt-in provider-owned Firestore Native database lifecycle behind
   `manage_firestore_database`.
+- [x] Live-validate provider-owned GCP runtime service-account, runtime IAM, and
+  Firestore database lifecycle.
 - [x] Add GCP startup-script and model tests.
 - [x] Add read-only GCP HA preflight for APIs, Firestore database presence, and
   IAM permissions.
@@ -581,7 +583,8 @@ Append dated notes here during implementation.
 - Added `scripts/gcp-ha-preflight.sh` for read-only GCP HA preflight.
   `smooth-calling-490406-d9` now passes preflight for enabled APIs, Firestore
   database presence, database lifecycle permissions, and runtime custom-role
-  lifecycle permissions. Terraform apply validation is still pending.
+  lifecycle permissions. Terraform apply/destroy validation passed in
+  `docs/research/058-gcp-provider-lifecycle-results.md`.
 - Strengthened HA route-mutation fencing in code: activation, active ownership
   repair, and proactive handover now verify the current lease generation before
   and after cloud mutations. Local tests cover stopping route repair/handover
@@ -678,3 +681,15 @@ Append dated notes here during implementation.
   systemd logs. Terraform destroy, bucket deletion, manual cleanup of
   run-scoped Firestore handover history, and residual scan passed. Evidence is
   recorded in `docs/research/057-gcp-loxilb-restart-results.md`.
+- Ran disposable GCP provider-owned lifecycle validation in
+  `smooth-calling-490406-d9`. The first run
+  `bnat-gcp-lc-20260625104016` proved Firestore database, runtime service
+  account, runtime custom role, IAM binding, gateway, route, destroy, bucket
+  cleanup, and residual scan behavior, but exposed that the fixed
+  `betterNATRuntime` role ID was unsafe for provider-owned lifecycle. The
+  provider now derives and exposes per-gateway `runtime_iam_role_id`. The
+  follow-up run `bnat-gcp-lc2-20260625105420` validated the isolated role
+  `bnatGcpLc220260625105420Runtime`, Firestore database lifecycle, runtime
+  service-account lifecycle, IAM binding cleanup, database deletion, bucket
+  deletion, and residual scan. Evidence is recorded in
+  `docs/research/058-gcp-provider-lifecycle-results.md`.

@@ -187,6 +187,32 @@ func cleanupGCPRuntimeIAM(ctx context.Context, model *GCPGatewayResourceModel) e
 	return manager.Cleanup(ctx, inputs)
 }
 
+func prepareGCPRuntimeIAMPlan(model *GCPGatewayResourceModel) error {
+	if !boolDefault(model.ManageRuntimeIAM, false) {
+		if model.RuntimeIAMRoleID.IsNull() || model.RuntimeIAMRoleID.IsUnknown() {
+			model.RuntimeIAMRoleID = types.StringValue("")
+		}
+		return nil
+	}
+	if !boolDefault(model.EnableAgentHA, false) {
+		return fmt.Errorf("manage_runtime_iam requires enable_agent_ha")
+	}
+	roleID := stringDefault(model.RuntimeIAMRoleID, "")
+	if roleID == "" {
+		roleID = defaultGCPRuntimeIAMRoleID(model.Name.ValueString())
+	}
+	inputs := gcpinstall.RuntimeIAMInputs{
+		ProjectID:           model.ProjectID.ValueString(),
+		ServiceAccountEmail: stringDefault(model.ServiceAccountEmail, ""),
+		RoleID:              roleID,
+	}
+	if err := inputs.Validate(); err != nil {
+		return err
+	}
+	model.RuntimeIAMRoleID = types.StringValue(roleID)
+	return nil
+}
+
 func gcpRuntimeIAMManagerAndInputs(ctx context.Context, model *GCPGatewayResourceModel) (gcpinstall.RuntimeIAMManager, gcpinstall.RuntimeIAMInputs, error) {
 	inputs, err := gcpRuntimeIAMInputs(model)
 	if err != nil {
@@ -209,6 +235,7 @@ func gcpRuntimeIAMInputs(model *GCPGatewayResourceModel) (gcpinstall.RuntimeIAMI
 	inputs := gcpinstall.RuntimeIAMInputs{
 		ProjectID:           model.ProjectID.ValueString(),
 		ServiceAccountEmail: stringDefault(model.ServiceAccountEmail, ""),
+		RoleID:              stringDefault(model.RuntimeIAMRoleID, ""),
 	}
 	if err := inputs.Validate(); err != nil {
 		return gcpinstall.RuntimeIAMInputs{}, err
@@ -218,6 +245,52 @@ func gcpRuntimeIAMInputs(model *GCPGatewayResourceModel) (gcpinstall.RuntimeIAMI
 
 func defaultGCPRuntimeServiceAccountID(name string) string {
 	return sanitizeGCPServiceAccountID(name + "-runtime")
+}
+
+func defaultGCPRuntimeIAMRoleID(name string) string {
+	return sanitizeGCPIAMRoleID(name)
+}
+
+func sanitizeGCPIAMRoleID(value string) string {
+	out := make([]rune, 0, len(value))
+	capNext := false
+	for _, r := range value {
+		if r >= 'A' && r <= 'Z' {
+			r += 'a' - 'A'
+		}
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			if len(out) == 0 && r >= '0' && r <= '9' {
+				out = append(out, 'b')
+			}
+			if capNext && r >= 'a' && r <= 'z' {
+				r += 'A' - 'a'
+			}
+			out = append(out, r)
+			capNext = false
+			continue
+		}
+		capNext = len(out) > 0
+	}
+	if len(out) == 0 {
+		out = []rune("betterNAT")
+	}
+	suffix := []rune("Runtime")
+	if len(out) > 64 {
+		out = out[:64]
+	}
+	if len(out) < len(suffix) || string(out[len(out)-len(suffix):]) != string(suffix) {
+		maxPrefix := 64 - len(suffix)
+		if len(out) > maxPrefix {
+			out = out[:maxPrefix]
+		}
+		out = append(out, suffix...)
+	}
+	if len(out) < 3 {
+		for len(out) < 3 {
+			out = append(out, '0')
+		}
+	}
+	return string(out)
 }
 
 func sanitizeGCPServiceAccountID(value string) string {

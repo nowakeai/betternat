@@ -139,12 +139,15 @@ print(json.dumps({
 PY
 )"
   firestore_response="$tmp_dir/firestore-response.json"
-  if curl -fsS \
+  firestore_status="$tmp_dir/firestore-status.txt"
+  if curl -sS \
     -H "Authorization: Bearer ${token}" \
     -H "Content-Type: application/json" \
     -X POST \
     "https://firestore.googleapis.com/v1/projects/${project_id}/databases/${database_id}/documents:runQuery" \
-    -d "$request_json" >"$firestore_response"; then
+    -d "$request_json" \
+    -w '%{http_code}' \
+    -o "$firestore_response" >"$firestore_status" && [[ "$(cat "$firestore_status")" == "200" ]]; then
     RUN_NAME="$run_name" RESPONSE_FILE="$firestore_response" OUTPUT_FILE="$firestore_records_file" python3 - <<'PY'
 import json
 import os
@@ -168,6 +171,9 @@ print(f"  firestore records: {len(records)}")
 for record in records:
     print("    " + record["name"])
 PY
+  elif [[ -s "$firestore_status" && "$(cat "$firestore_status")" == "404" ]]; then
+    echo "  firestore database absent: $database_id"
+    echo "  firestore records: 0"
   else
     echo "  warning: failed to scan Firestore records" >&2
   fi

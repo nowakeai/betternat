@@ -144,8 +144,9 @@ Reasons:
 User-facing docs should say:
 
 - BetterNAT uses LoxiLB/eBPF as the primary datapath.
-- BetterNAT also keeps nftables/nf_conntrack as a fallback.
+- BetterNAT has no product fallback datapath; existing nftables/nf_conntrack
+  code is legacy-only while retained.
 - The alpha bootstrap applies minimal gateway sysctls.
-- `nf_conntrack_max` is a fallback/compatibility setting when available.
+- `nf_conntrack_max` is a legacy/compatibility setting when available.
 - LoxiLB conntrack should be inspected through BetterNAT metrics or `loxicmd get conntrack -o json`.
 - High-volume tuning will be benchmark-backed in a later release.

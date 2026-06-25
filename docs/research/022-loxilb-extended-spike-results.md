@@ -308,5 +308,6 @@ Next implementation step:
 Build a local `datapath.Engine` interface and implement:
 
 1. `loxilb` engine: rule apply/read/reconcile using `loxicmd` or API.
-2. `nftables` engine: fallback masquerade/SNAT.
+2. legacy `nftables` diagnostics only while retained; do not use them as a
+   product fallback.
 3. `metrics` exporter: normalize LoxiLB firewall/conntrack data into BetterNAT metrics.

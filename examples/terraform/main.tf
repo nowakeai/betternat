@@ -39,13 +39,12 @@ resource "betternat_aws_gateway" "egress" {
 
   private_cidrs = ["10.0.0.0/8"]
 
-  datapath_engine          = "loxilb"
-  fallback_datapath_engine = "nftables"
-  betternat_version        = "v0.1.0"
-  stable_egress_ip         = true
-  ha_profile               = "default"
-  prometheus_enabled       = true
-  rollback_on_destroy      = true
+  datapath_engine     = "loxilb"
+  betternat_version   = "v0.1.0"
+  stable_egress_ip    = true
+  ha_profile          = "default"
+  prometheus_enabled  = true
+  rollback_on_destroy = true
 }
 
 output "agent_config_hash" {

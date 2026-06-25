@@ -201,6 +201,8 @@ sys.exit(1)
 PY
   then
     echo "firestore database selected: $database_id"
+  elif [[ "${BETTERNAT_GCP_MANAGE_FIRESTORE_DATABASE:-0}" == "1" ]]; then
+    echo "firestore database will be created by provider: $database_id"
   else
     echo "firestore database $database_id not found" >&2
     exit 1

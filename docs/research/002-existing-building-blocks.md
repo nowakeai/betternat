@@ -36,8 +36,8 @@ High-performance alternatives like VPP are real, but they make the appliance a d
 
 | Component | What It Gives Us | Fit | Recommendation |
 | --- | --- | --- | --- |
-| nftables + nf_conntrack | Kernel NAT, masquerade, stateful conntrack | Excellent baseline | Use for MVP datapath |
-| iptables + nf_conntrack | Older but widely known kernel NAT | Good fallback | Support only if needed |
+| nftables + nf_conntrack | Kernel NAT, masquerade, stateful conntrack | Historical baseline | Legacy diagnostics only while retained |
+| iptables + nf_conntrack | Older but widely known kernel NAT | Historical alternative | Do not add unless a new architecture decision supersedes LoxiLB |
 | conntrack-tools / conntrackd | Conntrack inspection and HA state sync | Useful for HA experiments | Optional; do not require initially |
 | Keepalived / VRRP | Classic virtual IP failover | Weak fit on AWS VPC | Borrow health-check ideas, not VRRP design |
 | AWS EIP / route / ENI APIs | Cloud-native failover primitive | Required | Implement directly in Go agent |

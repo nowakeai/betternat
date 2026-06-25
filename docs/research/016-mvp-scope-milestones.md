@@ -136,8 +136,8 @@ LoxiLB is now the leading datapath candidate after the M-1 standalone AWS egress
 datapath_engine = "loxilb"
 ```
 
-nftables is no longer a mandatory fallback. LoxiLB packaging, observability, HA,
-and benchmark work are product gates.
+nftables is no longer part of the product datapath contract. LoxiLB packaging,
+observability, HA, and benchmark work are product gates.
 
 ### HA
 
@@ -559,8 +559,9 @@ Build v0 as an AWS-first, Terraform-provider-first, route-failover NAT appliance
 
 Current default:
 
-- nftables/nf_conntrack remains the safe fallback.
-- LoxiLB gets an M-1 spike before finalizing the v0 datapath.
+- LoxiLB is the supported datapath.
+- There is no product fallback datapath; existing nftables/nf_conntrack code is
+  legacy-only while retained.
 - self-built eBPF NAT and VPP remain deferred.
 
 The fastest credible path is:

@@ -56,7 +56,9 @@ Recommended BetterNAT action:
 
 - create a Packer-based AMI build path,
 - publish arm64 and x86_64 variants,
-- preinstall LoxiLB, `betternat-agent`, fallback nftables dependencies, SSM agent, diagnostics tools, and systemd units,
+- preinstall LoxiLB, `betternat-agent`, SSM agent, diagnostics tools, and
+  systemd units; legacy nftables tools may remain only as diagnostics while
+  that code is phased out,
 - keep cloud-init limited to small runtime config.
 
 ### 2. Simple Runtime Config Contract
@@ -91,7 +93,9 @@ fck-nat exposes useful production knobs:
 - IPv4 forwarding,
 - reverse path filter disable.
 
-Even with LoxiLB as the primary datapath, BetterNAT still needs Linux forwarding and conntrack visibility for fallback and diagnostics.
+Even with LoxiLB as the supported datapath, BetterNAT still needs Linux
+forwarding. Linux conntrack visibility is useful for host-networking and legacy
+diagnostics while retained, but it is not a product fallback path.
 
 Recommended BetterNAT action:
 

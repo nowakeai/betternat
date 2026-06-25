@@ -170,6 +170,8 @@ Capture:
 - plan summary,
 - `betternat_gcp_gateway.egress.agent_config_hash`,
 - `betternat_gcp_gateway.egress.route_target`,
+- `betternat_gcp_gateway.egress.runtime_iam_role_id` when
+  `manage_runtime_iam = true`,
 - gateway instance names,
 - service account email,
 - route name.
@@ -407,6 +409,7 @@ Pass condition:
 - no BetterNAT routes remain,
 - no BetterNAT firewall rules remain,
 - provider-owned service account and IAM bindings are gone,
+- provider-owned custom role is deleted or in GCP soft-deleted state,
 - provider-owned Firestore database is gone, or existing database has no
   BetterNAT records for the run.
 

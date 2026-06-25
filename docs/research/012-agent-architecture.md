@@ -30,7 +30,7 @@ It should own:
 - cloud failover operations through official SDKs,
 - route/EIP verification,
 - LoxiLB health and rule reconciliation,
-- nftables/sysctl fallback health,
+- legacy nftables/sysctl diagnostics while retained,
 - optional eBPF flow accounting,
 - Prometheus metrics,
 - local doctor API.
@@ -114,7 +114,6 @@ local:
 
 datapath:
   mode: loxilb
-  fallback_mode: nftables
   allowed_private_cidrs:
     - 10.0.0.0/8
   loxilb:

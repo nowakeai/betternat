@@ -10,6 +10,11 @@ Can BetterNAT's Terraform provider fit into an existing AWS networking module so
 
 Yes.
 
+Current decision note: this workflow research predates the no-fallback product
+decision. Module examples below should not introduce `fallback_engine` or
+`fallback_datapath_engine`; current BetterNAT release gates require LoxiLB.
+See `docs/research/055-no-nftables-fallback-decision.md`.
+
 The referenced `devops-tf` AWS networking module is a good target for BetterNAT UX because NAT is already hidden behind one module-level switch:
 
 ```hcl
@@ -202,7 +207,6 @@ variable "betternat" {
     ami_id           = optional(string)
     stable_egress_ip = optional(bool, true)
     datapath_engine  = optional(string, "loxilb")
-    fallback_engine  = optional(string, "nftables")
     prometheus       = optional(bool, true)
     rollback_on_destroy = optional(bool, true)
   })
@@ -271,7 +275,6 @@ resource "betternat_gateway" "main" {
   ami_id                    = try(var.betternat.ami_id, null)
   stable_egress_ip          = try(var.betternat.stable_egress_ip, true)
   datapath_engine           = try(var.betternat.datapath_engine, "loxilb")
-  fallback_datapath_engine  = try(var.betternat.fallback_engine, "nftables")
   prometheus_enabled        = try(var.betternat.prometheus, true)
   rollback_on_destroy       = try(var.betternat.rollback_on_destroy, true)
 

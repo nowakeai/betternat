@@ -11,7 +11,7 @@ import (
 	"github.com/nowakeai/betternat/internal/config"
 )
 
-func TestGCPInputsDefaultToForwardingStartupScript(t *testing.T) {
+func TestGCPInputsDefaultToLegacySubstrateStartupScript(t *testing.T) {
 	model := baseGCPGatewayModel()
 	privateCIDRs := []string{"10.91.0.0/24"}
 
@@ -47,7 +47,7 @@ func TestGCPInputsDefaultToForwardingStartupScript(t *testing.T) {
 		t.Fatalf("runtime iam permissions missing route/firestore actions: %#v", perms)
 	}
 	if !strings.Contains(model.StartupScript.ValueString(), "nft add rule ip nat postrouting ip saddr 10.91.0.0/24 masquerade") {
-		t.Fatalf("default path should keep nftables forwarding startup script: %s", model.StartupScript.ValueString())
+		t.Fatalf("default substrate path should keep legacy forwarding startup script: %s", model.StartupScript.ValueString())
 	}
 }
 
@@ -234,6 +234,9 @@ func TestGCPRuntimeIAMInputsUseRuntimeServiceAccount(t *testing.T) {
 	model.ManageRuntimeIAM = types.BoolValue(true)
 	model.ServiceAccountEmail = types.StringValue("betternat-runtime@shared-resources-alt.iam.gserviceaccount.com")
 
+	if err := prepareGCPRuntimeIAMPlan(&model); err != nil {
+		t.Fatalf("prepare runtime iam: %v", err)
+	}
 	inputs, err := gcpRuntimeIAMInputs(&model)
 	if err != nil {
 		t.Fatalf("runtime iam inputs: %v", err)
@@ -243,6 +246,42 @@ func TestGCPRuntimeIAMInputsUseRuntimeServiceAccount(t *testing.T) {
 	}
 	if inputs.ServiceAccountEmail != "betternat-runtime@shared-resources-alt.iam.gserviceaccount.com" {
 		t.Fatalf("unexpected service account: %s", inputs.ServiceAccountEmail)
+	}
+	if inputs.RoleID != "bnatGcpRuntime" {
+		t.Fatalf("unexpected role id: %s", inputs.RoleID)
+	}
+}
+
+func TestGCPRuntimeIAMInputsUseExplicitRoleID(t *testing.T) {
+	model := baseGCPGatewayModel()
+	model.EnableAgentHA = types.BoolValue(true)
+	model.ManageRuntimeIAM = types.BoolValue(true)
+	model.ServiceAccountEmail = types.StringValue("betternat-runtime@shared-resources-alt.iam.gserviceaccount.com")
+	model.RuntimeIAMRoleID = types.StringValue("customBetterNATRuntime")
+
+	if err := prepareGCPRuntimeIAMPlan(&model); err != nil {
+		t.Fatalf("prepare runtime iam: %v", err)
+	}
+	inputs, err := gcpRuntimeIAMInputs(&model)
+	if err != nil {
+		t.Fatalf("runtime iam inputs: %v", err)
+	}
+	if inputs.RoleID != "customBetterNATRuntime" {
+		t.Fatalf("unexpected role id: %s", inputs.RoleID)
+	}
+}
+
+func TestSanitizeGCPIAMRoleID(t *testing.T) {
+	cases := map[string]string{
+		"bnat-gcp": "bnatGcpRuntime",
+		"123":      "b123Runtime",
+		"---":      "betterNATRuntime",
+		"prod.egress.gateway.with.a.very.long.name.that.must.be.trimmed": "prodEgressGatewayWithAVeryLongNameThatMustBeTrimmedRuntime",
+	}
+	for input, want := range cases {
+		if got := defaultGCPRuntimeIAMRoleID(input); got != want {
+			t.Fatalf("default role id for %q = %q, want %q", input, got, want)
+		}
 	}
 }
 
@@ -324,6 +363,7 @@ func baseGCPGatewayModel() GCPGatewayResourceModel {
 		ServiceAccountEmail:         types.StringNull(),
 		RuntimeServiceAccountID:     types.StringNull(),
 		ManageRuntimeServiceAccount: types.BoolNull(),
+		RuntimeIAMRoleID:            types.StringNull(),
 		ManageRuntimeIAM:            types.BoolNull(),
 		EnableAgentHA:               types.BoolNull(),
 		FirestoreDatabaseID:         types.StringNull(),

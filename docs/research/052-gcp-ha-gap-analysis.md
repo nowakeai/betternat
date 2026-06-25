@@ -627,9 +627,9 @@ runtime service account when `manage_runtime_service_account = true`, so live
 smoke does not depend on the broad and environment-specific Compute Engine
 default service account.
 The provider also exposes the runtime permission contract as computed
-`runtime_iam_permissions`. It can manage the project-level BetterNAT runtime
-custom role and service-account binding when `manage_runtime_iam = true`; that
-IAM lifecycle is still pending live validation in the GCP HA smoke.
+`runtime_iam_permissions`. It can manage a per-gateway runtime custom role and
+service-account binding when `manage_runtime_iam = true`; live lifecycle
+validation passed in `docs/research/058-gcp-provider-lifecycle-results.md`.
 
 ### 10. Agent Packaging And Bootstrap
 
@@ -696,14 +696,12 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
   custom roles.
 - [x] Provider has opt-in runtime IAM custom-role and binding lifecycle behind
   `manage_runtime_iam`.
-- [ ] Live `manage_runtime_iam` validation. The `smooth-calling-490406-d9`
-  preflight has the required custom-role lifecycle permissions; Terraform apply
-  validation is still pending.
+- [x] Live `manage_runtime_iam` validation passed with per-gateway role ID in
+  `docs/research/058-gcp-provider-lifecycle-results.md`.
 - [x] Provider has opt-in Firestore Native database lifecycle behind
   `manage_firestore_database`.
-- [ ] Live `manage_firestore_database` validation. The `smooth-calling-490406-d9`
-  preflight has database create/delete permission and a manually created
-  `(default)` database; provider-owned database lifecycle apply is still pending.
+- [x] Live `manage_firestore_database` validation passed in
+  `docs/research/058-gcp-provider-lifecycle-results.md`.
 - [x] Agent on GCE mutates routes only after lease verification in live
   validation. See `docs/research/054-gcp-agent-ha-smoke-results.md`.
 - [x] GCP `cloud.Provider` route replace/describe implementation exists for
@@ -750,10 +748,9 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
 
 ### P2: Production Fit
 
-- Least-privilege IAM documented and tested. The current implementation can
-  attach an explicit runtime service account, exposes the runtime permission
-  contract, and has opt-in provider-owned service-account, custom role, and IAM
-  binding lifecycle. Live GCP validation is still pending.
+- Least-privilege IAM documented and tested. Provider-owned service account,
+  per-gateway custom role, IAM binding, and Firestore database lifecycle have
+  live GCP validation.
 - Multi-zone behavior documented and tested.
 - GKE/private-node install path tested in a disposable project.
 - Observability and support bundle include GCP-specific HA evidence. Local live

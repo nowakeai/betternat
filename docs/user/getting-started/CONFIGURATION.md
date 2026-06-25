@@ -210,17 +210,19 @@ data "betternat_gcp_gateway_status" "egress" {
 ## GCP Alpha Resource
 
 `betternat_gcp_gateway` is an alpha resource for disposable GCP validation.
-It manages provider-owned GCE gateway VMs with `canIpForward=true`, an nftables
-masquerade startup script, and one tagged default route to the active gateway.
+It manages provider-owned GCE gateway VMs with `canIpForward=true`, LoxiLB
+agent HA bootstrap when enabled, and one tagged default route to the active
+gateway.
 It is not yet a GCP product-parity HA release. BetterNAT's HA value over a raw
 LoxiLB appliance requires live agent-owned lease fencing, route mutation,
 passive failover, proactive handover, observability, and rollback evidence.
 
-The runtime now has an implementation path for Firestore-backed lease
-coordination and GCP tagged-route mutation, but it has not yet passed live GCE
-HA validation. Treat the resource as alpha until active/passive failover,
-proactive handover, LoxiLB-on-GCE, GKE migration safety, IAM, and observability
-gates are complete.
+The runtime now has live evidence for Firestore-backed lease coordination,
+GCP tagged-route mutation, passive failover, proactive handover, LoxiLB-on-GCE
+restart replay, support bundles, and provider-owned lifecycle cleanup. Treat
+the resource as alpha until raw LoxiLB comparison, failure injection,
+protocol-level failover coverage, GKE migration safety, stable public identity,
+capacity repair, packaging, and release-contract gates are complete.
 
 Minimal shape:
 
@@ -281,8 +283,9 @@ The required permission list is exposed as computed
 `runtime_iam_permissions`; see [IAM Policy](../reference/IAM_POLICY.md#gcp-alpha-runtime-service-account).
 Set `manage_runtime_iam = true` to let this resource create or update the
 project-level BetterNAT runtime custom role and bind `service_account_email` to
-it. Leave it false when IAM is managed by a separate Terraform stack or an
-infra-admin workflow.
+it. The default custom role ID is derived from the gateway name and exposed as
+`runtime_iam_role_id`. Leave it false when IAM is managed by a separate
+Terraform stack or an infra-admin workflow.
 Set `manage_firestore_database = true` only in disposable validation projects
 where this resource should create and delete the Firestore Native database used
 for HA coordination. Leave it false when the database is created by a platform
