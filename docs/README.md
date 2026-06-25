@@ -143,6 +143,7 @@ Read these first when revisiting product or architecture direction:
 - [research/061-gcp-stable-public-identity-decision.md](research/061-gcp-stable-public-identity-decision.md) — Decision that GCP alpha remains route-only/non-stable until access-config handover is designed and live-validated.
 - [research/062-gcp-capacity-repair-decision.md](research/062-gcp-capacity-repair-decision.md) — Decision that GCP alpha may use unmanaged VMs, while GA should use MIG-backed capacity repair unless a later ADR changes that direction.
 - [research/063-gcp-mig-stable-ip-results.md](research/063-gcp-mig-stable-ip-results.md) — Live GCP combined MIG capacity repair and static external IPv4 handover validation, including Private Google Access and IAM findings.
+- [research/064-gcp-stable-ip-protocol-results.md](research/064-gcp-stable-ip-protocol-results.md) — Live GCP private-client stable public IP protocol validation, proactive handover blocker, SSH harness notes, and cleanup evidence.
 
 ## Supporting Research
 

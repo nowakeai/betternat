@@ -16,9 +16,9 @@ Disposable GCP validation passed for the first combined GCP GA-readiness slice:
   handover history cleanup.
 
 This validates the implementation direction, but it does not close every GCP GA
-gate. SSH/IAP access was unavailable in this project, so private-client protocol
-checks were not rerun in this pass. Earlier route-only protocol evidence remains
-in `docs/research/059-gcp-protocol-failover-results.md`.
+gate. A later run in `docs/research/064-gcp-stable-ip-protocol-results.md`
+validated private-client stable source-IP continuity during passive active loss
+and found that proactive stable-IP handover still needs hardening.
 
 ## Environment
 
@@ -114,8 +114,8 @@ GCP residual scan passed
 
 ## Remaining Gaps
 
-- Rerun private-client TCP/HTTPS/UDP/download protocol checks with stable public
-  identity once a reliable operator access path is available.
+- Harden proactive stable-IP handover after transient Compute operation polling
+  failures and partial detach/attach states.
 - Add an automated disposable script for combined MIG plus stable-IP validation.
 - Decide whether provider-owned GCP subnet/module code should enable Private
   Google Access by default for stable public identity mode.

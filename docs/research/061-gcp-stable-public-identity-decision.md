@@ -32,13 +32,17 @@ contract for GCP: `ha.public_identity.mode="shared_eip"` uses
 access configs, detaches the address from the previous instance when needed,
 and adds it to the target gateway access config. Live validation in
 `docs/research/063-gcp-mig-stable-ip-results.md` proved takeover during active
-gateway deletion, but also proved two required prerequisites: the gateway subnet
-needs Private Google Access or an equivalent private Google API path, and the
-runtime service account needs `compute.addresses.use` plus
-`compute.subnetworks.useExternalIp`. A production design still needs to prove
-at least:
+gateway deletion, and
+`docs/research/064-gcp-stable-ip-protocol-results.md` proved private-client
+source-IP continuity during passive active loss. The runs also proved two
+required prerequisites: the gateway subnet needs Private Google Access or an
+equivalent private Google API path, and the runtime service account needs
+`compute.addresses.use` plus `compute.subnetworks.useExternalIp`. A production
+design still needs to prove at least:
 
-- source-IP continuity for private-client protocol checks after handover,
+- proactive stable-IP handover success under private-client protocol probe,
+- retry/recovery behavior when Compute operation polling resets during static
+  address detach or attach,
 - interaction with route delete/insert because GCP route replacement is not
   atomic,
 - behavior when detach succeeds but attach fails,
@@ -57,8 +61,8 @@ For GCP alpha:
 - `betternat status` and `doctor --live` must report route-only status rather
   than pretending a shared public identity exists.
 - experimental support exists behind `stable_public_identity_address_name`, but
-  it must not be marketed as GA until protocol checks, documentation, and
-  cleanup semantics are complete.
+  it must not be marketed as GA until proactive handover, failure recovery,
+  documentation, and cleanup semantics are complete.
 
 For GCP GA:
 
@@ -76,3 +80,5 @@ For GCP GA:
   `docs/research/059-gcp-protocol-failover-results.md`
 - Live MIG plus static IP handover evidence:
   `docs/research/063-gcp-mig-stable-ip-results.md`
+- Live stable IP private-client protocol evidence:
+  `docs/research/064-gcp-stable-ip-protocol-results.md`
