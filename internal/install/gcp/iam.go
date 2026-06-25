@@ -1,10 +1,13 @@
 package gcp
 
 // RuntimeIAMPermissions returns the permissions required by betternat-agent
-// for the experimental GCP route-only HA path.
+// for the experimental GCP HA path.
 func RuntimeIAMPermissions() []string {
 	return []string{
+		"compute.addresses.get",
 		"compute.globalOperations.get",
+		"compute.instances.addAccessConfig",
+		"compute.instances.deleteAccessConfig",
 		"compute.instances.get",
 		"compute.instances.use",
 		"compute.networks.get",
@@ -12,6 +15,7 @@ func RuntimeIAMPermissions() []string {
 		"compute.routes.create",
 		"compute.routes.delete",
 		"compute.routes.get",
+		"compute.zoneOperations.get",
 		"datastore.databases.get",
 		"datastore.databases.getMetadata",
 		"datastore.databases.list",

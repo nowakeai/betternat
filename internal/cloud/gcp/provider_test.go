@@ -182,20 +182,81 @@ func TestDescribeRouteRejectsDestinationMismatch(t *testing.T) {
 	}
 }
 
-func TestSharedPublicIdentityIsUnsupported(t *testing.T) {
-	provider := NewFromAPI(testConfig(), &fakeRoutes{}, &fakeOperations{})
+func TestAssociateEIPMovesStaticAddressAccessConfig(t *testing.T) {
+	instances := &fakeInstances{instances: map[string]*compute.Instance{
+		"prod-gw-a": instanceWithAccessConfig("prod-gw-a", "203.0.113.9"),
+		"prod-gw-b": instanceWithAccessConfig("prod-gw-b", "198.51.100.20"),
+	}}
+	addresses := &fakeAddresses{address: &compute.Address{
+		Name:    "bnat-static-egress",
+		Address: "203.0.113.10",
+		Users:   []string{"https://www.googleapis.com/compute/v1/projects/test-project/zones/us-west2-a/instances/prod-gw-a"},
+	}}
+	zoneOps := &fakeZoneOperations{}
+	provider := NewFromAPIs(testConfig(), &fakeRoutes{}, &fakeOperations{}, zoneOps, instances, addresses)
 
-	if _, err := provider.AssociateEIP(context.Background(), "ip", "node"); err == nil {
-		t.Fatal("expected AssociateEIP to fail")
+	identity, err := provider.AssociateEIP(context.Background(), "bnat-static-egress", "prod-gw-b")
+	if err != nil {
+		t.Fatalf("associate eip: %v", err)
 	}
-	if _, err := provider.DescribePublicIdentity(context.Background(), "ip"); err == nil {
-		t.Fatal("expected DescribePublicIdentity to fail")
+	if identity.AllocationID != "bnat-static-egress" || identity.PublicIP != "203.0.113.10" || identity.InstanceID != "prod-gw-b" {
+		t.Fatalf("unexpected identity: %#v", identity)
+	}
+	wantDeletes := []string{
+		"us-west2-a/prod-gw-a/External NAT/nic0",
+		"us-west2-a/prod-gw-b/External NAT/nic0",
+	}
+	if strings.Join(instances.deletedAccessConfigs, ",") != strings.Join(wantDeletes, ",") {
+		t.Fatalf("unexpected deleted access configs: %#v", instances.deletedAccessConfigs)
+	}
+	if len(instances.addedAccessConfigs) != 1 || instances.addedAccessConfigs[0] != "us-west2-a/prod-gw-b/nic0/203.0.113.10" {
+		t.Fatalf("unexpected added access config: %#v", instances.addedAccessConfigs)
+	}
+	if got := strings.Join(zoneOps.waited, ","); got != "us-west2-a/delete-access-config-op,us-west2-a/delete-access-config-op,us-west2-a/add-access-config-op" {
+		t.Fatalf("unexpected zone operation waits: %s", got)
+	}
+}
+
+func TestAssociateEIPNoopsWhenAddressAlreadyOnTarget(t *testing.T) {
+	instances := &fakeInstances{instances: map[string]*compute.Instance{
+		"prod-gw-b": instanceWithAccessConfig("prod-gw-b", "203.0.113.10"),
+	}}
+	addresses := &fakeAddresses{address: &compute.Address{
+		Name:    "bnat-static-egress",
+		Address: "203.0.113.10",
+		Users:   []string{"https://www.googleapis.com/compute/v1/projects/test-project/zones/us-west2-a/instances/prod-gw-b"},
+	}}
+	provider := NewFromAPIs(testConfig(), &fakeRoutes{}, &fakeOperations{}, &fakeZoneOperations{}, instances, addresses)
+
+	if _, err := provider.AssociateEIP(context.Background(), "bnat-static-egress", "prod-gw-b"); err != nil {
+		t.Fatalf("associate eip: %v", err)
+	}
+	if len(instances.deletedAccessConfigs) != 0 || len(instances.addedAccessConfigs) != 0 {
+		t.Fatalf("already-attached address should not mutate access configs: deletes=%#v adds=%#v", instances.deletedAccessConfigs, instances.addedAccessConfigs)
+	}
+}
+
+func TestDescribePublicIdentityReadsStaticAddressUser(t *testing.T) {
+	addresses := &fakeAddresses{address: &compute.Address{
+		Name:    "bnat-static-egress",
+		Address: "203.0.113.10",
+		Users:   []string{"https://www.googleapis.com/compute/v1/projects/test-project/zones/us-west2-a/instances/prod-gw-a"},
+	}}
+	provider := NewFromAPIs(testConfig(), &fakeRoutes{}, &fakeOperations{}, &fakeZoneOperations{}, &fakeInstances{}, addresses)
+
+	identity, err := provider.DescribePublicIdentity(context.Background(), "bnat-static-egress")
+	if err != nil {
+		t.Fatalf("describe public identity: %v", err)
+	}
+	if identity.AllocationID != "bnat-static-egress" || identity.PublicIP != "203.0.113.10" || identity.InstanceID != "prod-gw-a" {
+		t.Fatalf("unexpected identity: %#v", identity)
 	}
 }
 
 func testConfig() Config {
 	return Config{
 		ProjectID:         "test-project",
+		Region:            "us-west2",
 		Zone:              "us-west2-a",
 		Network:           "test-vpc",
 		ClientTag:         "private-client",
@@ -255,4 +316,79 @@ func (f *fakeOperations) Get(_ context.Context, _ string, name string) (*compute
 		}}, nil
 	}
 	return &compute.Operation{Name: name, Status: "DONE"}, nil
+}
+
+type fakeZoneOperations struct {
+	waited []string
+}
+
+func (f *fakeZoneOperations) Get(_ context.Context, _ string, zone string, name string) (*compute.Operation, error) {
+	f.waited = append(f.waited, zone+"/"+name)
+	return &compute.Operation{Name: name, Status: "DONE"}, nil
+}
+
+type fakeInstances struct {
+	instances            map[string]*compute.Instance
+	deletedAccessConfigs []string
+	addedAccessConfigs   []string
+}
+
+func (f *fakeInstances) Get(_ context.Context, _ string, _ string, instanceName string) (*compute.Instance, error) {
+	if f.instances == nil {
+		return nil, errors.New("googleapi: Error 404: not found")
+	}
+	instance := f.instances[instanceName]
+	if instance == nil {
+		return nil, errors.New("googleapi: Error 404: not found")
+	}
+	return instance, nil
+}
+
+func (f *fakeInstances) DeleteAccessConfig(_ context.Context, _ string, zone string, instanceName string, accessConfigName string, networkInterface string) (*compute.Operation, error) {
+	f.deletedAccessConfigs = append(f.deletedAccessConfigs, zone+"/"+instanceName+"/"+accessConfigName+"/"+networkInterface)
+	if instance := f.instances[instanceName]; instance != nil {
+		for _, nic := range instance.NetworkInterfaces {
+			if nic.Name == networkInterface {
+				nic.AccessConfigs = nil
+			}
+		}
+	}
+	return &compute.Operation{Name: "delete-access-config-op", Status: "PENDING"}, nil
+}
+
+func (f *fakeInstances) AddAccessConfig(_ context.Context, _ string, zone string, instanceName string, networkInterface string, accessConfig *compute.AccessConfig) (*compute.Operation, error) {
+	f.addedAccessConfigs = append(f.addedAccessConfigs, zone+"/"+instanceName+"/"+networkInterface+"/"+accessConfig.NatIP)
+	if instance := f.instances[instanceName]; instance != nil {
+		for _, nic := range instance.NetworkInterfaces {
+			if nic.Name == networkInterface {
+				nic.AccessConfigs = append(nic.AccessConfigs, accessConfig)
+			}
+		}
+	}
+	return &compute.Operation{Name: "add-access-config-op", Status: "PENDING"}, nil
+}
+
+type fakeAddresses struct {
+	address *compute.Address
+}
+
+func (f *fakeAddresses) Get(context.Context, string, string, string) (*compute.Address, error) {
+	if f.address == nil {
+		return nil, errors.New("googleapi: Error 404: not found")
+	}
+	return f.address, nil
+}
+
+func instanceWithAccessConfig(name string, publicIP string) *compute.Instance {
+	return &compute.Instance{
+		Name: name,
+		NetworkInterfaces: []*compute.NetworkInterface{{
+			Name: "nic0",
+			AccessConfigs: []*compute.AccessConfig{{
+				Name:  "External NAT",
+				Type:  "ONE_TO_ONE_NAT",
+				NatIP: publicIP,
+			}},
+		}},
+	}
 }

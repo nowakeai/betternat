@@ -46,7 +46,10 @@ func TestGatewayInstanceAttachesRuntimeServiceAccount(t *testing.T) {
 func TestRuntimeIAMPermissions(t *testing.T) {
 	got := RuntimeIAMPermissions()
 	want := []string{
+		"compute.addresses.get",
 		"compute.globalOperations.get",
+		"compute.instances.addAccessConfig",
+		"compute.instances.deleteAccessConfig",
 		"compute.instances.get",
 		"compute.instances.use",
 		"compute.networks.get",
@@ -54,6 +57,7 @@ func TestRuntimeIAMPermissions(t *testing.T) {
 		"compute.routes.create",
 		"compute.routes.delete",
 		"compute.routes.get",
+		"compute.zoneOperations.get",
 		"datastore.databases.get",
 		"datastore.databases.getMetadata",
 		"datastore.databases.list",

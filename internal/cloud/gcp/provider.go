@@ -13,6 +13,7 @@ import (
 
 type Config struct {
 	ProjectID         string
+	Region            string
 	Zone              string
 	Network           string
 	ClientTag         string
@@ -30,10 +31,27 @@ type GlobalOperationAPI interface {
 	Get(ctx context.Context, projectID string, name string) (*compute.Operation, error)
 }
 
+type ZoneOperationAPI interface {
+	Get(ctx context.Context, projectID string, zone string, name string) (*compute.Operation, error)
+}
+
+type InstanceAPI interface {
+	Get(ctx context.Context, projectID string, zone string, instanceName string) (*compute.Instance, error)
+	DeleteAccessConfig(ctx context.Context, projectID string, zone string, instanceName string, accessConfigName string, networkInterface string) (*compute.Operation, error)
+	AddAccessConfig(ctx context.Context, projectID string, zone string, instanceName string, networkInterface string, accessConfig *compute.AccessConfig) (*compute.Operation, error)
+}
+
+type AddressAPI interface {
+	Get(ctx context.Context, projectID string, region string, addressName string) (*compute.Address, error)
+}
+
 type Provider struct {
-	cfg        Config
-	routes     RouteAPI
-	operations GlobalOperationAPI
+	cfg              Config
+	routes           RouteAPI
+	globalOperations GlobalOperationAPI
+	zoneOperations   ZoneOperationAPI
+	instances        InstanceAPI
+	addresses        AddressAPI
 }
 
 var _ cloud.Provider = (*Provider)(nil)
@@ -43,11 +61,22 @@ func New(ctx context.Context, cfg Config) (*Provider, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create gcp compute service: %w", err)
 	}
-	return NewFromAPI(cfg, computeRoutes{service: service}, computeGlobalOperations{service: service}), nil
+	return NewFromAPIs(cfg, computeRoutes{service: service}, computeGlobalOperations{service: service}, computeZoneOperations{service: service}, computeInstances{service: service}, computeAddresses{service: service}), nil
 }
 
 func NewFromAPI(cfg Config, routes RouteAPI, operations GlobalOperationAPI) *Provider {
-	return &Provider{cfg: cfg, routes: routes, operations: operations}
+	return NewFromAPIs(cfg, routes, operations, nil, nil, nil)
+}
+
+func NewFromAPIs(cfg Config, routes RouteAPI, globalOperations GlobalOperationAPI, zoneOperations ZoneOperationAPI, instances InstanceAPI, addresses AddressAPI) *Provider {
+	return &Provider{
+		cfg:              cfg,
+		routes:           routes,
+		globalOperations: globalOperations,
+		zoneOperations:   zoneOperations,
+		instances:        instances,
+		addresses:        addresses,
+	}
 }
 
 func (p *Provider) ReplaceRoute(ctx context.Context, target cloud.RouteTarget) error {
@@ -126,19 +155,72 @@ func (p *Provider) DescribeRoute(ctx context.Context, routeName string, destinat
 	}, nil
 }
 
-func (p *Provider) AssociateEIP(context.Context, string, string) (cloud.PublicIdentity, error) {
-	return cloud.PublicIdentity{}, fmt.Errorf("gcp route-only HA does not support shared public identity")
+func (p *Provider) AssociateEIP(ctx context.Context, allocationID string, instanceID string) (cloud.PublicIdentity, error) {
+	if err := p.validatePublicIdentity(); err != nil {
+		return cloud.PublicIdentity{}, err
+	}
+	if strings.TrimSpace(allocationID) == "" {
+		return cloud.PublicIdentity{}, fmt.Errorf("gcp static address name is required")
+	}
+	if strings.TrimSpace(instanceID) == "" {
+		return cloud.PublicIdentity{}, fmt.Errorf("target instance is required")
+	}
+	address, err := p.addresses.Get(ctx, p.cfg.ProjectID, p.cfg.Region, allocationID)
+	if err != nil {
+		return cloud.PublicIdentity{}, fmt.Errorf("gcp compute get address %q: %w", allocationID, err)
+	}
+	if strings.TrimSpace(address.Address) == "" {
+		return cloud.PublicIdentity{}, fmt.Errorf("gcp address %q has no external IP", allocationID)
+	}
+	holderInstance, holderZone := addressHolder(address.Users)
+	if holderInstance != "" && holderInstance != instanceID {
+		if err := p.deleteExternalAccessConfig(ctx, holderZone, holderInstance); err != nil {
+			return cloud.PublicIdentity{}, fmt.Errorf("detach gcp address %q from %q: %w", allocationID, holderInstance, err)
+		}
+	}
+	instance, err := p.instances.Get(ctx, p.cfg.ProjectID, p.cfg.Zone, instanceID)
+	if err != nil {
+		return cloud.PublicIdentity{}, fmt.Errorf("gcp compute get instance %q: %w", instanceID, err)
+	}
+	if err := p.removeConflictingAccessConfigs(ctx, instance, address.Address); err != nil {
+		return cloud.PublicIdentity{}, err
+	}
+	if !instanceHasPublicIP(instance, address.Address) {
+		op, err := p.instances.AddAccessConfig(ctx, p.cfg.ProjectID, p.cfg.Zone, instanceID, primaryNICName(instance), &compute.AccessConfig{
+			Name:  defaultAccessConfigName(instance),
+			Type:  "ONE_TO_ONE_NAT",
+			NatIP: address.Address,
+		})
+		if err != nil {
+			return cloud.PublicIdentity{}, fmt.Errorf("gcp compute add access config to %q: %w", instanceID, err)
+		}
+		if err := p.waitZoneOperation(ctx, p.cfg.Zone, operationName(op)); err != nil {
+			return cloud.PublicIdentity{}, fmt.Errorf("wait for gcp access config attach to %q: %w", instanceID, err)
+		}
+	}
+	return cloud.PublicIdentity{AllocationID: allocationID, PublicIP: address.Address, InstanceID: instanceID}, nil
 }
 
-func (p *Provider) DescribePublicIdentity(context.Context, string) (cloud.PublicIdentity, error) {
-	return cloud.PublicIdentity{}, fmt.Errorf("gcp route-only HA does not support shared public identity")
+func (p *Provider) DescribePublicIdentity(ctx context.Context, allocationID string) (cloud.PublicIdentity, error) {
+	if err := p.validatePublicIdentity(); err != nil {
+		return cloud.PublicIdentity{}, err
+	}
+	if strings.TrimSpace(allocationID) == "" {
+		return cloud.PublicIdentity{}, fmt.Errorf("gcp static address name is required")
+	}
+	address, err := p.addresses.Get(ctx, p.cfg.ProjectID, p.cfg.Region, allocationID)
+	if err != nil {
+		return cloud.PublicIdentity{}, fmt.Errorf("gcp compute get address %q: %w", allocationID, err)
+	}
+	instanceID, _ := addressHolder(address.Users)
+	return cloud.PublicIdentity{AllocationID: allocationID, PublicIP: address.Address, InstanceID: instanceID}, nil
 }
 
 func (p *Provider) validate() error {
 	if p.routes == nil {
 		return fmt.Errorf("gcp routes api is required")
 	}
-	if p.operations == nil {
+	if p.globalOperations == nil {
 		return fmt.Errorf("gcp global operations api is required")
 	}
 	missing := []string{}
@@ -154,6 +236,32 @@ func (p *Provider) validate() error {
 	}
 	if len(missing) > 0 {
 		return fmt.Errorf("missing required GCP cloud config: %s", strings.Join(missing, ", "))
+	}
+	return nil
+}
+
+func (p *Provider) validatePublicIdentity() error {
+	if p.instances == nil {
+		return fmt.Errorf("gcp instances api is required for stable public identity")
+	}
+	if p.addresses == nil {
+		return fmt.Errorf("gcp addresses api is required for stable public identity")
+	}
+	if p.zoneOperations == nil {
+		return fmt.Errorf("gcp zone operations api is required for stable public identity")
+	}
+	missing := []string{}
+	for name, value := range map[string]string{
+		"project_id": p.cfg.ProjectID,
+		"region":     p.cfg.Region,
+		"zone":       p.cfg.Zone,
+	} {
+		if strings.TrimSpace(value) == "" {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required GCP public identity config: %s", strings.Join(missing, ", "))
 	}
 	return nil
 }
@@ -180,7 +288,7 @@ func (p *Provider) waitGlobalOperation(ctx context.Context, name string) error {
 		poll = 2 * time.Second
 	}
 	for {
-		op, err := p.operations.Get(ctx, p.cfg.ProjectID, name)
+		op, err := p.globalOperations.Get(ctx, p.cfg.ProjectID, name)
 		if err != nil {
 			return err
 		}
@@ -191,6 +299,70 @@ func (p *Provider) waitGlobalOperation(ctx context.Context, name string) error {
 			return err
 		}
 	}
+}
+
+func (p *Provider) waitZoneOperation(ctx context.Context, zone string, name string) error {
+	if name == "" {
+		return nil
+	}
+	poll := p.cfg.OperationPollTime
+	if poll <= 0 {
+		poll = 2 * time.Second
+	}
+	for {
+		op, err := p.zoneOperations.Get(ctx, p.cfg.ProjectID, zone, name)
+		if err != nil {
+			return err
+		}
+		if op.Status == "DONE" {
+			return operationError(op)
+		}
+		if err := sleepContext(ctx, poll); err != nil {
+			return err
+		}
+	}
+}
+
+func (p *Provider) deleteExternalAccessConfig(ctx context.Context, zone string, instanceID string) error {
+	if zone == "" {
+		zone = p.cfg.Zone
+	}
+	instance, err := p.instances.Get(ctx, p.cfg.ProjectID, zone, instanceID)
+	if err != nil {
+		return err
+	}
+	for _, nic := range instance.NetworkInterfaces {
+		nicName := valueOr(nic.Name, "nic0")
+		for _, accessConfig := range nic.AccessConfigs {
+			op, err := p.instances.DeleteAccessConfig(ctx, p.cfg.ProjectID, zone, instanceID, valueOr(accessConfig.Name, "External NAT"), nicName)
+			if err != nil {
+				return err
+			}
+			if err := p.waitZoneOperation(ctx, zone, operationName(op)); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (p *Provider) removeConflictingAccessConfigs(ctx context.Context, instance *compute.Instance, publicIP string) error {
+	for _, nic := range instance.NetworkInterfaces {
+		nicName := valueOr(nic.Name, "nic0")
+		for _, accessConfig := range nic.AccessConfigs {
+			if accessConfig.NatIP == publicIP {
+				continue
+			}
+			op, err := p.instances.DeleteAccessConfig(ctx, p.cfg.ProjectID, p.cfg.Zone, instance.Name, valueOr(accessConfig.Name, "External NAT"), nicName)
+			if err != nil {
+				return fmt.Errorf("gcp compute delete conflicting access config from %q: %w", instance.Name, err)
+			}
+			if err := p.waitZoneOperation(ctx, p.cfg.Zone, operationName(op)); err != nil {
+				return fmt.Errorf("wait for gcp conflicting access config delete from %q: %w", instance.Name, err)
+			}
+		}
+	}
+	return nil
 }
 
 func operationError(op *compute.Operation) error {
@@ -261,6 +433,56 @@ func baseName(link string) string {
 	return parts[len(parts)-1]
 }
 
+func addressHolder(users []string) (string, string) {
+	for _, user := range users {
+		instance, zone := instanceAndZoneFromLink(user)
+		if instance != "" {
+			return instance, zone
+		}
+	}
+	return "", ""
+}
+
+func instanceAndZoneFromLink(link string) (string, string) {
+	parts := strings.Split(strings.TrimRight(link, "/"), "/")
+	instance := ""
+	zone := ""
+	for i, part := range parts {
+		if part == "instances" && i+1 < len(parts) {
+			instance = parts[i+1]
+		}
+		if part == "zones" && i+1 < len(parts) {
+			zone = parts[i+1]
+		}
+	}
+	return instance, zone
+}
+
+func instanceHasPublicIP(instance *compute.Instance, publicIP string) bool {
+	for _, nic := range instance.NetworkInterfaces {
+		for _, accessConfig := range nic.AccessConfigs {
+			if accessConfig.NatIP == publicIP {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func primaryNICName(instance *compute.Instance) string {
+	if len(instance.NetworkInterfaces) == 0 {
+		return "nic0"
+	}
+	return valueOr(instance.NetworkInterfaces[0].Name, "nic0")
+}
+
+func defaultAccessConfigName(instance *compute.Instance) string {
+	if len(instance.NetworkInterfaces) == 0 || len(instance.NetworkInterfaces[0].AccessConfigs) == 0 {
+		return "External NAT"
+	}
+	return valueOr(instance.NetworkInterfaces[0].AccessConfigs[0].Name, "External NAT")
+}
+
 func sleepContext(ctx context.Context, delay time.Duration) error {
 	timer := time.NewTimer(delay)
 	defer timer.Stop()
@@ -294,4 +516,43 @@ type computeGlobalOperations struct {
 
 func (o computeGlobalOperations) Get(ctx context.Context, projectID string, name string) (*compute.Operation, error) {
 	return o.service.GlobalOperations.Get(projectID, name).Context(ctx).Do()
+}
+
+type computeZoneOperations struct {
+	service *compute.Service
+}
+
+func (o computeZoneOperations) Get(ctx context.Context, projectID string, zone string, name string) (*compute.Operation, error) {
+	return o.service.ZoneOperations.Get(projectID, zone, name).Context(ctx).Do()
+}
+
+type computeInstances struct {
+	service *compute.Service
+}
+
+func (i computeInstances) Get(ctx context.Context, projectID string, zone string, instanceName string) (*compute.Instance, error) {
+	return i.service.Instances.Get(projectID, zone, instanceName).Context(ctx).Do()
+}
+
+func (i computeInstances) DeleteAccessConfig(ctx context.Context, projectID string, zone string, instanceName string, accessConfigName string, networkInterface string) (*compute.Operation, error) {
+	return i.service.Instances.DeleteAccessConfig(projectID, zone, instanceName, accessConfigName, networkInterface).Context(ctx).Do()
+}
+
+func (i computeInstances) AddAccessConfig(ctx context.Context, projectID string, zone string, instanceName string, networkInterface string, accessConfig *compute.AccessConfig) (*compute.Operation, error) {
+	return i.service.Instances.AddAccessConfig(projectID, zone, instanceName, networkInterface, accessConfig).Context(ctx).Do()
+}
+
+type computeAddresses struct {
+	service *compute.Service
+}
+
+func (a computeAddresses) Get(ctx context.Context, projectID string, region string, addressName string) (*compute.Address, error) {
+	return a.service.Addresses.Get(projectID, region, addressName).Context(ctx).Do()
+}
+
+func valueOr(value, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return value
 }

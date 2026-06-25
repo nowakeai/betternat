@@ -527,14 +527,13 @@ The current GCP resource uses per-VM public IPv4 addresses. That means failover
 changes public egress IP. For many BetterNAT users, stable egress IP is part of
 the product promise.
 
-GCP public identity options still need a separate spike:
+GCP public identity has a local implementation path, but still needs live validation:
 
 - route-only, non-stable public identity: simplest, already validated,
-- reserved external address reassignment to a gateway VM/NIC: must validate API
-  semantics and OS/SNAT behavior,
-- next-hop internal passthrough load balancer plus Cloud NAT or external
-  identity layer: different product shape, may undermine the "replace managed
-  NAT Gateway/Cloud NAT processing cost" goal,
+- reserved external address reassignment to a gateway VM/NIC: runtime/provider
+  local tests now cover access-config detach/attach and config rendering; live
+  GCE must validate source-IP continuity, failure handling, and cleanup,
+- next-hop internal passthrough load balancer plus Cloud NAT or external identity layer: different product shape,
 - no stable public identity in GCP alpha: acceptable only with explicit docs.
 
 Do not imply GCP parity with AWS stable EIP until this is proven.

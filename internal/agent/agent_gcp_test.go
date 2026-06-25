@@ -70,7 +70,21 @@ func TestValidateHAConfigRejectsGCPDynamoDBLease(t *testing.T) {
 	}
 }
 
-func TestValidateHAConfigRejectsGCPSharedPublicIdentity(t *testing.T) {
+func TestValidateHAConfigAcceptsGCPSharedPublicIdentity(t *testing.T) {
+	cfg, err := config.Load(strings.NewReader(validGCPHAConfigJSON()))
+	if err != nil {
+		t.Fatalf("load gcp config: %v", err)
+	}
+	cfg.Local.NodeID = "gce-a"
+	cfg.HA.PublicIdentity.Mode = "shared_eip"
+	cfg.HA.PublicIdentity.AllocationID = "bnat-static-egress"
+
+	if err := validateHAConfig(cfg); err != nil {
+		t.Fatalf("validate gcp public identity config: %v", err)
+	}
+}
+
+func TestValidateHAConfigRequiresGCPSharedPublicIdentityAddress(t *testing.T) {
 	cfg, err := config.Load(strings.NewReader(validGCPHAConfigJSON()))
 	if err != nil {
 		t.Fatalf("load gcp config: %v", err)
@@ -79,7 +93,7 @@ func TestValidateHAConfigRejectsGCPSharedPublicIdentity(t *testing.T) {
 	cfg.HA.PublicIdentity.Mode = "shared_eip"
 
 	err = validateHAConfig(cfg)
-	if err == nil || !strings.Contains(err.Error(), "cloud=gcp") {
-		t.Fatalf("expected gcp public identity validation error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "allocation_id") {
+		t.Fatalf("expected missing public identity address validation error, got %v", err)
 	}
 }

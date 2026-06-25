@@ -111,6 +111,41 @@ func TestGCPAgentHABootstrapRendersConfigAndUserData(t *testing.T) {
 	}
 }
 
+func TestGCPAgentHABootstrapRendersStablePublicIdentity(t *testing.T) {
+	model := baseGCPGatewayModel()
+	model.EnableAgentHA = types.BoolValue(true)
+	model.BetterNATVersion = types.StringValue("v0.1.0")
+	model.FirestoreDatabaseID = types.StringValue("(default)")
+	model.ServiceAccountEmail = types.StringValue("betternat-runtime@shared-resources-alt.iam.gserviceaccount.com")
+	model.StablePublicIdentityAddress = types.StringValue("bnat-static-egress")
+	privateCIDRs := []string{"10.91.0.0/24"}
+
+	inputs := gcpInputs(model, privateCIDRs)
+	if err := enrichGCPAgentBootstrap(&model, &inputs, privateCIDRs); err != nil {
+		t.Fatalf("enrich bootstrap: %v", err)
+	}
+
+	var cfg config.Config
+	if err := json.Unmarshal([]byte(model.AgentConfigJSON.ValueString()), &cfg); err != nil {
+		t.Fatalf("unmarshal agent config: %v", err)
+	}
+	if cfg.HA.PublicIdentity.Mode != "shared_eip" || cfg.HA.PublicIdentity.AllocationID != "bnat-static-egress" {
+		t.Fatalf("expected GCP stable public identity config: %#v", cfg.HA.PublicIdentity)
+	}
+}
+
+func TestGCPStablePublicIdentityRequiresAgentHA(t *testing.T) {
+	model := baseGCPGatewayModel()
+	model.StablePublicIdentityAddress = types.StringValue("bnat-static-egress")
+	privateCIDRs := []string{"10.91.0.0/24"}
+
+	inputs := gcpInputs(model, privateCIDRs)
+	err := enrichGCPAgentBootstrap(&model, &inputs, privateCIDRs)
+	if err == nil || !strings.Contains(err.Error(), "stable_public_identity_address_name requires enable_agent_ha") {
+		t.Fatalf("expected stable identity validation error, got %v", err)
+	}
+}
+
 func TestGCPAgentHABootstrapRequiresArtifacts(t *testing.T) {
 	model := baseGCPGatewayModel()
 	model.EnableAgentHA = types.BoolValue(true)

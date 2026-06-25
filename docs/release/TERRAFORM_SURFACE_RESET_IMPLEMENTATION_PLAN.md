@@ -466,6 +466,9 @@ Done when:
   AMI until BetterNAT AMIs exist.
 - [x] Whether GCP stable public identity is in the first alpha: no; GCP alpha
   remains route-only/non-stable.
+- [x] GCP stable public identity first implementation path: use an existing
+  regional static external address name and access-config handover; live GCE
+  validation is still required before GA.
 - [ ] Whether GCP lease backend is Firestore or GCS generation preconditions.
 - [ ] Provider version number for the surface reset.
 - [ ] Module versioning policy while provider and modules are released from
@@ -744,6 +747,14 @@ Append dated notes here during implementation.
   `expires_at`, while the current fenced owner can still renew or transfer.
   Local Firestore decision tests cover acquire, renew, and transfer boundaries;
   live GCE clock-skew injection remains open.
+- Added the first GCP stable-public-identity implementation slice. The runtime
+  GCP cloud provider can move an existing regional static external IPv4 address
+  by deleting conflicting access configs and adding the static address access
+  config to the target instance. `betternat_gcp_gateway` can now render this
+  through `stable_public_identity_address_name` when `enable_agent_ha=true`.
+  Local tests cover detach/attach ordering, describe behavior, IAM permission
+  expansion, and rendered agent config. Live GCE stable-IP handover validation
+  and static-address lifecycle management remain open.
 - Re-locked the global no-nftables-fallback decision across architecture,
   development, testing, and historical research docs. This is a BetterNAT-wide
   product rule, not a GCP exception: LoxiLB is the supported datapath, existing

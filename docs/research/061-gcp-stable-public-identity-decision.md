@@ -6,10 +6,11 @@ Date: 2026-06-25
 
 GCP alpha remains route-only and non-stable for public egress identity.
 
-BetterNAT must not claim stable GCP public identity until a separate
-access-config handover design is implemented and live-validated. The current
-GCP agent config rejects `ha.public_identity.mode` for `cloud=gcp`, and GCP
-doctor reports route-only public identity status.
+BetterNAT must not claim stable GCP public identity until access-config
+handover is live-validated. The runtime now has local support for using an
+existing regional static external IPv4 address as a shared public identity, but
+the mode is not validated on live GCE yet and the provider does not create or
+delete the static address.
 
 ## Rationale
 
@@ -25,9 +26,12 @@ and adding a new one. The `gcloud compute instances delete-access-config`
 reference states that deleting the access config removes the external IP from
 the VM interface and traffic to that external IP will no longer reach that VM.
 
-Those primitives may be usable for a future BetterNAT stable-public-identity
-mode, but they are not the current route-only HA implementation. A production
-design needs to prove at least:
+BetterNAT now maps those primitives to its existing shared public identity
+contract for GCP: `ha.public_identity.mode="shared_eip"` uses
+`allocation_id` as the regional static address name, removes conflicting
+access configs, detaches the address from the previous instance when needed,
+and adds it to the target gateway access config. A production design still
+needs to prove at least:
 
 - exact Compute API calls and IAM permissions for detach/attach access config,
 - operation ordering with the Firestore lease generation,
@@ -49,6 +53,10 @@ For GCP alpha:
 - stable allowlist semantics are unsupported,
 - `betternat status` and `doctor --live` must report route-only status rather
   than pretending a shared public identity exists.
+- experimental local support exists behind
+  `stable_public_identity_address_name`, but it must not be marketed as
+  validated until a live GCE handover run proves source-IP continuity and
+  cleanup.
 
 For GCP GA:
 

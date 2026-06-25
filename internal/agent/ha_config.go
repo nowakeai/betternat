@@ -77,16 +77,13 @@ func validateHAConfig(cfg config.Config) error {
 	if len(cfg.HA.RouteFailover.RouteTableIDs) == 0 {
 		return fmt.Errorf("ha.route_failover.route_table_ids is required")
 	}
-	if cfg.Cloud == "aws" {
+	if cfg.Cloud == "aws" || cfg.Cloud == "gcp" {
 		if cfg.HA.PublicIdentity.Mode == "shared_eip" && cfg.HA.PublicIdentity.AllocationID == "" {
 			return fmt.Errorf("ha.public_identity.allocation_id is required for shared_eip")
 		}
 		if cfg.HA.PublicIdentity.Mode != "" && cfg.HA.PublicIdentity.Mode != "shared_eip" {
 			return fmt.Errorf("unsupported ha.public_identity.mode %q", cfg.HA.PublicIdentity.Mode)
 		}
-	}
-	if cfg.Cloud == "gcp" && cfg.HA.PublicIdentity.Mode != "" {
-		return fmt.Errorf("unsupported ha.public_identity.mode %q for cloud=gcp", cfg.HA.PublicIdentity.Mode)
 	}
 	return nil
 }
@@ -98,6 +95,7 @@ func defaultCloudProvider(ctx context.Context, cfg config.Config) (cloud.Provide
 	case "gcp":
 		return gcpcloud.New(ctx, gcpcloud.Config{
 			ProjectID:     cfg.GCP.ProjectID,
+			Region:        cfg.Region,
 			Zone:          gcpZone(cfg),
 			Network:       cfg.GCP.Network,
 			ClientTag:     cfg.GCP.ClientTag,

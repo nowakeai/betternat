@@ -60,6 +60,7 @@ type GCPGatewayResourceModel struct {
 	FirestoreDatabaseID         types.String `tfsdk:"firestore_database_id"`
 	FirestoreLocationID         types.String `tfsdk:"firestore_location_id"`
 	ManageFirestoreDatabase     types.Bool   `tfsdk:"manage_firestore_database"`
+	StablePublicIdentityAddress types.String `tfsdk:"stable_public_identity_address_name"`
 	PeerAPIAuthToken            types.String `tfsdk:"peer_api_auth_token"`
 	AgentConfigJSON             types.String `tfsdk:"agent_config_json"`
 	AgentConfigHash             types.String `tfsdk:"agent_config_hash"`
@@ -229,6 +230,10 @@ func (r *GCPGatewayResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Computed:            true,
 				Default:             booldefault.StaticBool(false),
 				MarkdownDescription: "Experimental. When true with enable_agent_ha, the provider creates and deletes the Firestore Native database used for GCP HA coordination. Leave false when the database is owned outside this resource.",
+			},
+			"stable_public_identity_address_name": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "Experimental. Existing regional static external IPv4 address name used for GCP shared public identity handover when enable_agent_ha is true. The provider does not create or delete this address yet.",
 			},
 			"peer_api_auth_token": schema.StringAttribute{
 				Computed:            true,
@@ -460,6 +465,9 @@ func applyGCPComputedPlan(model *GCPGatewayResourceModel, inputs gcpinstall.Inpu
 
 func enrichGCPAgentBootstrap(model *GCPGatewayResourceModel, inputs *gcpinstall.Inputs, privateCIDRs []string) error {
 	if !boolDefault(model.EnableAgentHA, false) {
+		if stringDefault(model.StablePublicIdentityAddress, "") != "" {
+			return fmt.Errorf("stable_public_identity_address_name requires enable_agent_ha")
+		}
 		model.AgentConfigJSON = types.StringValue("")
 		model.AgentConfigHash = types.StringValue("")
 		return nil
@@ -467,6 +475,7 @@ func enrichGCPAgentBootstrap(model *GCPGatewayResourceModel, inputs *gcpinstall.
 	if stringDefault(model.ServiceAccountEmail, "") == "" {
 		return fmt.Errorf("enable_agent_ha requires service_account_email with Firestore and Compute route permissions")
 	}
+	stableAddressName := stringDefault(model.StablePublicIdentityAddress, "")
 	artifacts, err := resolveGCPBootstrapArtifacts(model)
 	if err != nil {
 		return err
@@ -492,13 +501,14 @@ func enrichGCPAgentBootstrap(model *GCPGatewayResourceModel, inputs *gcpinstall.
 			FirestoreDatabaseID: stringDefault(model.FirestoreDatabaseID, "(default)"),
 		},
 		HA: provider.HASpec{
-			Enabled:              true,
-			LeaseBackend:         "firestore",
-			TTLSeconds:           10,
-			RenewSeconds:         1,
-			RouteMode:            "replace_route",
-			RouteDestinationCIDR: inputs.RouteDestRange,
-			RouteTargetType:      "instance",
+			Enabled:               true,
+			LeaseBackend:          "firestore",
+			TTLSeconds:            10,
+			RenewSeconds:          1,
+			RouteMode:             "replace_route",
+			RouteDestinationCIDR:  inputs.RouteDestRange,
+			RouteTargetType:       "instance",
+			SharedEIPAllocationID: stableAddressName,
 		},
 		Coordination: provider.CoordinationSpec{
 			Backend: "firestore",
