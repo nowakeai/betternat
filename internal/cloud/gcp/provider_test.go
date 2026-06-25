@@ -123,6 +123,38 @@ func TestReplaceRouteRestoresPreviousRouteWhenInsertOperationFails(t *testing.T)
 	}
 }
 
+func TestReplaceRouteRestoresPreviousRouteWhenDeleteOperationFails(t *testing.T) {
+	previous := &compute.Route{
+		Name:            "prod-default-via-gw",
+		Network:         "projects/test-project/global/networks/test-vpc",
+		DestRange:       "0.0.0.0/0",
+		Priority:        900,
+		NextHopInstance: "projects/test-project/zones/us-west2-a/instances/prod-gw-a",
+	}
+	routes := &fakeRoutes{route: previous}
+	ops := &fakeOperations{operationErrors: map[string]error{"delete-op": errors.New("delete operation failed")}}
+	provider := NewFromAPI(testConfig(), routes, ops)
+
+	err := provider.ReplaceRoute(context.Background(), cloud.RouteTarget{
+		RouteTableID:    "prod-default-via-gw",
+		DestinationCIDR: "0.0.0.0/0",
+		Target:          "prod-gw-b",
+	})
+	if err == nil || !strings.Contains(err.Error(), "previous gcp route") || !strings.Contains(err.Error(), "restored") {
+		t.Fatalf("expected restored previous route error, got %v", err)
+	}
+	if len(routes.inserts) != 1 {
+		t.Fatalf("expected restore insert after failed delete operation, got %d", len(routes.inserts))
+	}
+	restored := routes.inserts[0]
+	if restored.NextHopInstance != previous.NextHopInstance || restored.DestRange != previous.DestRange {
+		t.Fatalf("previous route was not restored: %#v", restored)
+	}
+	if got := strings.Join(ops.waited, ","); got != "delete-op,insert-op" {
+		t.Fatalf("unexpected operation waits: %s", got)
+	}
+}
+
 func TestDescribeRouteReturnsBaseInstanceName(t *testing.T) {
 	routes := &fakeRoutes{route: &compute.Route{
 		Name:            "prod-default-via-gw",

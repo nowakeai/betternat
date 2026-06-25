@@ -734,3 +734,8 @@ Append dated notes here during implementation.
   selection helpers were split out of `control.go` to keep file size below the
   project limit. Live GCE stale-registry and restarted-old-active validation
   remains open.
+- Hardened GCP route replacement rollback for another non-atomic route window:
+  if Compute route deletion starts but the delete operation reports failure,
+  `internal/cloud/gcp` now attempts to restore the previous route snapshot.
+  Local tests cover restore after delete-operation, insert, and insert-operation
+  failures; live GCE route-operation failure injection remains open.

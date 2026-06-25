@@ -70,7 +70,7 @@ func (p *Provider) ReplaceRoute(ctx context.Context, target cloud.RouteTarget) e
 	}
 	if err == nil {
 		if err := p.waitGlobalOperation(ctx, operationName(deleteOp)); err != nil {
-			return fmt.Errorf("wait for gcp route %q delete: %w", target.RouteTableID, err)
+			return p.restorePreviousRoute(ctx, target.RouteTableID, previous, fmt.Errorf("wait for gcp route %q delete: %w", target.RouteTableID, err))
 		}
 	}
 	route := &compute.Route{
