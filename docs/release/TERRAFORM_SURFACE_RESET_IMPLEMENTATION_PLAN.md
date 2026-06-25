@@ -616,6 +616,11 @@ Append dated notes here during implementation.
   route insert or insert operation wait fails. This does not make GCP route
   replacement atomic, but it reduces the dangerous no-route window that remains
   before live GCE failure-injection evidence exists.
+- Added local HA proof for route-only GCP behavior: activation with a standby
+  node fails before any cloud mutation when another unexpired lease owner
+  exists. This covers the "standby cannot mutate route while another owner
+  holds the lease" invariant locally; live two-agent GCE evidence is still
+  required.
 - Opened implementation PRs:
   - main repo: `https://github.com/nowakeai/betternat/pull/1`
   - split provider repo:

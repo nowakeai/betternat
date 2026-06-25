@@ -171,6 +171,24 @@ func TestActivateFailsWhenLeaseExpiresDuringActivation(t *testing.T) {
 	}
 }
 
+func TestActivateDoesNotMutateRouteWhenAnotherOwnerHoldsLease(t *testing.T) {
+	cfg := validRouteOnlyHAConfig()
+	leaseManager := lease.NewMemoryManager("prod-egress-a", time.Minute, time.Now)
+	if _, err := leaseManager.Acquire(context.Background(), "i-active"); err != nil {
+		t.Fatalf("acquire active lease: %v", err)
+	}
+	cloudProvider := &fakeCloud{}
+	controller := Controller{Cloud: cloudProvider, Lease: leaseManager}
+
+	_, err := controller.Activate(context.Background(), cfg, "i-standby")
+	if err == nil {
+		t.Fatal("expected standby activation to fail while active lease is held")
+	}
+	if len(cloudProvider.calls) != 0 {
+		t.Fatalf("standby must not mutate cloud while another owner holds the lease: %#v", cloudProvider.calls)
+	}
+}
+
 func TestEnsureOwnershipRepairsDrift(t *testing.T) {
 	cloudProvider := &fakeCloud{
 		routes: map[string]cloud.RouteTarget{
@@ -591,6 +609,12 @@ func validHAConfig() config.Config {
 			},
 		},
 	}
+}
+
+func validRouteOnlyHAConfig() config.Config {
+	cfg := validHAConfig()
+	cfg.HA.PublicIdentity = config.PublicIdentityConfig{}
+	return cfg
 }
 
 func equalStrings(a []string, b []string) bool {

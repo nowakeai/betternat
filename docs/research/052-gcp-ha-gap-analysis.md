@@ -662,8 +662,9 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
 - [ ] Proactive handover works.
 - [ ] Route mutation cannot occur without a current lease generation. The
   controller now verifies the current lease generation before and after active
-  repair, activation, and handover cloud mutations in local tests, but live GCE
-  evidence is still required.
+  repair, activation, and handover cloud mutations in local tests. A route-only
+  local test also proves that a standby cannot mutate routes while another
+  unexpired lease owner exists. Live GCE evidence is still required.
 - [ ] Agent degrades instead of reporting active when Firestore or Compute route
   verification is unavailable. Local supervisor tests now cover degradation
   when a previously active node cannot read the lease backend and when active
