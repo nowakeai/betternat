@@ -14,6 +14,10 @@ Environment:
       Require datastore.databases.create even if a Firestore database already
       exists. By default, an existing database is enough for HA smoke.
 
+  BETTERNAT_GCP_MANAGE_FIRESTORE_DATABASE=1
+      Also require Firestore database create/delete permissions for provider-owned
+      database lifecycle.
+
 This is a read-only preflight. It does not create service accounts, databases,
 routes, instances, roles, or IAM bindings.
 EOF
@@ -130,6 +134,12 @@ permissions=(
 
 if [[ "$database_count" == "0" || "${BETTERNAT_GCP_REQUIRE_DATABASE_CREATE:-0}" == "1" ]]; then
   permissions+=(datastore.databases.create)
+fi
+if [[ "${BETTERNAT_GCP_MANAGE_FIRESTORE_DATABASE:-0}" == "1" ]]; then
+  permissions+=(
+    datastore.databases.create
+    datastore.databases.delete
+  )
 fi
 
 if [[ "${BETTERNAT_GCP_MANAGE_RUNTIME_IAM:-0}" == "1" ]]; then

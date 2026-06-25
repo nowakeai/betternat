@@ -36,6 +36,9 @@ func TestGCPInputsDefaultToForwardingStartupScript(t *testing.T) {
 	if model.ManageRuntimeIAM.ValueBool() {
 		t.Fatal("runtime IAM management should default to disabled")
 	}
+	if model.ManageFirestoreDatabase.ValueBool() {
+		t.Fatal("firestore database management should default to disabled")
+	}
 	perms, err := listStrings(context.Background(), model.RuntimeIAMPermissions)
 	if err != nil {
 		t.Fatalf("runtime iam permissions: %v", err)
@@ -257,6 +260,51 @@ func TestGCPRuntimeIAMInputsRequireServiceAccount(t *testing.T) {
 	}
 }
 
+func TestGCPManagedFirestoreDatabaseDefaultsLocation(t *testing.T) {
+	model := baseGCPGatewayModel()
+	model.EnableAgentHA = types.BoolValue(true)
+	model.ManageFirestoreDatabase = types.BoolValue(true)
+
+	if err := prepareGCPFirestoreDatabasePlan(&model); err != nil {
+		t.Fatalf("prepare firestore database: %v", err)
+	}
+	if model.FirestoreDatabaseID.ValueString() != "(default)" {
+		t.Fatalf("unexpected firestore database id: %s", model.FirestoreDatabaseID.ValueString())
+	}
+	if model.FirestoreLocationID.ValueString() != "us-west1" {
+		t.Fatalf("unexpected firestore location id: %s", model.FirestoreLocationID.ValueString())
+	}
+}
+
+func TestGCPManagedFirestoreDatabaseRequiresAgentHA(t *testing.T) {
+	model := baseGCPGatewayModel()
+	model.ManageFirestoreDatabase = types.BoolValue(true)
+
+	err := prepareGCPFirestoreDatabasePlan(&model)
+	if err == nil {
+		t.Fatal("expected manage_firestore_database without agent HA to fail")
+	}
+	if !strings.Contains(err.Error(), "manage_firestore_database requires enable_agent_ha") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestGCPFirestoreDatabaseInputs(t *testing.T) {
+	model := baseGCPGatewayModel()
+	model.EnableAgentHA = types.BoolValue(true)
+	model.ManageFirestoreDatabase = types.BoolValue(true)
+	model.FirestoreDatabaseID = types.StringValue("betternat-ha")
+	model.FirestoreLocationID = types.StringValue("nam5")
+
+	inputs, err := gcpFirestoreDatabaseInputs(&model)
+	if err != nil {
+		t.Fatalf("firestore database inputs: %v", err)
+	}
+	if inputs.ProjectID != "shared-resources-alt" || inputs.DatabaseID != "betternat-ha" || inputs.LocationID != "nam5" {
+		t.Fatalf("unexpected firestore database inputs: %#v", inputs)
+	}
+}
+
 func baseGCPGatewayModel() GCPGatewayResourceModel {
 	return GCPGatewayResourceModel{
 		Name:                        types.StringValue("bnat-gcp"),
@@ -279,5 +327,7 @@ func baseGCPGatewayModel() GCPGatewayResourceModel {
 		ManageRuntimeIAM:            types.BoolNull(),
 		EnableAgentHA:               types.BoolNull(),
 		FirestoreDatabaseID:         types.StringNull(),
+		FirestoreLocationID:         types.StringNull(),
+		ManageFirestoreDatabase:     types.BoolNull(),
 	}
 }

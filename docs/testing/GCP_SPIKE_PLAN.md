@@ -39,10 +39,18 @@ BETTERNAT_GCP_MANAGE_RUNTIME_IAM=1 \
   scripts/gcp-ha-preflight.sh --project shared-resources-alt --database "(default)"
 ```
 
+When validating provider-owned Firestore database lifecycle, include:
+
+```sh
+BETTERNAT_GCP_MANAGE_FIRESTORE_DATABASE=1 \
+  scripts/gcp-ha-preflight.sh --project shared-resources-alt --database "(default)"
+```
+
 The preflight checks enabled APIs, Firestore database presence, and the current
 gcloud identity's permissions for Compute route/instance operations, Firestore
 coordination records, service-account use, project IAM bindings, and optional
-custom-role lifecycle. It does not create or mutate resources.
+custom-role and Firestore database lifecycle. It does not create or mutate
+resources.
 
 ## Topology
 

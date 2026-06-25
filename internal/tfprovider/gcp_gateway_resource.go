@@ -57,6 +57,8 @@ type GCPGatewayResourceModel struct {
 	LoxiCMDBinaryURL            types.String `tfsdk:"loxicmd_binary_url"`
 	LoxiCMDBinarySHA256         types.String `tfsdk:"loxicmd_binary_sha256"`
 	FirestoreDatabaseID         types.String `tfsdk:"firestore_database_id"`
+	FirestoreLocationID         types.String `tfsdk:"firestore_location_id"`
+	ManageFirestoreDatabase     types.Bool   `tfsdk:"manage_firestore_database"`
 	PeerAPIAuthToken            types.String `tfsdk:"peer_api_auth_token"`
 	AgentConfigJSON             types.String `tfsdk:"agent_config_json"`
 	AgentConfigHash             types.String `tfsdk:"agent_config_hash"`
@@ -211,6 +213,17 @@ func (r *GCPGatewayResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Default:             stringdefault.StaticString("(default)"),
 				MarkdownDescription: "Firestore Native database ID used by the experimental GCP agent HA path.",
 			},
+			"firestore_location_id": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Firestore Native database location used when manage_firestore_database is true. Defaults to region.",
+			},
+			"manage_firestore_database": schema.BoolAttribute{
+				Optional:            true,
+				Computed:            true,
+				Default:             booldefault.StaticBool(false),
+				MarkdownDescription: "Experimental. When true with enable_agent_ha, the provider creates and deletes the Firestore Native database used for GCP HA coordination. Leave false when the database is owned outside this resource.",
+			},
 			"peer_api_auth_token": schema.StringAttribute{
 				Computed:            true,
 				Sensitive:           true,
@@ -241,13 +254,23 @@ func (r *GCPGatewayResource) Create(ctx context.Context, req resource.CreateRequ
 		resp.Diagnostics.AddError("Configure GCP gateway", err.Error())
 		return
 	}
+	if err := applyGCPFirestoreDatabase(ctx, &plan); err != nil {
+		resp.Diagnostics.AddError("Configure GCP Firestore database", err.Error())
+		return
+	}
 	if err := applyGCPRuntimeServiceAccount(ctx, &plan); err != nil {
+		if cleanupErr := cleanupGCPFirestoreDatabase(ctx, &plan); cleanupErr != nil {
+			err = fmt.Errorf("%w; cleanup GCP Firestore database after failed service account setup: %v", err, cleanupErr)
+		}
 		resp.Diagnostics.AddError("Configure GCP runtime service account", err.Error())
 		return
 	}
 	if err := applyGCPRuntimeIAM(ctx, &plan); err != nil {
 		if cleanupErr := cleanupGCPRuntimeServiceAccount(ctx, &plan); cleanupErr != nil {
 			err = fmt.Errorf("%w; cleanup GCP runtime service account after failed IAM setup: %v", err, cleanupErr)
+		}
+		if cleanupErr := cleanupGCPFirestoreDatabase(ctx, &plan); cleanupErr != nil {
+			err = fmt.Errorf("%w; cleanup GCP Firestore database after failed IAM setup: %v", err, cleanupErr)
 		}
 		resp.Diagnostics.AddError("Configure GCP runtime IAM", err.Error())
 		return
@@ -259,6 +282,9 @@ func (r *GCPGatewayResource) Create(ctx context.Context, req resource.CreateRequ
 		}
 		if cleanupErr := cleanupGCPRuntimeServiceAccount(ctx, &plan); cleanupErr != nil {
 			err = fmt.Errorf("%w; cleanup GCP runtime service account after failed create: %v", err, cleanupErr)
+		}
+		if cleanupErr := cleanupGCPFirestoreDatabase(ctx, &plan); cleanupErr != nil {
+			err = fmt.Errorf("%w; cleanup GCP Firestore database after failed create: %v", err, cleanupErr)
 		}
 		resp.Diagnostics.AddError("Create GCP gateway", err.Error())
 		return
@@ -325,6 +351,9 @@ func (r *GCPGatewayResource) Delete(ctx context.Context, req resource.DeleteRequ
 	if err := cleanupGCPRuntimeServiceAccount(ctx, &state); err != nil {
 		resp.Diagnostics.AddError("Delete GCP runtime service account", err.Error())
 	}
+	if err := cleanupGCPFirestoreDatabase(ctx, &state); err != nil {
+		resp.Diagnostics.AddError("Delete GCP Firestore database", err.Error())
+	}
 }
 
 func gcpApplierAndInputs(ctx context.Context, model *GCPGatewayResourceModel) (gcpinstall.Applier, gcpinstall.Inputs, error) {
@@ -337,6 +366,9 @@ func gcpApplierAndInputs(ctx context.Context, model *GCPGatewayResourceModel) (g
 		return gcpinstall.Applier{}, gcpinstall.Inputs{}, fmt.Errorf("create GCP compute service: %w", err)
 	}
 	if err := prepareGCPRuntimeServiceAccountPlan(model); err != nil {
+		return gcpinstall.Applier{}, gcpinstall.Inputs{}, err
+	}
+	if err := prepareGCPFirestoreDatabasePlan(model); err != nil {
 		return gcpinstall.Applier{}, gcpinstall.Inputs{}, err
 	}
 	inputs := gcpInputs(*model, privateCIDRs)
@@ -411,139 +443,9 @@ func applyGCPComputedPlan(model *GCPGatewayResourceModel, inputs gcpinstall.Inpu
 	model.ManageRuntimeIAM = types.BoolValue(boolDefault(model.ManageRuntimeIAM, false))
 	model.EnableAgentHA = types.BoolValue(boolDefault(model.EnableAgentHA, false))
 	model.FirestoreDatabaseID = types.StringValue(stringDefault(model.FirestoreDatabaseID, "(default)"))
+	model.FirestoreLocationID = types.StringValue(stringDefault(model.FirestoreLocationID, ""))
+	model.ManageFirestoreDatabase = types.BoolValue(boolDefault(model.ManageFirestoreDatabase, false))
 	model.StartupScript = types.StringValue(inputs.StartupScript)
-}
-
-func prepareGCPRuntimeServiceAccountPlan(model *GCPGatewayResourceModel) error {
-	if !boolDefault(model.ManageRuntimeServiceAccount, false) {
-		if model.RuntimeServiceAccountID.IsNull() || model.RuntimeServiceAccountID.IsUnknown() {
-			model.RuntimeServiceAccountID = types.StringValue("")
-		}
-		return nil
-	}
-	if !boolDefault(model.EnableAgentHA, false) {
-		return fmt.Errorf("manage_runtime_service_account requires enable_agent_ha")
-	}
-	accountID := stringDefault(model.RuntimeServiceAccountID, "")
-	if accountID == "" {
-		accountID = defaultGCPRuntimeServiceAccountID(model.Name.ValueString())
-	}
-	inputs := gcpinstall.RuntimeServiceAccountInputs{
-		ProjectID: model.ProjectID.ValueString(),
-		AccountID: accountID,
-	}
-	if err := inputs.Validate(); err != nil {
-		return err
-	}
-	model.RuntimeServiceAccountID = types.StringValue(accountID)
-	if stringDefault(model.ServiceAccountEmail, "") == "" {
-		model.ServiceAccountEmail = types.StringValue(inputs.Email())
-	}
-	return nil
-}
-
-func applyGCPRuntimeServiceAccount(ctx context.Context, model *GCPGatewayResourceModel) error {
-	if !boolDefault(model.ManageRuntimeServiceAccount, false) {
-		return nil
-	}
-	manager, inputs, err := gcpRuntimeServiceAccountManagerAndInputs(ctx, model)
-	if err != nil {
-		return err
-	}
-	_, err = manager.Apply(ctx, inputs)
-	return err
-}
-
-func cleanupGCPRuntimeServiceAccount(ctx context.Context, model *GCPGatewayResourceModel) error {
-	if !boolDefault(model.ManageRuntimeServiceAccount, false) {
-		return nil
-	}
-	manager, inputs, err := gcpRuntimeServiceAccountManagerAndInputs(ctx, model)
-	if err != nil {
-		return err
-	}
-	return manager.Cleanup(ctx, inputs)
-}
-
-func gcpRuntimeServiceAccountManagerAndInputs(ctx context.Context, model *GCPGatewayResourceModel) (gcpinstall.RuntimeServiceAccountManager, gcpinstall.RuntimeServiceAccountInputs, error) {
-	inputs, err := gcpRuntimeServiceAccountInputs(model)
-	if err != nil {
-		return gcpinstall.RuntimeServiceAccountManager{}, gcpinstall.RuntimeServiceAccountInputs{}, err
-	}
-	api, err := gcpinstall.NewRuntimeServiceAccountAPI(ctx)
-	if err != nil {
-		return gcpinstall.RuntimeServiceAccountManager{}, gcpinstall.RuntimeServiceAccountInputs{}, err
-	}
-	return gcpinstall.RuntimeServiceAccountManager{API: api}, inputs, nil
-}
-
-func gcpRuntimeServiceAccountInputs(model *GCPGatewayResourceModel) (gcpinstall.RuntimeServiceAccountInputs, error) {
-	if !boolDefault(model.ManageRuntimeServiceAccount, false) {
-		return gcpinstall.RuntimeServiceAccountInputs{}, nil
-	}
-	inputs := gcpinstall.RuntimeServiceAccountInputs{
-		ProjectID: model.ProjectID.ValueString(),
-		AccountID: stringDefault(model.RuntimeServiceAccountID, ""),
-	}
-	if err := inputs.Validate(); err != nil {
-		return gcpinstall.RuntimeServiceAccountInputs{}, err
-	}
-	return inputs, nil
-}
-
-func applyGCPRuntimeIAM(ctx context.Context, model *GCPGatewayResourceModel) error {
-	if !boolDefault(model.ManageRuntimeIAM, false) {
-		return nil
-	}
-	manager, inputs, err := gcpRuntimeIAMManagerAndInputs(ctx, model)
-	if err != nil {
-		return err
-	}
-	return manager.Apply(ctx, inputs)
-}
-
-func cleanupGCPRuntimeIAM(ctx context.Context, model *GCPGatewayResourceModel) error {
-	if !boolDefault(model.ManageRuntimeIAM, false) {
-		return nil
-	}
-	manager, inputs, err := gcpRuntimeIAMManagerAndInputs(ctx, model)
-	if err != nil {
-		return err
-	}
-	return manager.Cleanup(ctx, inputs)
-}
-
-func gcpRuntimeIAMManagerAndInputs(ctx context.Context, model *GCPGatewayResourceModel) (gcpinstall.RuntimeIAMManager, gcpinstall.RuntimeIAMInputs, error) {
-	inputs, err := gcpRuntimeIAMInputs(model)
-	if err != nil {
-		return gcpinstall.RuntimeIAMManager{}, gcpinstall.RuntimeIAMInputs{}, err
-	}
-	api, err := gcpinstall.NewRuntimeIAMAPI(ctx)
-	if err != nil {
-		return gcpinstall.RuntimeIAMManager{}, gcpinstall.RuntimeIAMInputs{}, err
-	}
-	return gcpinstall.RuntimeIAMManager{API: api}, inputs, nil
-}
-
-func gcpRuntimeIAMInputs(model *GCPGatewayResourceModel) (gcpinstall.RuntimeIAMInputs, error) {
-	if !boolDefault(model.ManageRuntimeIAM, false) {
-		return gcpinstall.RuntimeIAMInputs{}, nil
-	}
-	if !boolDefault(model.EnableAgentHA, false) {
-		return gcpinstall.RuntimeIAMInputs{}, fmt.Errorf("manage_runtime_iam requires enable_agent_ha")
-	}
-	inputs := gcpinstall.RuntimeIAMInputs{
-		ProjectID:           model.ProjectID.ValueString(),
-		ServiceAccountEmail: stringDefault(model.ServiceAccountEmail, ""),
-	}
-	if err := inputs.Validate(); err != nil {
-		return gcpinstall.RuntimeIAMInputs{}, err
-	}
-	return inputs, nil
-}
-
-func defaultGCPRuntimeServiceAccountID(name string) string {
-	return sanitizeGCPServiceAccountID(name + "-runtime")
 }
 
 func enrichGCPAgentBootstrap(model *GCPGatewayResourceModel, inputs *gcpinstall.Inputs, privateCIDRs []string) error {
@@ -699,38 +601,6 @@ func sanitizeGCPLabel(value string) string {
 	}
 	if len(out) > 63 {
 		out = out[:63]
-	}
-	return string(out)
-}
-
-func sanitizeGCPServiceAccountID(value string) string {
-	out := make([]rune, 0, len(value))
-	for _, r := range value {
-		if r >= 'A' && r <= 'Z' {
-			r += 'a' - 'A'
-		}
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
-			out = append(out, r)
-		} else {
-			out = append(out, '-')
-		}
-	}
-	for len(out) > 0 && out[0] == '-' {
-		out = out[1:]
-	}
-	if len(out) == 0 || out[0] < 'a' || out[0] > 'z' {
-		out = append([]rune{'b'}, out...)
-	}
-	if len(out) > 30 {
-		out = out[:30]
-	}
-	for len(out) > 0 && out[len(out)-1] == '-' {
-		out = out[:len(out)-1]
-	}
-	if len(out) < 6 {
-		for len(out) < 6 {
-			out = append(out, '0')
-		}
 	}
 	return string(out)
 }

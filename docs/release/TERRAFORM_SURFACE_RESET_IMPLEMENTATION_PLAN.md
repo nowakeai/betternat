@@ -296,7 +296,7 @@ Done when:
 
 ## Phase 5: GCP Provider Alpha
 
-Status: `narrow forwarding alpha implemented; Firestore/runtime backend code, opt-in runtime service-account/IAM wiring exists; live runtime HA, IAM validation, packaging, and LoxiLB validation pending`
+Status: `narrow forwarding alpha implemented; Firestore/runtime backend code, opt-in Firestore database, runtime service-account, and runtime IAM wiring exists; live runtime HA, IAM validation, packaging, and LoxiLB validation pending`
 
 Goal: expose a GCP alpha resource only after the spike proves the minimum
 control-plane behavior.
@@ -316,6 +316,8 @@ Tasks:
 - [x] Expose GCP runtime IAM permission contract from the provider.
 - [x] Add opt-in provider-owned GCP runtime custom role and service-account
   binding lifecycle behind `manage_runtime_iam`.
+- [x] Add opt-in provider-owned Firestore Native database lifecycle behind
+  `manage_firestore_database`.
 - [x] Add GCP startup-script and model tests.
 - [x] Add read-only GCP HA preflight for APIs, Firestore database presence, and
   IAM permissions.
@@ -561,6 +563,9 @@ Append dated notes here during implementation.
   `shared-resources-alt` results for `renjie@altresear.ch`:
   - base HA smoke is blocked because the project has no Firestore database and
     the account lacks `datastore.databases.create`,
+  - provider-owned Firestore database smoke with
+    `manage_firestore_database = true` is blocked by missing Firestore database
+    create/delete permission,
   - provider-owned runtime IAM smoke with `manage_runtime_iam = true` is also
     blocked by missing `iam.roles.create`, `iam.roles.update`, and
     `iam.roles.delete`.

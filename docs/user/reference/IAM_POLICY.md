@@ -151,6 +151,7 @@ experimental `enable_agent_ha = true` path does.
 When `enable_agent_ha = true`, set:
 
 ```hcl
+manage_firestore_database      = true
 manage_runtime_service_account = true
 manage_runtime_iam             = true
 ```
@@ -212,6 +213,19 @@ needs:
 Leave `manage_runtime_service_account = false` when service-account lifecycle is
 owned by another Terraform stack or infra-admin workflow.
 
+When `manage_firestore_database = true`, the provider creates and deletes the
+Firestore Native database used for GCP HA coordination. The Terraform execution
+identity then needs:
+
+| Permission | Why |
+| --- | --- |
+| `datastore.databases.create` | Create the provider-owned Firestore Native database before HA smoke resources start. |
+| `datastore.databases.delete` | Remove the provider-owned Firestore Native database on destroy. |
+| `datastore.databases.get` | Check existing database state and poll database operation results. |
+
+Leave `manage_firestore_database = false` when Firestore database lifecycle is
+owned by another Terraform stack or infra-admin workflow.
+
 Current GCP limitations:
 
 - provider-owned GCP custom role and IAM binding lifecycle exists behind the
@@ -220,6 +234,8 @@ Current GCP limitations:
 - provider-owned runtime service-account lifecycle exists behind
   `manage_runtime_service_account`, but still needs live validation in the GCP
   HA smoke,
-- Firestore database creation may require project-owner or App Engine/Firestore
-  admin permissions outside the gateway runtime role,
+- provider-owned Firestore database lifecycle exists behind
+  `manage_firestore_database`, but live validation is blocked until the
+  Terraform identity has database create/delete permission or an existing
+  Firestore Native database is provided,
 - route-only GCP HA does not provide stable public egress IP failover yet.

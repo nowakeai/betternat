@@ -259,9 +259,11 @@ resource "betternat_gcp_gateway" "egress" {
   private_cidrs = ["10.91.0.0/24"]
 
   enable_agent_ha                = true
+  manage_firestore_database      = true
+  firestore_database_id          = "(default)"
+  firestore_location_id          = "us-west2"
   manage_runtime_service_account = true
   manage_runtime_iam             = true
-  firestore_database_id          = "(default)"
   betternat_version              = "v0.1.0"
 }
 ```
@@ -281,6 +283,11 @@ Set `manage_runtime_iam = true` to let this resource create or update the
 project-level BetterNAT runtime custom role and bind `service_account_email` to
 it. Leave it false when IAM is managed by a separate Terraform stack or an
 infra-admin workflow.
+Set `manage_firestore_database = true` only in disposable validation projects
+where this resource should create and delete the Firestore Native database used
+for HA coordination. Leave it false when the database is created by a platform
+or infra-admin stack. `firestore_location_id` defaults to `region` when
+database management is enabled.
 Set `runtime_service_account_id` only when the derived service-account ID is not
 acceptable for the project.
 Explicit `agent_binary_url`, `agent_binary_sha256`, `cli_binary_url`, and

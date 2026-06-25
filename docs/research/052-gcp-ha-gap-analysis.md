@@ -557,6 +557,12 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
 - [ ] Live `manage_runtime_iam` validation. Current `shared-resources-alt`
   preflight for `renjie@altresear.ch` is missing `iam.roles.create`,
   `iam.roles.update`, and `iam.roles.delete`.
+- [x] Provider has opt-in Firestore Native database lifecycle behind
+  `manage_firestore_database`.
+- [ ] Live `manage_firestore_database` validation. Current
+  `shared-resources-alt` preflight for `renjie@altresear.ch` is missing
+  Firestore database create/delete permission and the project has no existing
+  Firestore database.
 - [ ] Agent on GCE mutates routes only after lease verification in live
   validation.
 - [x] GCP `cloud.Provider` route replace/describe implementation exists for
