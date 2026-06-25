@@ -192,6 +192,39 @@ Terraform user can install, observe, fail over, and destroy.
 The review also found several areas that were not weighted strongly enough in
 the first GCP spike plan:
 
+- LoxiLB HA mode fit. Raw LoxiLB HA is real, but most documented modes assume
+  Kubernetes service load balancer semantics, BGP/ECMP participation, or
+  explicit LoxiLB-managed peer behavior. BetterNAT needs a decision on whether
+  any of those primitives can be reused for private-subnet egress without
+  weakening Terraform route ownership, rollback, IAM minimization, or
+  non-Kubernetes install UX.
+- Split-brain blast radius. A bad HA implementation can be worse than a single
+  node because two gateways may both SNAT, repair routes, or report active. GCP
+  tests must inject stale lease generations, delayed Compute operations, stale
+  registry records, and restarted old actives.
+- Asymmetric routing and conntrack reset behavior. Route-only failover changes
+  the next hop for new flows, but existing flows may be pinned to old conntrack
+  state or reset. This needs explicit measurement for TCP, UDP, DNS, and long
+  downloads instead of only short `curl` probes.
+- Route-priority coexistence. GCP static routes are VPC-global and selected by
+  destination, priority, tags, and next-hop availability. BetterNAT must prove
+  that tagged routes do not accidentally capture unrelated workloads or lose to
+  customer routes, Cloud NAT migration routes, VPN routes, or PSC/private access
+  routes.
+- Compute operation idempotency and retries. Route delete/insert is not atomic.
+  The controller needs retry/backoff, final-state reads, operation IDs in logs,
+  and a clear restore path when delete succeeds but insert or operation polling
+  fails.
+- Clock skew and lease TTL margins. Firestore transactions give atomic writes,
+  but the lease expiry decision still depends on agent timestamps. GCP tests
+  should include skew tolerance, slow API operations, and renewal jitter.
+- Peer API and handover auth. Handover safety depends on trusting standby
+  readiness. GCP evidence must prove peer API tokens, local socket permissions,
+  service-account identity, and stale peer rejection.
+- Organization policy and project shape. Customer projects may restrict service
+  account creation, custom roles, external IPs, serial-port access, OS Login,
+  or metadata scripts. The alpha docs need a clear infra-admin handoff path for
+  those constraints.
 - MIG or equivalent capacity repair. AWS uses ASG repair as a separate loop
   after fast failover. GCP needs an explicit decision on unmanaged instances
   versus MIGs, and tests must prove replacement nodes join standby without
@@ -230,6 +263,39 @@ the first GCP spike plan:
 - Runtime image quality. HA is weak if replacement nodes must fetch unsigned or
   unavailable packages during an outage. The GCP path needs a prebaked image or
   private artifact mirror gate before GA.
+- Cost and throughput parity. The product promise includes lower NAT processing
+  cost, not only HA. GCP needs enough traffic measurement to decide whether the
+  chosen route-only/LoxiLB shape is materially better than Cloud NAT for the
+  target workloads after VM, egress, logging, and operational overhead.
+
+## Raw LoxiLB Baseline Required
+
+Because LoxiLB already documents HA patterns, BetterNAT needs a baseline run
+that answers "why not just deploy LoxiLB?" for the exact private-egress use case.
+This baseline should not replace BetterNAT HA testing; it sets the comparison
+point.
+
+Minimum baseline questions:
+
+1. Can raw LoxiLB on GCE provide active/standby or active/active egress for
+   private VM workloads without Kubernetes?
+2. Does it require BGP peering, Cloud Router, route advertisement, or guest-level
+   networking that typical Terraform users would not already operate?
+3. Who owns the GCP route or public identity during failover: LoxiLB, an
+   operator script, Terraform, or BetterNAT?
+4. How are route ownership, rollback to Cloud NAT, cleanup, and least-privilege
+   IAM expressed?
+5. What status can an operator read before a failure: owner, peer readiness,
+   route target, datapath counters, and failover history?
+6. Does it preserve source IP, and if not, is that limitation identical to
+   BetterNAT's GCP route-only alpha?
+7. What parts should BetterNAT reuse directly versus keep behind its
+   provider-neutral datapath and HA interfaces?
+
+Decision rule: if raw LoxiLB solves a specific datapath HA primitive better than
+our wrapper, reuse it behind the BetterNAT contract. If it does not solve cloud
+route ownership, Terraform lifecycle, IAM, rollback, and operator status, then
+BetterNAT still needs its own HA control plane.
 
 ## DynamoDB Equivalent
 

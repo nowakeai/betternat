@@ -202,6 +202,32 @@ gcloud --project "$BETTERNAT_GCP_PROJECT" compute routes describe \
   --format=json
 ```
 
+## Raw LoxiLB Baseline
+
+Before treating BetterNAT GCP HA as a product milestone, run a raw-LoxiLB
+comparison in the same disposable network or record why it cannot run in that
+environment.
+
+Capture:
+
+- LoxiLB install mode and version,
+- whether the HA mode is standalone, BGP active/backup, BGP ECMP active/active,
+  kube-loxilb, or another documented upstream pattern,
+- whether the mode requires BGP/Cloud Router, Kubernetes, extra routes, or
+  privileged peer connectivity,
+- who mutates GCP routes or public identity during failover,
+- active/standby or active/active status output,
+- egress source IP before and after failover,
+- datapath counters before and after failover.
+
+Pass condition for BetterNAT comparison:
+
+- the baseline is documented well enough to explain what LoxiLB already solves,
+- any LoxiLB primitive reused by BetterNAT is still hidden behind BetterNAT's
+  provider-neutral config, status, IAM, and cleanup contracts,
+- raw LoxiLB alone is not counted as BetterNAT HA evidence unless it also proves
+  lease-fenced cloud route ownership, rollback, and operator-visible status.
+
 ## Firestore Contention
 
 Run the reusable Firestore integration test against the same database:
@@ -337,7 +363,13 @@ At minimum, run one controlled failure in each category:
 - block Firestore from the active and verify the agent degrades,
 - force Compute route operation failure and verify the lease is not advertised
   as active after failed mutation,
+- force a failure after route delete but before route insert and record whether
+  the previous route is restored,
 - make the standby registry stale and verify proactive handover refuses it,
+- restart the old active after passive failover and verify it does not repair the
+  route back without reacquiring the current lease generation,
+- skew one node's clock within the expected tolerance and verify lease renewal
+  and takeover behavior remain conservative,
 - interrupt route operation polling and verify final route state is checked
   before success.
 
@@ -407,6 +439,8 @@ Blocking issues:
 ## Private Client Egress
 
 ## Firestore Contention
+
+## Raw LoxiLB Baseline
 
 ## Two-Agent HA
 

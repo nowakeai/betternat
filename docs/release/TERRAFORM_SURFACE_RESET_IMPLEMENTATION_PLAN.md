@@ -276,6 +276,12 @@ Tasks:
   route target, and local datapath readiness all match.
 - [ ] Validate that a standby cannot mutate routes while another unexpired
   Firestore lease owner exists.
+- [ ] Run raw LoxiLB-on-GCE HA baseline for the same private-egress topology and
+  record which upstream primitives BetterNAT should reuse versus wrap.
+- [ ] Validate GCP split-brain failure injections: stale lease generation,
+  delayed route operation, restarted old active, and stale standby registry.
+- [ ] Validate TCP, UDP, DNS, and long-download behavior across route-only
+  failover; do not rely only on short HTTP source-IP probes.
 - [ ] Validate destroy/rollback after an agent-owned handover.
 - [ ] Decide GCP capacity repair model: unmanaged instances for alpha only or
   MIG-backed replacement before GA.
@@ -349,6 +355,10 @@ GCP validation:
 - [ ] Passive failover after active crash.
 - [ ] Proactive handover.
 - [ ] LoxiLB-on-GCE datapath counters and restart reconciliation.
+- [ ] Raw LoxiLB HA baseline compared against BetterNAT-owned route fencing,
+  rollback, IAM, status, and cleanup.
+- [ ] GCP failure injection for route delete/insert, Compute operation polling,
+  stale lease generation, stale registry, restarted old active, and clock skew.
 - [ ] Cleanup.
 
 Done when:
@@ -628,6 +638,12 @@ Append dated notes here during implementation.
   enabled, reads the configured GCP route target through Compute, and reports
   route-target match against the lease owner. Local unit tests cover the GCP
   direct-status path; live GCE evidence is still pending.
+- Re-audited the GCP HA plan against raw LoxiLB rather than against a single VM
+  forwarding baseline. The missing GCP gates now include a raw LoxiLB HA
+  comparison, split-brain failure injection, route delete/insert rollback
+  evidence, route-priority coexistence, clock-skew tolerance, peer API
+  authentication, org-policy constraints, and TCP/UDP/DNS/long-flow behavior
+  across failover.
 - Opened implementation PRs:
   - main repo: `https://github.com/nowakeai/betternat/pull/1`
   - split provider repo:
