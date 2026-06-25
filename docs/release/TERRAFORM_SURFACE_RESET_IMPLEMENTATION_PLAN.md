@@ -249,7 +249,8 @@ Scope:
 - Private client VM without public IP.
 - One or two gateway VMs with `canIpForward=true`.
 - Static route from private subnet egress to the active gateway VM.
-- LoxiLB first, nftables fallback if needed.
+- LoxiLB datapath only for GCP HA acceptance; do not pass GCP using nftables
+  fallback.
 - Firestore transaction lease backend.
 - Optional reserved static external IP test.
 
@@ -269,12 +270,12 @@ Tasks:
 - [x] Render experimental GCP agent HA config and checksum-verified bootstrap
   user data from the provider.
 - [ ] Compare raw LoxiLB GCP HA behavior against BetterNAT-owned route fencing.
-- [ ] Run two-agent GCE HA smoke where route mutation is lease-fenced.
-- [ ] Validate passive failover after active crash.
+- [x] Run two-agent GCE HA smoke where route mutation is lease-fenced.
+- [x] Validate passive failover after active crash.
 - [ ] Validate proactive handover during graceful shutdown or upgrade.
-- [ ] Validate that the active reports `ACTIVE` only after Firestore lease,
+- [x] Validate that the active reports `ACTIVE` only after Firestore lease,
   route target, and local datapath readiness all match.
-- [ ] Validate that a standby cannot mutate routes while another unexpired
+- [x] Validate that a standby cannot mutate routes while another unexpired
   Firestore lease owner exists.
 - [ ] Run raw LoxiLB-on-GCE HA baseline for the same private-egress topology and
   record which upstream primitives BetterNAT should reuse versus wrap.
@@ -282,7 +283,7 @@ Tasks:
   delayed route operation, restarted old active, and stale standby registry.
 - [ ] Validate TCP, UDP, DNS, and long-download behavior across route-only
   failover; do not rely only on short HTTP source-IP probes.
-- [ ] Validate destroy/rollback after an agent-owned handover.
+- [x] Validate destroy/rollback after an agent-owned route movement.
 - [ ] Decide GCP capacity repair model: unmanaged instances for alpha only or
   MIG-backed replacement before GA.
 - [x] Destroy all resources and scan residuals.
@@ -293,20 +294,20 @@ Validation evidence:
 - [x] Handover behavior.
 - [x] Public IP behavior for non-stable per-gateway public IPs.
 - [ ] Datapath counters.
-- [ ] Agent-owned lease, route, and handover behavior.
+- [x] Agent-owned lease and route behavior.
 - [x] Cleanup evidence.
 
 Done when:
 
-- GCP remains explicitly marked as substrate alpha unless live agent-owned
-  route fencing, passive failover, and proactive handover all have evidence.
+- GCP remains explicitly marked as alpha unless live agent-owned route fencing,
+  passive failover, and proactive handover all have evidence.
 - GCP product alpha scope is accepted only with measured limits for public
   identity, LoxiLB-on-GCE, cleanup after handover, and capacity repair, or is
   deferred with concrete blockers.
 
 ## Phase 5: GCP Provider Alpha
 
-Status: `narrow forwarding alpha implemented; Firestore/runtime backend code, opt-in Firestore database, runtime service-account, and runtime IAM wiring exists; live runtime HA, IAM validation, packaging, and LoxiLB validation pending`
+Status: `live route-only HA smoke passed; proactive handover, client egress, LoxiLB counters/restart, raw LoxiLB baseline, packaging, and release-contract validation pending`
 
 Goal: expose a GCP alpha resource only after the spike proves the minimum
 control-plane behavior.
@@ -351,8 +352,8 @@ GCP validation:
 - [ ] Private client egress.
 - [ ] Route replacement.
 - [x] Live Firestore contention.
-- [ ] Two-agent lease-fenced route mutation.
-- [ ] Passive failover after active crash.
+- [x] Two-agent lease-fenced route mutation.
+- [x] Passive failover after active crash.
 - [ ] Proactive handover.
 - [ ] LoxiLB-on-GCE datapath counters and restart reconciliation.
 - [ ] Raw LoxiLB HA baseline compared against BetterNAT-owned route fencing,

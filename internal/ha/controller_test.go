@@ -226,6 +226,34 @@ func TestEnsureOwnershipRepairsDrift(t *testing.T) {
 	}
 }
 
+func TestEnsureOwnershipRepairsMissingRoute(t *testing.T) {
+	cloudProvider := &fakeCloud{
+		routes: map[string]cloud.RouteTarget{
+			"rtb-b:0.0.0.0/0": {RouteTableID: "rtb-b", DestinationCIDR: "0.0.0.0/0", Target: "i-active"},
+		},
+		identity: cloud.PublicIdentity{AllocationID: "eipalloc-123", InstanceID: "i-active", PublicIP: "198.51.100.10"},
+	}
+	controller := Controller{Cloud: cloudProvider}
+
+	result, err := controller.EnsureOwnership(context.Background(), validHAConfig(), "i-active")
+	if err != nil {
+		t.Fatalf("ensure ownership: %v", err)
+	}
+	if len(result.Routes) != 2 {
+		t.Fatalf("expected both routes after repair, got %#v", result.Routes)
+	}
+	wantCalls := []string{
+		"describe-eip:eipalloc-123",
+		"describe-route:rtb-a:0.0.0.0/0",
+		"replace:rtb-a:0.0.0.0/0:i-active",
+		"describe-route:rtb-a:0.0.0.0/0",
+		"describe-route:rtb-b:0.0.0.0/0",
+	}
+	if !equalStrings(cloudProvider.calls, wantCalls) {
+		t.Fatalf("unexpected calls: got %#v want %#v", cloudProvider.calls, wantCalls)
+	}
+}
+
 func TestEnsureOwnershipDoesNotMutateWhenAlreadyOwned(t *testing.T) {
 	cloudProvider := &fakeCloud{
 		routes: map[string]cloud.RouteTarget{

@@ -125,6 +125,7 @@ Read these first when revisiting product or architecture direction:
 - [research/051-gcp-forwarding-spike-results.md](research/051-gcp-forwarding-spike-results.md) — Disposable GCP forwarding spike proving GCE `canIpForward`, nftables masquerade, tagged route replacement, and cleanup.
 - [research/052-gcp-ha-gap-analysis.md](research/052-gcp-ha-gap-analysis.md) — GCP HA gap analysis covering Firestore coordination, route fencing, public identity, LoxiLB, IAM, observability, and release gates.
 - [research/053-gcp-firestore-live-contention-results.md](research/053-gcp-firestore-live-contention-results.md) — Live Firestore Native contention validation for GCP lease, registry, handover records, and cleanup.
+- [research/054-gcp-agent-ha-smoke-results.md](research/054-gcp-agent-ha-smoke-results.md) — Live GCP two-agent HA smoke covering Firestore ownership, route repair, passive failover, cleanup, and remaining GCP alpha gaps.
 
 ## Supporting Research
 

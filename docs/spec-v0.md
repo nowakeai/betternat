@@ -10,7 +10,8 @@ Current baseline:
 
 ```text
 Primary datapath: LoxiLB standalone egress SNAT
-Fallback datapath: Linux nftables/nf_conntrack
+Fallback datapath: none for GCP HA acceptance; AWS may keep explicit nftables
+diagnostic mode
 Cloud target: AWS
 Runtime control plane: betternat-agent
 User-facing install path: terraform-provider-betternat
@@ -36,7 +37,7 @@ v0 MUST provide:
 
 - AWS private subnet egress through self-owned EC2 nodes.
 - LoxiLB-based egress SNAT as the primary datapath.
-- nftables/nf_conntrack fallback mode.
+- Optional nftables/nf_conntrack diagnostic mode for AWS/local support paths.
 - Terraform-managed install and lifecycle.
 - Active/standby HA for new connections.
 - Stable public egress IP for new connections after failover when `stable_egress_ip = true`.
@@ -97,9 +98,8 @@ resource "betternat_aws_gateway" "egress" {
   }
 
   datapath = {
-    engine          = "loxilb"
-    fallback_engine = "nftables"
-    private_cidrs   = ["10.0.0.0/8"]
+    engine        = "loxilb"
+    private_cidrs = ["10.0.0.0/8"]
   }
 
   observability = {
@@ -212,7 +212,6 @@ local:
 
 datapath:
   engine: loxilb
-  fallback_engine: nftables
   private_cidrs:
     - 10.0.0.0/8
   loxilb:
@@ -503,7 +502,7 @@ Top-N data SHOULD be exposed through an admin API or bounded metric set, not unl
 - source/destination check disabled,
 - LoxiLB running and API reachable,
 - LoxiLB egress rules present,
-- nftables fallback availability,
+- nftables diagnostic-mode availability where explicitly enabled,
 - IP forwarding enabled,
 - DynamoDB lease table reachable,
 - route table target matches expected active,
@@ -568,7 +567,7 @@ Appliance MUST install or start:
 
 - LoxiLB,
 - betternat-agent,
-- nftables fallback prerequisites,
+- nftables diagnostic-mode prerequisites where explicitly enabled,
 - metrics endpoint,
 - OS sysctl settings.
 

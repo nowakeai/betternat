@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	cloudresourcemanager "google.golang.org/api/cloudresourcemanager/v1"
 	"google.golang.org/api/googleapi"
@@ -12,6 +13,8 @@ import (
 )
 
 const runtimeRoleID = "betterNATRuntime"
+
+var runtimeIAMSetPolicyRetryDelay = 5 * time.Second
 
 type RuntimeIAMInputs struct {
 	ProjectID           string
@@ -23,6 +26,7 @@ type RuntimeIAMAPI interface {
 	GetRole(ctx context.Context, name string) (*gcpiam.Role, error)
 	CreateRole(ctx context.Context, parent string, request *gcpiam.CreateRoleRequest) (*gcpiam.Role, error)
 	PatchRole(ctx context.Context, name string, role *gcpiam.Role) (*gcpiam.Role, error)
+	UndeleteRole(ctx context.Context, name string) (*gcpiam.Role, error)
 	DeleteRole(ctx context.Context, name string) (*gcpiam.Role, error)
 	GetPolicy(ctx context.Context, projectID string) (*cloudresourcemanager.Policy, error)
 	SetPolicy(ctx context.Context, projectID string, policy *cloudresourcemanager.Policy) (*cloudresourcemanager.Policy, error)
@@ -56,11 +60,22 @@ func (m RuntimeIAMManager) Apply(ctx context.Context, inputs RuntimeIAMInputs) e
 	if existing, err := m.API.GetRole(ctx, roleName); err != nil && !isGoogleNotFound(err) {
 		return fmt.Errorf("get gcp runtime iam role %q: %w", roleName, err)
 	} else if err != nil {
+		createRole := *role
+		createRole.Name = ""
 		if _, err := m.API.CreateRole(ctx, "projects/"+inputs.ProjectID, &gcpiam.CreateRoleRequest{
 			RoleId: inputs.roleID(),
-			Role:   role,
+			Role:   &createRole,
 		}); err != nil {
 			return fmt.Errorf("create gcp runtime iam role %q: %w", roleName, err)
+		}
+	} else if existing.Deleted {
+		undeleted, err := m.API.UndeleteRole(ctx, roleName)
+		if err != nil {
+			return fmt.Errorf("undelete gcp runtime iam role %q: %w", roleName, err)
+		}
+		role.Etag = undeleted.Etag
+		if _, err := m.API.PatchRole(ctx, roleName, role); err != nil {
+			return fmt.Errorf("patch undeleted gcp runtime iam role %q: %w", roleName, err)
 		}
 	} else if !samePermissions(existing.IncludedPermissions, role.IncludedPermissions) || existing.Title != role.Title || existing.Description != role.Description || existing.Stage != role.Stage {
 		role.Etag = existing.Etag
@@ -74,11 +89,32 @@ func (m RuntimeIAMManager) Apply(ctx context.Context, inputs RuntimeIAMInputs) e
 	}
 	member := "serviceAccount:" + inputs.ServiceAccountEmail
 	if addBindingMember(policy, roleName, member) {
-		if _, err := m.API.SetPolicy(ctx, inputs.ProjectID, policy); err != nil {
+		if err := m.setPolicyWithRetry(ctx, inputs.ProjectID, policy); err != nil {
 			return fmt.Errorf("set gcp project iam policy %q: %w", inputs.ProjectID, err)
 		}
 	}
 	return nil
+}
+
+func (m RuntimeIAMManager) setPolicyWithRetry(ctx context.Context, projectID string, policy *cloudresourcemanager.Policy) error {
+	var lastErr error
+	for attempt := 0; attempt < 6; attempt++ {
+		if _, err := m.API.SetPolicy(ctx, projectID, policy); err != nil {
+			lastErr = err
+			if !isServiceAccountPropagationError(err) {
+				return err
+			}
+			if attempt == 5 {
+				break
+			}
+			if err := sleepContext(ctx, runtimeIAMSetPolicyRetryDelay); err != nil {
+				return err
+			}
+			continue
+		}
+		return nil
+	}
+	return lastErr
 }
 
 func (m RuntimeIAMManager) Cleanup(ctx context.Context, inputs RuntimeIAMInputs) error {
@@ -122,6 +158,10 @@ func (a googleRuntimeIAMAPI) PatchRole(ctx context.Context, name string, role *g
 		UpdateMask("title,description,includedPermissions,stage").
 		Context(ctx).
 		Do()
+}
+
+func (a googleRuntimeIAMAPI) UndeleteRole(ctx context.Context, name string) (*gcpiam.Role, error) {
+	return a.iam.Projects.Roles.Undelete(name, &gcpiam.UndeleteRoleRequest{}).Context(ctx).Do()
 }
 
 func (a googleRuntimeIAMAPI) DeleteRole(ctx context.Context, name string) (*gcpiam.Role, error) {
@@ -251,4 +291,14 @@ func isGoogleNotFound(err error) bool {
 		return true
 	}
 	return strings.Contains(err.Error(), "googleapi: Error 404")
+}
+
+func isServiceAccountPropagationError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := err.Error()
+	return strings.Contains(message, "googleapi: Error 400") &&
+		strings.Contains(message, "Service account") &&
+		strings.Contains(message, "does not exist")
 }

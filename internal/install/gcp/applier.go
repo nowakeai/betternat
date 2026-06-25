@@ -73,13 +73,13 @@ func (a Applier) Cleanup(ctx context.Context, inputs Inputs) error {
 		return err
 	}
 	var firstErr error
-	if err := a.deleteRoute(ctx, inputs); err != nil && !isNotFound(err) {
-		firstErr = err
-	}
 	for _, name := range gatewayNames(inputs.Name, inputs.GatewayCount) {
 		if err := a.deleteInstance(ctx, inputs, name); err != nil && !isNotFound(err) && firstErr == nil {
 			firstErr = err
 		}
+	}
+	if err := a.deleteRoute(ctx, inputs); err != nil && !isNotFound(err) && firstErr == nil {
+		firstErr = err
 	}
 	return firstErr
 }
@@ -110,11 +110,18 @@ func (a Applier) Read(ctx context.Context, inputs Inputs) (ReadResult, error) {
 	} else if !isNotFound(err) {
 		return ReadResult{}, err
 	}
-	status := "missing"
-	if len(instances) > 0 && routeTarget != "" {
-		status = "active"
-	}
+	status := readStatus(len(instances), routeTarget)
 	return ReadResult{GatewayInstances: instances, EgressPublicIPs: ips, RouteTarget: routeTarget, Status: status}, nil
+}
+
+func readStatus(instanceCount int, routeTarget string) string {
+	if instanceCount == 0 {
+		return "missing"
+	}
+	if routeTarget == "" {
+		return "degraded"
+	}
+	return "active"
 }
 
 func (a Applier) createInstance(ctx context.Context, inputs Inputs, name string) error {

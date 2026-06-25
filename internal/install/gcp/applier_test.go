@@ -50,18 +50,40 @@ func TestRuntimeIAMPermissions(t *testing.T) {
 		"compute.instances.get",
 		"compute.instances.use",
 		"compute.networks.get",
+		"compute.networks.updatePolicy",
 		"compute.routes.create",
 		"compute.routes.delete",
 		"compute.routes.get",
 		"datastore.databases.get",
+		"datastore.databases.getMetadata",
+		"datastore.databases.list",
+		"datastore.entities.allocateIds",
 		"datastore.entities.create",
 		"datastore.entities.delete",
 		"datastore.entities.get",
 		"datastore.entities.list",
 		"datastore.entities.update",
+		"datastore.namespaces.get",
+		"datastore.namespaces.list",
+		"datastore.schemas.list",
+		"datastore.statistics.get",
+		"datastore.statistics.list",
+		"resourcemanager.projects.get",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("unexpected runtime IAM permissions:\ngot:  %#v\nwant: %#v", got, want)
+	}
+}
+
+func TestReadStatusKeepsGatewayWhenOnlyRouteIsMissing(t *testing.T) {
+	if got := readStatus(0, ""); got != "missing" {
+		t.Fatalf("zero instances should be missing, got %q", got)
+	}
+	if got := readStatus(2, ""); got != "degraded" {
+		t.Fatalf("instances without route should be degraded, got %q", got)
+	}
+	if got := readStatus(2, "prod-gw-a"); got != "active" {
+		t.Fatalf("instances with route target should be active, got %q", got)
 	}
 }
 

@@ -2,6 +2,22 @@ package loxilb
 
 import "testing"
 
+func TestParseFirewallTreatsEmptyFirewallOutputAsNoRules(t *testing.T) {
+	rules, err := parseFirewall([]byte("Error: no firewall rules found\n"))
+	if err != nil {
+		t.Fatalf("parse empty firewall output: %v", err)
+	}
+	if len(rules) != 0 {
+		t.Fatalf("expected no rules, got %#v", rules)
+	}
+}
+
+func TestParseFirewallRejectsUnexpectedNonJSON(t *testing.T) {
+	if _, err := parseFirewall([]byte("Error: loxilb API unavailable\n")); err == nil {
+		t.Fatal("expected unexpected non-json output to fail")
+	}
+}
+
 func TestParseFirewallCounters(t *testing.T) {
 	data := []byte(`{
 	  "fwAttr": [

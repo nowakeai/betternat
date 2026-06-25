@@ -4,9 +4,8 @@ Date: 2026-06-25
 
 ## Summary
 
-BetterNAT's core value over a raw LoxiLB or nftables gateway is not merely
-packet forwarding. The product value is the HA control plane around the
-datapath:
+BetterNAT's core value over a raw LoxiLB gateway is not merely packet
+forwarding. The product value is the HA control plane around the datapath:
 
 - fenced active/standby ownership,
 - safe route mutation,
@@ -39,9 +38,8 @@ References:
   <https://docs.loxilb.io/kube-loxilb/>
 
 The current GCP alpha implementation proves a necessary but insufficient layer:
-GCE forwarding VMs, nftables masquerade, tagged route replacement, provider
-status reads, and provider cleanup. It is not yet a BetterNAT-equivalent GCP HA
-implementation.
+GCE forwarding VMs, tagged route replacement, provider status reads, and
+provider cleanup. It is not yet a BetterNAT-equivalent GCP HA implementation.
 
 Important correction from the 2026-06-25 review: because BetterNAT's main value
 over a raw LoxiLB appliance is the HA product layer, GCP must not be framed as
@@ -53,7 +51,6 @@ items are substrate. The product milestone is live agent-owned HA.
 Validated:
 
 - private client egress through a `canIpForward=true` gateway VM,
-- nftables masquerade on Debian 12 GCE gateway VMs,
 - tagged default route replacement from `gw-a` to `gw-b`,
 - provider-created gateway VMs and route,
 - provider read path observing out-of-band route handover,
@@ -121,7 +118,7 @@ nice-to-have polish:
 | Proactive handover | Upgrades, shutdown, Spot/MIG lifecycle, and manual maintenance should move ownership before the old active exits | Generic handover path exists; GCP live path unvalidated | Manual handover and systemd stop on active GCE node produce completed handover records and no route split-brain |
 | Route verification | GCP static route delete/insert is not an atomic AWS `ReplaceRoute` equivalent | GCP provider describes and replaces route | Every mutation verifies target and degrades on Compute API or propagation failure |
 | Stable public identity | Many egress users care about allowlists and source-IP continuity | GCP route-only mode intentionally has non-stable public identity | Either validate an address handover design or state that GCP alpha is non-stable only |
-| Datapath reconciliation | LoxiLB state can be lost after restart; BetterNAT owns desired-state replay | AWS path has this design; GCP tests so far used nftables substrate | LoxiLB on GCE install, counters, restart replay, and nftables fallback evidence |
+| Datapath reconciliation | LoxiLB state can be lost after restart; BetterNAT owns desired-state replay | AWS path has this design; GCP must prove LoxiLB directly | LoxiLB on GCE install, counters, and restart replay; nftables fallback is not a GCP acceptance item |
 | Peer readiness | A standby must be selected only if it is healthy enough to receive traffic | Registry and peer prepare APIs exist | Handover refuses stale, unhealthy, or wrong-generation standby records in live GCE smoke |
 | Observability | Operators need to see whether HA is working before failure | Metrics/status are provider-neutral, but GCP support bundle not proven | GCP status includes lease, route, datapath, handover, Firestore errors, and Compute operation IDs |
 | Rollback and destroy | Terraform cleanup must not fight or orphan agent-owned route changes | Provider cleanup passed substrate spike | Destroy after agent-owned handover restores/removes provider-owned routes and leaves no residual resources |
@@ -137,7 +134,7 @@ GCP should not be considered a BetterNAT-equivalent alpha until the following
 sequence passes in a disposable project:
 
 1. Two GCE gateway nodes boot with the BetterNAT agent, publish registry
-   records, and keep LoxiLB or nftables ready.
+   records, and keep LoxiLB ready.
 2. Exactly one node acquires a Firestore lease generation and mutates the
    configured tagged default route.
 3. The active node reports `ACTIVE` only after route verification and datapath
@@ -548,8 +545,9 @@ failover.
 
 ### 5. LoxiLB On GCE
 
-The current GCP tests used nftables. That is useful as a fallback and debugging
-baseline, but it does not prove the preferred BetterNAT datapath.
+The current GCP tests used nftables. That evidence is useful for early
+forwarding substrate debugging, but it is not a GCP HA acceptance item and does
+not prove the BetterNAT datapath.
 
 Required tests:
 
@@ -744,7 +742,7 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
 
 - LoxiLB on GCE validated or explicitly rejected with evidence.
 - Raw LoxiLB GCP HA behavior compared against BetterNAT-owned route fencing.
-- nftables fallback remains tested.
+- nftables fallback is excluded from GCP HA acceptance.
 - Stable public IP is validated or explicitly not supported in GCP alpha.
 - Existing connections are documented as not preserved.
 - Bootstrap installs agent, CLI, datapath, config, metrics, and systemd units

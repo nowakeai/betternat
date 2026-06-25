@@ -262,10 +262,7 @@ func (c Controller) ensureOwnership(ctx context.Context, cfg config.Config, loca
 	}
 	for _, target := range routes {
 		actual, err := c.Cloud.DescribeRoute(ctx, target.RouteTableID, target.DestinationCIDR)
-		if err != nil {
-			return ActivationResult{}, fmt.Errorf("describe route %s %s: %w", target.RouteTableID, target.DestinationCIDR, err)
-		}
-		if actual.Target != target.Target {
+		if err != nil || actual.Target != target.Target {
 			if err := c.verifyLeaseFence(ctx, record, localInstanceID, "before route repair"); err != nil {
 				return ActivationResult{}, err
 			}

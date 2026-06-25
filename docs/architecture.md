@@ -12,7 +12,8 @@ The product is now LoxiLB-first:
 
 ```text
 Primary datapath: LoxiLB standalone egress SNAT
-Fallback datapath: Linux nftables/nf_conntrack
+Fallback datapath: none for GCP HA acceptance; AWS may keep nftables as a
+diagnostic or explicit operator-selected mode
 Cloud target: AWS first
 Install UX: Terraform provider first
 Runtime control plane: betternat-agent
@@ -144,7 +145,6 @@ resource "betternat_aws_gateway" "egress" {
   stable_egress_ip  = true
 
   datapath_engine = "loxilb"
-  fallback_engine = "nftables"
 
   observability = {
     prometheus = true
@@ -162,7 +162,7 @@ It owns:
 - local health checks,
 - local datapath reconciliation,
 - LoxiLB rule apply/read/replay,
-- nftables fallback rule apply/read/replay,
+- optional nftables diagnostic-mode rule apply/read/replay where explicitly supported,
 - lease acquire/renew/release,
 - active/standby HA state machine,
 - AWS SDK failover operations,
@@ -222,14 +222,19 @@ The spike validated this mode with:
 - 10MB and 137MB response downloads,
 - EIP + `ReplaceRoute` failover to a backup appliance.
 
-## nftables Fallback
+## nftables Scope
 
-nftables/nf_conntrack remains a required fallback engine, not the main product path.
+nftables/nf_conntrack is not part of the GCP HA acceptance bar and must not be
+used to down-scope LoxiLB or HA validation. BetterNAT's GCP design is
+LoxiLB-first with agent-owned HA; if LoxiLB cannot become ready on GCE, that is
+a GCP datapath blocker rather than a reason to pass through nftables.
 
-Fallback use cases:
+For AWS and local diagnostics, nftables may remain available as an explicit
+operator-selected or support-mode Linux NAT path. It is not the main product
+path and should not be described as a required fallback for every cloud.
 
-- LoxiLB install failure,
-- unsupported kernel or instance behavior,
+Allowed non-GCP use cases:
+
 - user explicitly selects conservative Linux NAT mode,
 - emergency rollback during support,
 - minimal local development and smoke tests.
