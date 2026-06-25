@@ -205,7 +205,9 @@ BetterNAT config sections to document:
 
 Do not expose advanced kernel/NIC tuning as a supported user knob until it is implemented and benchmarked.
 
-When discussing `nf_conntrack_max`, state that it is retained for nftables fallback and Linux-netfilter compatibility. LoxiLB conntrack is inspected through LoxiLB/BetterNAT metrics, not Linux `conntrack -L`.
+When discussing `nf_conntrack_max`, state that it is retained for legacy
+nftables code and Linux-netfilter compatibility. LoxiLB conntrack is inspected
+through LoxiLB/BetterNAT metrics, not Linux `conntrack -L`.
 
 ## Limitations Page
 

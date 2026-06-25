@@ -92,7 +92,7 @@ Capacity-only updates are intended to be in-place. Other topology or bootstrap c
 | Name | Default | Description |
 | --- | --- | --- |
 | `datapath_engine` | `loxilb` | BetterNAT node datapath. |
-| `fallback_datapath_engine` | `nftables` | Fallback/debug datapath engine value rendered into runtime config. Currently accepts `nftables`. |
+| `fallback_datapath_engine` | `nftables` | Legacy debug value retained for compatibility while nftables code remains. It is not a supported product fallback and must not be used to pass a deployment where LoxiLB is not ready. |
 
 LoxiLB has its own eBPF conntrack state. Linux `nf_conntrack_max` is not the primary LoxiLB capacity knob.
 

@@ -10,8 +10,8 @@ Current baseline:
 
 ```text
 Primary datapath: LoxiLB standalone egress SNAT
-Fallback datapath: none for GCP HA acceptance; AWS may keep explicit nftables
-diagnostic mode
+Fallback datapath: none. nftables is not a product fallback; existing code may
+remain temporarily as legacy diagnostic code while it is phased out
 Cloud target: AWS
 Runtime control plane: betternat-agent
 User-facing install path: terraform-provider-betternat
@@ -37,7 +37,7 @@ v0 MUST provide:
 
 - AWS private subnet egress through self-owned EC2 nodes.
 - LoxiLB-based egress SNAT as the primary datapath.
-- Optional nftables/nf_conntrack diagnostic mode for AWS/local support paths.
+- No product fallback datapath; LoxiLB is required for supported deployments.
 - Terraform-managed install and lifecycle.
 - Active/standby HA for new connections.
 - Stable public egress IP for new connections after failover when `stable_egress_ip = true`.
@@ -221,9 +221,6 @@ datapath:
     snat_interface: ens5
     rule_preference_base: 100
     reconcile_interval_seconds: 10
-  nftables:
-    table_name: betternat
-    chain_prefix: betternat
 
 ha:
   enabled: true
@@ -303,18 +300,12 @@ loxicmd create firewall \
 
 The LoxiLB engine MUST treat LoxiLB rules as ephemeral. Desired state lives in BetterNAT config, not only inside LoxiLB.
 
-### nftables Fallback Engine
+### nftables Legacy Code
 
-The nftables engine MUST:
-
-- enable/check IP forwarding,
-- create a dedicated `betternat` nftables table,
-- configure SNAT or masquerade for configured private CIDRs,
-- read basic nftables counters,
-- read `nf_conntrack` usage,
-- expose fallback health.
-
-The fallback engine SHOULD be simple and conservative. It is not the main performance/observability path.
+nftables/nf_conntrack code may remain temporarily for existing diagnostics and
+tests, but it is not part of the v0 product contract. It MUST NOT be expanded as
+a fallback mode, required by release acceptance, or used to pass a deployment
+where LoxiLB is not ready. Future cleanup can remove this code gradually.
 
 ## HA State Machine
 
@@ -502,7 +493,6 @@ Top-N data SHOULD be exposed through an admin API or bounded metric set, not unl
 - source/destination check disabled,
 - LoxiLB running and API reachable,
 - LoxiLB egress rules present,
-- nftables diagnostic-mode availability where explicitly enabled,
 - IP forwarding enabled,
 - DynamoDB lease table reachable,
 - route table target matches expected active,
@@ -567,7 +557,6 @@ Appliance MUST install or start:
 
 - LoxiLB,
 - betternat-agent,
-- nftables diagnostic-mode prerequisites where explicitly enabled,
 - metrics endpoint,
 - OS sysctl settings.
 
@@ -604,12 +593,9 @@ v0 HA acceptance:
 - Agent exports failover event and duration metrics.
 - Active connection preservation is not required.
 
-v0 fallback acceptance:
-
-- User can select `datapath.engine = "nftables"`.
-- Private test instance reaches internet.
-- Basic counters and conntrack usage are exported.
-- Doctor clearly reports fallback mode.
+v0 has no fallback acceptance gate. Users must not be asked to select nftables
+to pass a release, support a cloud, or recover from an unready LoxiLB datapath.
+Existing nftables code is legacy and can be removed gradually.
 
 ## Open Questions
 

@@ -63,7 +63,8 @@ resources.
 - One private client VM without public IP.
 - One or two gateway VMs with `canIpForward=true`.
 - A static default route from the private subnet tag to the active gateway VM.
-- LoxiLB first; nftables fallback if LoxiLB forwarding does not work.
+- LoxiLB datapath only. If LoxiLB forwarding does not work, that is a GCP
+  blocker, not a reason to pass with nftables.
 - Firestore transaction or GCS generation-precondition lease backend candidate.
 - Optional reserved static external IP handover test.
 

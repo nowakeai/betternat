@@ -27,7 +27,7 @@ Positioning:
 - AWS only,
 - Terraform-first,
 - LoxiLB-first datapath,
-- nftables fallback,
+- no product fallback datapath,
 - ASG active/standby HA,
 - Prometheus metrics,
 - no central server,
@@ -220,7 +220,8 @@ Acceptance:
 
 - user can deploy from the Terraform example without local absolute paths,
 - release notes state whether AMI is prebuilt or bootstrap-based,
-- bootstrap installs/runs agent, LoxiLB, `loxicmd`, nftables fallback tools, and systemd unit.
+- bootstrap installs/runs agent, LoxiLB, `loxicmd`, legacy nftables tools while
+  retained, and systemd unit.
 - bootstrap applies the documented baseline sysctl profile.
 
 ### 6. Release Artifact Hygiene
@@ -299,7 +300,7 @@ Completed locally:
   - `scripts/linux-smoke-nftables.sh`
   - `scripts/linux-smoke-nftables-udp.sh`
   - `scripts/linux-smoke-nftables-throughput.sh`
-- [x] Linux VM agent metrics with nftables fallback passed:
+- [x] Linux VM agent metrics with legacy nftables code passed:
   - `scripts/linux-smoke-agent-nftables.sh`
 - [x] `doctor --live` P0 local unit coverage passed:
   - `GOCACHE=$PWD/tmp/go-build-cache go test ./internal/cli ./internal/doctor ./internal/cloud/aws ./internal/iamcheck/aws`
@@ -402,7 +403,7 @@ Required before alpha:
 - nftables datapath smoke,
 - nftables UDP smoke,
 - nftables throughput sanity,
-- agent metrics with nftables fallback,
+- agent metrics with legacy nftables code,
 - LoxiLB smoke if the local Linux environment supports it; otherwise AWS LoxiLB
   validation is the authoritative alpha datapath proof.
 

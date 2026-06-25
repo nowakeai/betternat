@@ -249,8 +249,8 @@ Scope:
 - Private client VM without public IP.
 - One or two gateway VMs with `canIpForward=true`.
 - Static route from private subnet egress to the active gateway VM.
-- LoxiLB datapath only for GCP HA acceptance; do not pass GCP using nftables
-  fallback.
+- LoxiLB datapath only for cloud HA acceptance; do not pass any cloud alpha or
+  GA gate using nftables.
 - Firestore transaction lease backend.
 - Optional reserved static external IP test.
 

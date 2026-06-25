@@ -70,7 +70,7 @@ flowchart LR
   awsapi[AWS APIs]
   agent[betternat-agent]
   loxi[LoxiLB<br/>local datapath]
-  nft[nftables fallback]
+  nft[nftables<br/>legacy diagnostics]
   prom[Prometheus / Grafana]
   ddb[(DynamoDB lease)]
   rt[AWS route tables]

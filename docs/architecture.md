@@ -12,8 +12,8 @@ The product is now LoxiLB-first:
 
 ```text
 Primary datapath: LoxiLB standalone egress SNAT
-Fallback datapath: none for GCP HA acceptance; AWS may keep nftables as a
-diagnostic or explicit operator-selected mode
+Fallback datapath: none. nftables is not a product fallback; existing code may
+remain temporarily as legacy diagnostic code while it is phased out
 Cloud target: AWS first
 Install UX: Terraform provider first
 Runtime control plane: betternat-agent
@@ -162,7 +162,7 @@ It owns:
 - local health checks,
 - local datapath reconciliation,
 - LoxiLB rule apply/read/replay,
-- optional nftables diagnostic-mode rule apply/read/replay where explicitly supported,
+- legacy nftables diagnostics while retained; no new fallback behavior,
 - lease acquire/renew/release,
 - active/standby HA state machine,
 - AWS SDK failover operations,
@@ -222,22 +222,18 @@ The spike validated this mode with:
 - 10MB and 137MB response downloads,
 - EIP + `ReplaceRoute` failover to a backup appliance.
 
-## nftables Scope
+## nftables Legacy Scope
 
-nftables/nf_conntrack is not part of the GCP HA acceptance bar and must not be
-used to down-scope LoxiLB or HA validation. BetterNAT's GCP design is
-LoxiLB-first with agent-owned HA; if LoxiLB cannot become ready on GCE, that is
-a GCP datapath blocker rather than a reason to pass through nftables.
+BetterNAT does not have a product fallback datapath. LoxiLB is the supported
+datapath for AWS and future clouds. If LoxiLB fails a cloud, kernel, or
+packaging acceptance test, that is a product blocker or an explicit architecture
+decision, not a reason to pass the release through nftables.
 
-For AWS and local diagnostics, nftables may remain available as an explicit
-operator-selected or support-mode Linux NAT path. It is not the main product
-path and should not be described as a required fallback for every cloud.
-
-Allowed non-GCP use cases:
-
-- user explicitly selects conservative Linux NAT mode,
-- emergency rollback during support,
-- minimal local development and smoke tests.
+Existing nftables/nf_conntrack code may remain temporarily to avoid risky
+removal and to preserve historical diagnostics while the codebase is simplified.
+It must not be expanded as a fallback mode, required by release acceptance, or
+used to down-scope LoxiLB and HA validation. Future cleanup can remove it
+opportunistically.
 
 Scope is intentionally small:
 
@@ -343,7 +339,7 @@ type DatapathEngine interface {
 `nftables` implementation:
 
 - verify Linux forwarding,
-- apply fallback NAT table,
+- apply legacy NAT table for existing diagnostics/tests,
 - read nftables counters,
 - read `nf_conntrack` counters,
 - report conservative status.
@@ -405,7 +401,8 @@ v0 does not promise:
 
 1. Define config schema and `DatapathEngine`.
 2. Implement `loxilb` engine with rule reconcile and counter reads.
-3. Implement minimal `nftables` fallback engine.
+3. Keep legacy nftables code stable until phased out; do not expand it as a
+   fallback.
 4. Implement AWS cloud client for route/EIP verification and mutation.
 5. Implement DynamoDB lease/fencing.
 6. Implement Prometheus exporter from normalized agent state.

@@ -77,12 +77,12 @@ This still does not replace real AWS route/EIP testing.
 | VM-004 | Agent validate-only config load | 1 | No | Ready | JSON/YAML config parsing and validation on Linux | Runtime reconciliation |
 | VM-005 | Prometheus text rendering | 1 | No | Ready | Metrics output format remains parseable on Linux | Real counter collection |
 | VM-006 | nftables masquerade smoke | 1 | Yes | Ready: `scripts/linux-smoke-nftables.sh` | Real nftables NAT, counters, conntrack visibility, namespace cleanup | AWS routing, public egress IP |
-| VM-007 | nftables UDP/DNS smoke | 1 | Yes | Ready: `scripts/linux-smoke-nftables-udp.sh` | UDP NAT and DNS-like traffic through fallback datapath | Long-lived TCP behavior |
+| VM-007 | nftables UDP/DNS smoke | 1 | Yes | Ready: `scripts/linux-smoke-nftables-udp.sh` | Legacy nftables UDP NAT and DNS-like traffic while the code remains | Long-lived TCP behavior |
 | VM-008 | nftables cleanup safety | 1 | Yes | Ready: `scripts/linux-smoke-nftables-cleanup.sh` | BetterNAT cleanup removes only BetterNAT-owned tables/chains/rules | Full firewall coexistence in production |
 | VM-009 | conntrack parser against live output | 1 | Yes | Ready: covered by VM-006 and VM-007 | Parser handles real TCP and UDP `conntrack -L` shape | Large table performance |
-| VM-010 | agent nftables fallback reconcile | 1 | Yes | Ready: `scripts/linux-smoke-agent-nftables.sh` | `betternat-agent --once` can apply fallback rules on Linux | HA or cloud failover |
-| VM-011 | agent metrics from live nftables datapath | 1 | Yes | Ready: `scripts/linux-smoke-agent-nftables.sh` | Agent exports Prometheus text from a real fallback datapath namespace | LoxiLB counters |
-| VM-012 | local route forwarding throughput baseline | 1 | Yes | Ready: `scripts/linux-smoke-nftables-throughput.sh` | Rough per-VM iperf throughput baseline for fallback datapath | AWS ENA/Nitro performance |
+| VM-010 | agent legacy nftables reconcile | 1 | Yes | Ready: `scripts/linux-smoke-agent-nftables.sh` | `betternat-agent --once` can apply legacy nftables rules on Linux | HA or cloud failover |
+| VM-011 | agent metrics from live nftables code | 1 | Yes | Ready: `scripts/linux-smoke-agent-nftables.sh` | Agent exports Prometheus text from a legacy nftables namespace | LoxiLB counters |
+| VM-012 | local route forwarding throughput baseline | 1 | Yes | Ready: `scripts/linux-smoke-nftables-throughput.sh` | Rough per-VM iperf baseline for legacy nftables code | AWS ENA/Nitro performance |
 | VM-013 | LoxiLB container starts | 1 | Yes / privileged runtime | Attempted: `scripts/linux-smoke-loxilb.sh`; blocked by current OrbStack VM runtime/kernel behavior | Local runtime can start or reach LoxiLB when `loxicmd`/runtime exists | AWS datapath behavior |
 | VM-014 | LoxiLB rule create/read | 1 | Yes / privileged runtime | Blocked in current VM: LoxiLB API did not become ready | `loxicmd` or API can create and read egress SNAT rules | Rule persistence across AWS appliance restart |
 | VM-015 | LoxiLB counter parsing | 1 | Yes / privileged runtime | Blocked in current VM: no live LoxiLB API output | BetterNAT parser works against live LoxiLB output | High-volume production accuracy |
@@ -260,7 +260,7 @@ Results:
 - Real nftables masquerade + conntrack smoke passed.
 - Real nftables UDP NAT + UDP conntrack smoke passed.
 - BetterNAT-owned nftables cleanup safety smoke passed.
-- `betternat-agent --once` applied real nftables fallback rules and emitted Prometheus text in a network namespace.
+- `betternat-agent --once` applied real legacy nftables rules and emitted Prometheus text in a network namespace.
 - Local nftables throughput baseline passed; observed output on the test VM was approximately `99433 Mbits/sec`.
 - Lease/HA race and repeated local fencing simulation passed.
 - Bootstrap render smoke passed.

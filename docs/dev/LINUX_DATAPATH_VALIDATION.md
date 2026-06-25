@@ -37,11 +37,12 @@ Equivalent convenience command:
 ./manage verify
 ```
 
-### L1: nftables/nf_conntrack Integration
+### L1: Legacy nftables/nf_conntrack Integration
 
 Purpose:
 
-- validate the fallback datapath against real Linux nftables,
+- validate legacy nftables diagnostics against real Linux nftables while the
+  code remains,
 - verify conntrack parsing against real conntrack output,
 - verify counters and cleanup behavior,
 - exercise a local network namespace topology without cloud dependencies.

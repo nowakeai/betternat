@@ -11,7 +11,10 @@ This directory is split by audience and document lifecycle.
 - `dev-logs/` is for dated implementation notes and session summaries.
 - `assets/` is for shared diagrams and images referenced by user and maintainer docs.
 
-Older research may describe nftables-first or custom-eBPF-first thinking. Treat those as history when they conflict with the current architecture and spec.
+Older research may describe nftables-first, nftables fallback, or
+custom-eBPF-first thinking. Treat those as history when they conflict with the
+current architecture and spec. Current BetterNAT has no product fallback
+datapath; LoxiLB readiness is a release gate.
 
 ## Start Here
 
@@ -126,6 +129,7 @@ Read these first when revisiting product or architecture direction:
 - [research/052-gcp-ha-gap-analysis.md](research/052-gcp-ha-gap-analysis.md) — GCP HA gap analysis covering Firestore coordination, route fencing, public identity, LoxiLB, IAM, observability, and release gates.
 - [research/053-gcp-firestore-live-contention-results.md](research/053-gcp-firestore-live-contention-results.md) — Live Firestore Native contention validation for GCP lease, registry, handover records, and cleanup.
 - [research/054-gcp-agent-ha-smoke-results.md](research/054-gcp-agent-ha-smoke-results.md) — Live GCP two-agent HA smoke covering Firestore ownership, route repair, passive failover, cleanup, and remaining GCP alpha gaps.
+- [research/055-no-nftables-fallback-decision.md](research/055-no-nftables-fallback-decision.md) — Decision record that BetterNAT has no product nftables fallback; legacy code may remain only while phased out.
 
 ## Supporting Research
 

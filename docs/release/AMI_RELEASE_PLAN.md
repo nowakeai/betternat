@@ -23,7 +23,7 @@ Each BetterNAT AMI should contain:
 - `betternat` CLI,
 - LoxiLB runtime,
 - `loxicmd`,
-- nftables fallback dependencies,
+- legacy nftables diagnostic tools while retained,
 - conntrack diagnostics,
 - Docker or the selected LoxiLB service runtime,
 - SSM agent,
@@ -257,7 +257,7 @@ Before marking an AMI stable:
 2. Verify SSM access without public SSH.
 3. Verify `betternat-agent.service` starts.
 4. Verify LoxiLB readiness.
-5. Verify nftables fallback tools are present.
+5. Verify legacy nftables diagnostic tools are present while retained.
 6. Verify `betternat doctor` output.
 7. Verify private client egress through the appliance.
 8. Verify route-only failover to a second appliance.
