@@ -328,6 +328,8 @@ Tasks:
 - [x] Add GCP-aware `betternat doctor --live` checks for Firestore lease,
   configured route, route-only public identity, Prometheus, and source-IP
   probe.
+- [x] Add GCP-aware `betternat status --direct` checks for Firestore registry,
+  configured route target, and route-target match.
 - [x] Add disposable GCP integration runbook.
 
 Validation:
@@ -621,6 +623,11 @@ Append dated notes here during implementation.
   exists. This covers the "standby cannot mutate route while another owner
   holds the lease" invariant locally; live two-agent GCE evidence is still
   required.
+- Added GCP support to `betternat status --direct`: direct status now resolves
+  GCE `local.node_id=auto`, reads Firestore registry records when GCP HA is
+  enabled, reads the configured GCP route target through Compute, and reports
+  route-target match against the lease owner. Local unit tests cover the GCP
+  direct-status path; live GCE evidence is still pending.
 - Opened implementation PRs:
   - main repo: `https://github.com/nowakeai/betternat/pull/1`
   - split provider repo:

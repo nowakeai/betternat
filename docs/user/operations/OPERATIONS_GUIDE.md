@@ -85,7 +85,7 @@ betternat version
 
 Current behavior:
 
-- `status` reads the local daemon by default, uses cached registry and metrics data, and prints fleet, active/standby, version, IP, lease, cache freshness, peer control, registry age, and traffic summary data.
+- `status` reads the local daemon by default, uses cached registry and metrics data, and prints fleet, active/standby, version, IP, lease, route match, cache freshness, peer control, registry age, and traffic summary data.
 - `status --watch` refreshes the same view until interrupted. Use `--output json` for newline-delimited machine-readable snapshots.
 - `doctor` performs static/config-level checks.
 - `doctor --live` adds local datapath, lease, route, public identity, Prometheus, and outbound source-IP probe checks where configured. On AWS it also checks IAM runtime permission simulation, ASG health where applicable, EIP ownership, and EC2 source/destination check. On GCP it checks Firestore lease ownership, configured tagged static routes, Prometheus, and route-only public identity status.
@@ -103,7 +103,7 @@ Important:
 - Gateway-local commands read `/etc/betternat/agent.json` by default. Use
   `--config <path>` only for debugging a non-default config.
 - The CLI does not currently connect to a central BetterNAT API.
-- The CLI live doctor path is cloud-aware for AWS and GCP, but it is still node-local. Fleet-level visibility comes from the coordination registry and per-agent metrics.
+- The CLI live status and doctor paths are cloud-aware for AWS and GCP, but they are still node-local. Fleet-level visibility comes from the coordination registry and per-agent metrics.
 - GCP live doctor is route-only today. It does not validate stable shared public identity because GCP stable public-IP handover is not yet supported.
 
 ## Monitoring Entry Point
@@ -219,13 +219,15 @@ The bundle includes:
 - LoxiLB inspection output,
 - local `ip addr`, `ip route`, and nftables snapshots.
 
-When the agent config uses `cloud=gcp`, `doctor --live` reads the Firestore
-lease, verifies configured GCP route objects through Compute, and reports the
-route-only public identity status. The support bundle also attempts to collect
-GCE metadata identity, the configured project's Firestore database list, and
-the configured GCP route objects. These checks are best-effort: missing
-`gcloud`, missing local metadata access, or missing read permissions are
-recorded as command errors inside the bundle.
+When the agent config uses `cloud=gcp`, `status --direct` reads the Firestore
+registry when HA is enabled, reads the configured GCP route target through
+Compute, and reports whether the route target matches the lease owner.
+`doctor --live` reads the Firestore lease, verifies configured GCP route
+objects through Compute, and reports the route-only public identity status. The
+support bundle also attempts to collect GCE metadata identity, the configured
+project's Firestore database list, and the configured GCP route objects. These
+checks are best-effort: missing `gcloud`, missing local metadata access, or
+missing read permissions are recorded as command errors inside the bundle.
 
 The command redacts the peer API auth token from the config. Review the archive
 before sharing it outside your organization.

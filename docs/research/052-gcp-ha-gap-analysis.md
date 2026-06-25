@@ -658,6 +658,10 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
   Firestore lease, configured GCP route, route-only public identity,
   Prometheus, and outbound source-IP probe checks. Live GCE evidence is still
   required.
+- [x] `betternat status --direct` supports `cloud=gcp` by reading Firestore
+  registry records when HA is enabled, reading the configured GCP route target,
+  and reporting route-target match against the lease owner. Live GCE evidence
+  is still required.
 - [ ] Passive failover after active crash works.
 - [ ] Proactive handover works.
 - [ ] Route mutation cannot occur without a current lease generation. The
@@ -690,8 +694,9 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
 - Multi-zone behavior documented and tested.
 - GKE/private-node install path tested in a disposable project.
 - Observability and support bundle include GCP-specific HA evidence. Local live
-  doctor now reads Firestore lease state and configured GCP routes for
-  `cloud=gcp`; support bundle collection includes GCP metadata, Firestore
+  status now compares Firestore lease owner with configured GCP route target,
+  live doctor reads Firestore lease state and configured GCP routes for
+  `cloud=gcp`, and support bundle collection includes GCP metadata, Firestore
   database list, and configured route describe attempts. Live GCE evidence is
   still pending.
 - Cleanup and residual scans include Firestore records and service accounts.

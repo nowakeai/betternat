@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -15,13 +14,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 
 	"github.com/nowakeai/betternat/internal/agentapi"
+	"github.com/nowakeai/betternat/internal/cloud"
 	"github.com/nowakeai/betternat/internal/config"
 	"github.com/nowakeai/betternat/internal/coordination"
 	dynamodbcoord "github.com/nowakeai/betternat/internal/coordination/dynamodb"
+	firestorecoord "github.com/nowakeai/betternat/internal/coordination/firestore"
 	"github.com/nowakeai/betternat/internal/doctor"
 )
 
@@ -90,6 +90,9 @@ type scrapedMetrics struct {
 var (
 	statusHTTPClient  doctor.HTTPClient = &http.Client{Timeout: 2 * time.Second}
 	newStatusRegistry                   = func(ctx context.Context, cfg config.Config) (coordination.AgentReader, error) {
+		if cfg.Cloud == "gcp" {
+			return firestorecoord.New(ctx, cfg.GCP.ProjectID, cfg.GCP.FirestoreDatabaseID, cfg.GatewayID, doctorLeaseKey(cfg), doctorLeaseTTL(cfg))
+		}
 		return dynamodbcoord.New(ctx, cfg.Region, cfg.Coordination.Table, doctorLeaseKey(cfg), doctorLeaseTTL(cfg))
 	}
 )
@@ -377,7 +380,11 @@ func collectStatus(ctx context.Context, cfg config.Config, sample time.Duration)
 
 	localInstanceID := cfg.Local.NodeID
 	if localInstanceID == "auto" {
-		resolved, err := resolveLocalInstanceID(ctx, cfg.Region)
+		resolver := resolveLocalInstanceID
+		if cfg.Cloud == "gcp" {
+			resolver = resolveGCPLocalInstanceID
+		}
+		resolved, err := resolver(ctx, cfg.Region)
 		if err != nil {
 			status.Warnings = append(status.Warnings, "local instance: "+err.Error())
 			localInstanceID = ""
@@ -391,13 +398,22 @@ func collectStatus(ctx context.Context, cfg config.Config, sample time.Duration)
 		status.Warnings = append(status.Warnings, "local metrics: "+err.Error())
 	}
 
-	if cfg.Coordination.Table != "" {
+	usedRegistry := false
+	if statusHasRegistry(cfg) {
 		if collectRegistryStatus(ctx, cfg, sample, &status) {
-			return status
+			usedRegistry = true
 		}
 	}
 
-	if cfg.Cloud == "aws" {
+	if cfg.Cloud == "gcp" {
+		collectGCPStatus(ctx, cfg, localInstanceID, localMetrics, localSecond, sample, &status)
+		if usedRegistry {
+			return status
+		}
+	} else if cfg.Cloud == "aws" {
+		if usedRegistry {
+			return status
+		}
 		collectAWSStatus(ctx, cfg, localInstanceID, localMetrics, localSecond, sample, &status)
 	} else if localInstanceID != "" {
 		status.Instances = append(status.Instances, statusInstanceRow{
@@ -554,7 +570,31 @@ func collectAWSStatus(ctx context.Context, cfg config.Config, localInstanceID st
 	}
 }
 
-func describeRouteTarget(ctx context.Context, cfg config.Config, cloudProvider liveCloudProvider, status *statusOutput) string {
+func collectGCPStatus(ctx context.Context, cfg config.Config, localInstanceID string, localMetrics scrapedMetrics, localSecond scrapedMetrics, sample time.Duration, status *statusOutput) {
+	cloudProvider, err := newLiveGCPCloudProvider(ctx, cfg)
+	if err != nil {
+		status.Warnings = append(status.Warnings, "cloud: "+err.Error())
+		return
+	}
+	leaseOwner := status.RouteTarget
+	routeTarget := describeRouteTarget(ctx, cfg, cloudProvider, status)
+	if routeTarget != "" {
+		status.RouteTarget = routeTarget
+		if leaseOwner != "" {
+			match := routeTarget == leaseOwner
+			status.RouteTargetMatch = &match
+		}
+	}
+	for idx := range status.Instances {
+		nodeID := statusRowNodeID(status.Instances[idx])
+		status.Instances[idx].Role = routeRole(nodeID, status.RouteTarget)
+	}
+	if len(status.Instances) == 0 && localInstanceID != "" {
+		status.Instances = append(status.Instances, localStatusRow(localInstanceID, status.RouteTarget, localMetrics, localSecond, sample))
+	}
+}
+
+func describeRouteTarget(ctx context.Context, cfg config.Config, cloudProvider cloud.Provider, status *statusOutput) string {
 	if !cfg.HA.Enabled || len(cfg.HA.RouteFailover.RouteTableIDs) == 0 {
 		return ""
 	}
@@ -566,7 +606,7 @@ func describeRouteTarget(ctx context.Context, cfg config.Config, cloudProvider l
 	return target.Target
 }
 
-func describePublicIP(ctx context.Context, cfg config.Config, cloudProvider liveCloudProvider, status *statusOutput) string {
+func describePublicIP(ctx context.Context, cfg config.Config, cloudProvider cloud.Provider, status *statusOutput) string {
 	allocationID := cfg.HA.PublicIdentity.AllocationID
 	var err error
 	if cfg.HA.PublicIdentity.Mode == "shared_eip" && allocationID == "auto" && cfg.Local.AvailabilityZone != "" && cfg.Local.AvailabilityZone != "auto" {
@@ -596,27 +636,6 @@ func localStatusRow(instanceID string, routeTarget string, first scrapedMetrics,
 		TXMbps:  rateMbps(first.TXBytes, second.TXBytes, sample),
 		Metrics: metricsState(first),
 	}
-}
-
-func agentStatusNodeID(row agentapi.StatusInstance) string {
-	if row.NodeID != "" {
-		return row.NodeID
-	}
-	return row.InstanceID
-}
-
-func statusRowNodeID(row statusInstanceRow) string {
-	if row.NodeID != "" {
-		return row.NodeID
-	}
-	return row.InstanceID
-}
-
-func statusAgentRecordNodeID(record coordination.AgentRecord) string {
-	if record.NodeID != "" {
-		return record.NodeID
-	}
-	return record.InstanceID
 }
 
 func scrapeMetricsSample(ctx context.Context, url string, sample time.Duration) (scrapedMetrics, scrapedMetrics, error) {
@@ -765,203 +784,4 @@ func parseUintMetric(value string) (uint64, bool) {
 		return 0, false
 	}
 	return uint64(floatValue), true
-}
-
-func renderStatusTable(out io.Writer, status statusOutput) {
-	summary := table.NewWriter()
-	summary.SetOutputMirror(out)
-	summary.SetStyle(statusTableStyle())
-	summary.AppendHeader(table.Row{"Gateway", "HA Group", "Region", "AZ", "Public IP", "Datapath", "Nodes", "Desired", "Lease", "TTL", "Cache"})
-	summary.AppendRow(table.Row{
-		valueOrUnknown(status.GatewayID),
-		valueOrUnknown(status.HAGroupID),
-		valueOrUnknown(status.Region),
-		valueOrUnknown(status.AvailabilityZone),
-		valueOrUnknown(status.PublicIP),
-		valueOrUnknown(status.Datapath),
-		status.InstanceCount,
-		desiredCountValue(status.DesiredCount),
-		leaseGenerationValue(status.LeaseGeneration),
-		leaseTTLValue(status.LeaseExpiresIn),
-		cacheValue(status),
-	})
-	summary.Render()
-	_, _ = fmt.Fprintln(out)
-
-	instances := table.NewWriter()
-	instances.SetOutputMirror(out)
-	instances.SetStyle(statusTableStyle())
-	instances.AppendHeader(table.Row{"Node", "Role", "Health", "State", "Age", "Version", "Private IP", "Public IP", "RX Mbps", "TX Mbps", "Metrics", "Control"})
-	for _, row := range status.Instances {
-		instances.AppendRow(table.Row{
-			valueOrUnknown(statusRowNodeID(row)),
-			valueOrUnknown(row.Role),
-			valueOrUnknown(row.Health),
-			valueOrUnknown(row.LifecycleState),
-			ageValue(row.AgeSeconds, row.Fresh),
-			valueOrUnknown(row.Version),
-			valueOrUnknown(row.PrivateIP),
-			valueOrUnknown(row.PublicIP),
-			formatMbps(row.RXMbps),
-			formatMbps(row.TXMbps),
-			valueOrUnknown(row.Metrics),
-			controlValue(row.ControlURL),
-		})
-	}
-	instances.Render()
-	if len(status.Warnings) > 0 {
-		_, _ = fmt.Fprintln(out, "\nWarnings:")
-		for _, warning := range status.Warnings {
-			_, _ = fmt.Fprintf(out, "- %s\n", warning)
-		}
-	}
-}
-
-func statusTableStyle() table.Style {
-	style := table.StyleDefault
-	style.Name = "BetterNATStatus"
-	style.Options = table.OptionsNoBordersAndSeparators
-	return style
-}
-
-func metricsAddress(cfg config.Config) string {
-	addr := cfg.Observability.Prometheus.ListenAddress
-	if addr == "" {
-		addr = "0.0.0.0"
-	}
-	return fmt.Sprintf("%s:%d", addr, metricsPort(cfg))
-}
-
-func metricsPort(cfg config.Config) int {
-	if cfg.Observability.Prometheus.ListenPort == 0 {
-		return 9108
-	}
-	return cfg.Observability.Prometheus.ListenPort
-}
-
-func routeRole(instanceID string, routeTarget string) string {
-	if routeTarget == "" {
-		return "unknown"
-	}
-	if instanceID == routeTarget {
-		return "active"
-	}
-	return "standby"
-}
-
-func roleFromMetrics(metrics scrapedMetrics) string {
-	if metrics.Active == nil {
-		return "unknown"
-	}
-	if *metrics.Active {
-		return "active"
-	}
-	return "standby"
-}
-
-func metricsState(metrics scrapedMetrics) string {
-	if metrics.Version == "" && metrics.Active == nil && metrics.RXBytes == nil && metrics.TXBytes == nil {
-		return "unavailable"
-	}
-	return "ok"
-}
-
-func desiredCountValue(value int32) string {
-	if value == 0 {
-		return "unknown"
-	}
-	return fmt.Sprintf("%d", value)
-}
-
-func leaseGenerationValue(value uint64) string {
-	if value == 0 {
-		return "unknown"
-	}
-	return fmt.Sprintf("%d", value)
-}
-
-func leaseTTLValue(value float64) string {
-	if value == 0 {
-		return "unknown"
-	}
-	return fmt.Sprintf("%.0fs", value)
-}
-
-func cacheValue(status statusOutput) string {
-	if status.CacheMode == "" {
-		return "unknown"
-	}
-	fresh := ""
-	if status.CacheFresh != nil && !*status.CacheFresh {
-		fresh = "/stale"
-	}
-	if status.CacheAgeSeconds > 0 {
-		return fmt.Sprintf("%s%s %.1fs", status.CacheMode, fresh, status.CacheAgeSeconds)
-	}
-	return status.CacheMode + fresh
-}
-
-func ageValue(seconds float64, fresh bool) string {
-	if seconds == 0 && !fresh {
-		return "unknown"
-	}
-	suffix := ""
-	if !fresh {
-		suffix = " stale"
-	}
-	return fmt.Sprintf("%.1fs%s", seconds, suffix)
-}
-
-func controlValue(url string) string {
-	if url == "" {
-		return "unknown"
-	}
-	return "ok"
-}
-
-func healthFromAgent(agent coordination.AgentRecord) string {
-	if agent.DatapathReady {
-		return "Healthy"
-	}
-	return "Degraded"
-}
-
-func rateMbps(first *uint64, second *uint64, sample time.Duration) float64 {
-	if first == nil || second == nil || sample <= 0 || *second < *first {
-		return 0
-	}
-	return float64(*second-*first) * 8 / sample.Seconds() / 1_000_000
-}
-
-func formatMbps(value float64) string {
-	if value == 0 {
-		return "0.00"
-	}
-	if math.Abs(value) < 0.01 {
-		return "<0.01"
-	}
-	return fmt.Sprintf("%.2f", value)
-}
-
-type outputFlag outputFormat
-
-func (f *outputFlag) String() string {
-	if f == nil || *f == "" {
-		return string(outputTable)
-	}
-	return string(*f)
-}
-
-func (f *outputFlag) Set(value string) error {
-	switch outputFormat(value) {
-	case outputTable, outputJSON:
-		*f = outputFlag(value)
-		return nil
-	default:
-		return fmt.Errorf("unsupported output format %q", value)
-	}
-}
-
-func (*outputFlag) Type() string {
-	return "format"
 }
