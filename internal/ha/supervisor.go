@@ -121,6 +121,11 @@ func (s Supervisor) step(ctx context.Context, cfg config.Config, localInstanceID
 
 	current, err := s.Controller.Lease.Current(ctx)
 	now := s.now()
+	if err != nil {
+		if previous := s.previousOwnedLease(localInstanceID, now); previous.OwnerInstanceID != "" {
+			return StepResult{State: StateDegraded, Lease: previous, Err: fmt.Errorf("read HA lease while active: %w", err)}
+		}
+	}
 	if err == nil && current.OwnerInstanceID == localInstanceID && now.Before(current.ExpiresAt) {
 		renewed, renewErr := s.Controller.Lease.Renew(ctx, current)
 		if renewErr != nil {
@@ -164,6 +169,23 @@ func (s Supervisor) step(ctx context.Context, cfg config.Config, localInstanceID
 		return StepResult{State: StateStandby, Lease: current, Err: activateErr}
 	}
 	return StepResult{State: StateActive, Lease: activation.Lease, Activation: activation}
+}
+
+func (s Supervisor) previousOwnedLease(localInstanceID string, now time.Time) lease.Record {
+	if s.Reporter == nil || localInstanceID == "" || localInstanceID == "auto" {
+		return lease.Record{}
+	}
+	snapshot := s.Reporter.Snapshot()
+	if snapshot.State != StateActive && snapshot.State != StateDegraded {
+		return lease.Record{}
+	}
+	if snapshot.Lease.OwnerInstanceID != localInstanceID {
+		return lease.Record{}
+	}
+	if !now.Before(snapshot.Lease.ExpiresAt) {
+		return lease.Record{}
+	}
+	return snapshot.Lease
 }
 
 func (s Supervisor) report(result StepResult) {

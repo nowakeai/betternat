@@ -574,7 +574,9 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
   repair, activation, and handover cloud mutations in local tests, but live GCE
   evidence is still required.
 - [ ] Agent degrades instead of reporting active when Firestore or Compute route
-  verification is unavailable.
+  verification is unavailable. Local supervisor tests now cover degradation
+  when a previously active node cannot read the lease backend and when active
+  ownership verification fails, but live GCE evidence is still required.
 - [x] Provider destroy remains safe after out-of-band route movement.
 
 ### P1: Datapath And Public Identity

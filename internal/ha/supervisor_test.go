@@ -148,6 +148,51 @@ func TestSupervisorTimesOutBlockedLeaseCurrent(t *testing.T) {
 	}
 }
 
+func TestSupervisorDegradesWhenLeaseCurrentFailsAfterLocalActive(t *testing.T) {
+	now := time.Unix(100, 0)
+	previous := lease.Record{
+		HAGroupID:       "prod-egress-a",
+		OwnerInstanceID: "i-local",
+		Generation:      7,
+		ExpiresAt:       time.Unix(120, 0),
+		UpdatedAt:       time.Unix(99, 0),
+	}
+	reporter := NewMemoryStatus()
+	reporter.now = func() time.Time { return now }
+	reporter.Report(StepResult{
+		State: StateActive,
+		Lease: previous,
+		Activation: ActivationResult{
+			Lease: previous,
+			Routes: []cloud.RouteTarget{{
+				RouteTableID:    "rtb-a",
+				DestinationCIDR: "0.0.0.0/0",
+				Target:          "i-local",
+			}},
+		},
+	})
+	cloudProvider := &fakeCloud{}
+	supervisor := Supervisor{
+		Controller: Controller{Cloud: cloudProvider, Lease: failingCurrentLease{}},
+		Now:        func() time.Time { return now },
+		Reporter:   reporter,
+	}
+
+	result := supervisor.Step(context.Background(), validSupervisorConfig(), "i-local")
+	if result.Err == nil {
+		t.Fatal("expected lease current error")
+	}
+	if result.State != StateDegraded {
+		t.Fatalf("previous active should degrade on Firestore current failure, got %#v", result)
+	}
+	if result.Lease.Generation != previous.Generation || result.Lease.OwnerInstanceID != "i-local" {
+		t.Fatalf("expected previous owned lease in degraded result: %#v", result.Lease)
+	}
+	if len(cloudProvider.calls) != 0 {
+		t.Fatalf("must not mutate cloud when active lease cannot be read: %#v", cloudProvider.calls)
+	}
+}
+
 func TestSupervisorTakesOverExpiredLease(t *testing.T) {
 	now := time.Unix(100, 0)
 	manager := lease.NewMemoryManager("prod-egress-a", 10*time.Second, func() time.Time { return now })
@@ -185,6 +230,26 @@ func TestSupervisorTakesOverExpiredLease(t *testing.T) {
 	}
 	if engine.reconcileCount != 1 {
 		t.Fatalf("takeover should reconcile datapath once, got %d", engine.reconcileCount)
+	}
+}
+
+func TestSupervisorDegradesWhenActiveOwnershipVerificationFails(t *testing.T) {
+	now := time.Unix(100, 0)
+	manager := lease.NewMemoryManager("prod-egress-a", 10*time.Second, func() time.Time { return now })
+	if _, err := manager.Acquire(context.Background(), "i-local"); err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	supervisor := Supervisor{
+		Controller: Controller{Cloud: &fakeCloud{}, Lease: manager, Datapath: &fakeDatapath{}},
+		Now:        func() time.Time { return now },
+	}
+
+	result := supervisor.Step(context.Background(), validSupervisorConfig(), "i-local")
+	if result.Err == nil {
+		t.Fatal("expected ownership verification error")
+	}
+	if result.State != StateDegraded {
+		t.Fatalf("active route verification failure should degrade, got %#v", result)
 	}
 }
 
@@ -437,6 +502,24 @@ func (b *blockingCurrentLease) Release(ctx context.Context, _ lease.Record) erro
 func (b *blockingCurrentLease) Current(ctx context.Context) (lease.Record, error) {
 	<-ctx.Done()
 	return lease.Record{}, ctx.Err()
+}
+
+type failingCurrentLease struct{}
+
+func (failingCurrentLease) Acquire(context.Context, string) (lease.Record, error) {
+	return lease.Record{}, errors.New("lease unavailable")
+}
+
+func (failingCurrentLease) Renew(context.Context, lease.Record) (lease.Record, error) {
+	return lease.Record{}, errors.New("lease unavailable")
+}
+
+func (failingCurrentLease) Release(context.Context, lease.Record) error {
+	return errors.New("lease unavailable")
+}
+
+func (failingCurrentLease) Current(context.Context) (lease.Record, error) {
+	return lease.Record{}, errors.New("firestore unavailable")
 }
 
 type renewFailLease struct {

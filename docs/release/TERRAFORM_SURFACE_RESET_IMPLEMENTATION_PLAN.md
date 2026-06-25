@@ -578,6 +578,10 @@ Append dated notes here during implementation.
   GCP evidence path for disposable apply, private egress, Firestore contention,
   two-agent HA, passive failover, proactive handover, datapath restart, failure
   injection, destroy, and residual scans.
+- Strengthened active degradation behavior: a node with a previous local active
+  lease now reports `DEGRADED` instead of attempting takeover when the lease
+  backend cannot be read, and active ownership verification failures also keep
+  the supervisor out of `ACTIVE`. Live GCE evidence is still pending.
 - Opened implementation PRs:
   - main repo: `https://github.com/nowakeai/betternat/pull/1`
   - split provider repo:
