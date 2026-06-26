@@ -184,7 +184,7 @@ func runtimeRole(name string) *gcpiam.Role {
 	return &gcpiam.Role{
 		Name:                name,
 		Title:               "BetterNAT Runtime",
-		Description:         "Runtime permissions for BetterNAT GCP route-only HA gateways.",
+		Description:         "Runtime permissions for BetterNAT GCP HA gateways.",
 		IncludedPermissions: RuntimeIAMPermissions(),
 		Stage:               "ALPHA",
 	}

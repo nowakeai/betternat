@@ -214,7 +214,8 @@ primitive that avoids static external IPv4 access-config movement.
   route ownership has moved.
 - GCP live doctor behavior was updated in the same branch so shared public
   identity is checked rather than reported as route-only unsupported.
-- Improve the GCP smoke harness so it can switch SSH proxy gateway after
-  handover and collect client probe results without manual recovery.
+- The GCP protocol smoke harness now switches SSH proxy gateway after handover
+  so client probe results can be collected without manual recovery. Keep
+  promoting this into broader repeatable smoke automation.
 - Keep multi-NIC as a deferred management-plane design, not a current GA
   latency requirement.

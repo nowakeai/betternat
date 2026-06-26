@@ -51,7 +51,7 @@ func (m RuntimeServiceAccountManager) Apply(ctx context.Context, inputs RuntimeS
 		AccountId: inputs.AccountID,
 		ServiceAccount: &gcpiam.ServiceAccount{
 			DisplayName: valueOr(inputs.DisplayName, "BetterNAT Runtime"),
-			Description: "Runtime identity for BetterNAT GCP route-only HA gateways.",
+			Description: "Runtime identity for BetterNAT GCP HA gateways.",
 		},
 	})
 	if err != nil {

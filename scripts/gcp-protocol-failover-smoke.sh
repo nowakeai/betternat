@@ -297,10 +297,14 @@ for ip in ips:
         switches += 1
     last = ip
 longest = cur = 0
-for row in rows:
+first_fail = last_fail = None
+for idx, row in enumerate(rows):
     if row[1] == "ok":
         cur = 0
     else:
+        if first_fail is None:
+            first_fail = idx
+        last_fail = idx
         cur += 1
         longest = max(longest, cur)
 print(f"samples={len(rows)}")
@@ -310,6 +314,10 @@ print(f"first_ip={ips[0] if ips else 'unknown'}")
 print(f"last_ip={ips[-1] if ips else 'unknown'}")
 print(f"ip_switches={switches}")
 print(f"longest_consecutive_failures={longest}")
+print(f"first_fail_index={first_fail if first_fail is not None else 'none'}")
+print(f"last_fail_index={last_fail if last_fail is not None else 'none'}")
+if first_fail is not None and last_fail is not None:
+    print(f"failure_window_samples={last_fail - first_fail + 1}")
 PY
 }
 
@@ -382,6 +390,11 @@ if [[ -z "$new_target" || "$new_target" == "$active" ]]; then
   echo "route target did not move away from $active" >&2
   capture_json "$output_dir/route-after-failed.json" "${gcloud_base[@]}" compute routes describe "$route_name"
   exit 1
+fi
+if [[ "$client_access" == "proxy-gateway" || ( "$client_access" == "auto" && "$ssh_mode" != "iap" ) ]]; then
+  client_proxy_gateway="$new_target"
+  echo "$client_proxy_gateway" >"$output_dir/client-proxy-gateway-after.txt"
+  run_ssh "$client_proxy_gateway" "true" >"$output_dir/client-proxy-gateway-after-ssh-warmup.txt" || true
 fi
 
 sleep "$(python3 - "$samples" "$interval" <<'PY'

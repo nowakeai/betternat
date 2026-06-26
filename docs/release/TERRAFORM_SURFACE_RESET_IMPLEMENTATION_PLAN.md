@@ -315,7 +315,7 @@ Done when:
 
 ## Phase 5: GCP Provider Alpha
 
-Status: `live route-only HA smoke and LoxiLB restart proof passed; raw LoxiLB baseline, packaging, and release-contract validation pending`
+Status: `live GCP HA, stable public identity, capacity repair, LoxiLB restart, failure injection, and connectivity-first handover proof passed; raw LoxiLB baseline, packaging, and release-contract validation pending`
 
 Goal: expose a GCP alpha resource only after the spike proves the minimum
 control-plane behavior.
@@ -586,15 +586,16 @@ Append dated notes here during implementation.
   publish/list, and handover create/update/list when a Firestore database is
   available.
 - Added `internal/cloud/gcp` as the GCP implementation of the provider-neutral
-  `cloud.Provider` route methods. It replaces GCP tagged static routes by
-  deleting and recreating the route with a `nextHopInstance`, verifies route
-  targets by reading Compute routes, and explicitly rejects shared public
-  identity operations until a GCP stable public IP strategy is proven.
+  `cloud.Provider` route and public-identity methods. It replaces GCP tagged
+  static routes with a handover-only shadow-route fast path, verifies route
+  targets by reading Compute routes, and can move an existing regional static
+  external IPv4 address through access-config detach/attach.
 - Wired the agent runtime selection path for `cloud=gcp`: GCP HA validation now
   accepts `ha.lease.backend=firestore`, uses Firestore for lease/registry/
-  handover coordination, uses `internal/cloud/gcp` for route mutation, and
-  rejects shared public identity. Live GCE activation/handover validation is
-  still pending.
+  handover coordination, uses `internal/cloud/gcp` for route mutation and
+  shared public identity, and prefers connectivity-first handover for GCP stable
+  public identity. Live GCE activation, failover, and handover validation passed
+  in docs 054, 056, 063, 064, 065, and 067.
 - Added `scripts/gcp-ha-preflight.sh` for read-only GCP HA preflight.
   `smooth-calling-490406-d9` now passes preflight for enabled APIs, Firestore
   database presence, database lifecycle permissions, and runtime custom-role
@@ -650,13 +651,13 @@ Append dated notes here during implementation.
   GCE `local.node_id=auto`, reads Firestore registry records when GCP HA is
   enabled, reads the configured GCP route target through Compute, and reports
   route-target match against the lease owner. Local unit tests cover the GCP
-  direct-status path; live GCE evidence is still pending.
+  direct-status path, and live GCE status evidence is included in the GCP HA,
+  stable-IP, and connectivity-first validation docs.
 - Re-audited the GCP HA plan against raw LoxiLB rather than against a single VM
-  forwarding baseline. The missing GCP gates now include a raw LoxiLB HA
-  comparison, split-brain failure injection, route delete/insert rollback
-  evidence, route-priority coexistence, clock-skew tolerance, peer API
-  authentication, org-policy constraints, and TCP/UDP/DNS/long-flow behavior
-  across failover.
+  forwarding baseline. Remaining GCP gates are now narrower: raw LoxiLB HA
+  comparison, packaging and release-contract validation, repeatable smoke
+  automation, multi-zone/regional capacity validation, and org-policy
+  constraints.
 - Switched live GCP coordination validation to project `smooth-calling-490406-d9`,
   enabled Firestore API, created the `(default)` Firestore Native database in
   `us-west2`, and passed
@@ -760,8 +761,19 @@ Append dated notes here during implementation.
   config to the target instance. `betternat_gcp_gateway` can now render this
   through `stable_public_identity_address_name` when `enable_agent_ha=true`.
   Local tests cover detach/attach ordering, describe behavior, IAM permission
-  expansion, and rendered agent config. Live GCE stable-IP handover validation
-  and static-address lifecycle management remain open.
+  expansion, and rendered agent config. Live GCE stable-IP activation,
+  failover, strict handover hardening, and connectivity-first handover
+  validation passed in docs 063, 064, 065, and 067. Static-address lifecycle
+  management remains outside the provider-owned resource for now; users pass an
+  existing regional static external IPv4 address name.
+- Decided the GCP GA handover structure: keep single-NIC gateways as the current
+  default and use connectivity-first handover. Route ownership moves before
+  stable public identity convergence, preserving private workload internet
+  connectivity even if the egress source IP is briefly non-stable. Live
+  microbenchmarks showed moving static external IPv4 on `nic1` is not faster
+  than moving it on `nic0`, so multi-NIC is deferred as a management-plane
+  isolation design rather than the current latency solution. Evidence is in
+  `docs/research/067-gcp-connectivity-first-and-multinic-results.md`.
 - Re-locked the global no-nftables-fallback decision across architecture,
   development, testing, and historical research docs. This is a BetterNAT-wide
   product rule, not a GCP exception: LoxiLB is the supported datapath, existing

@@ -82,7 +82,7 @@ func (r *GCPGatewayResource) Metadata(_ context.Context, req resource.MetadataRe
 
 func (r *GCPGatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "BetterNAT GCP alpha gateway resource. By default this manages GCE forwarding gateway VMs and a tagged default route for substrate validation. The experimental enable_agent_ha path renders BetterNAT agent bootstrap for Firestore-backed route-only HA. GCP remains alpha until raw LoxiLB comparison, failure injection, stable public identity, capacity repair, packaging, and release-contract gates are complete.",
+		MarkdownDescription: "BetterNAT GCP alpha gateway resource. By default this manages GCE forwarding gateway VMs and a tagged default route for substrate validation. The experimental enable_agent_ha path renders BetterNAT agent bootstrap for Firestore-backed HA with optional stable public identity. GCP remains alpha until raw LoxiLB comparison, packaging, and release-contract gates are complete.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{Computed: true},
 			"name": schema.StringAttribute{
@@ -185,7 +185,7 @@ func (r *GCPGatewayResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional:            true,
 				Computed:            true,
 				Default:             booldefault.StaticBool(false),
-				MarkdownDescription: "Experimental. When true, renders BetterNAT agent config and cloud-init user data for GCP route-only HA using Firestore coordination. This remains an alpha validation path until the remaining GCP release gates are complete.",
+				MarkdownDescription: "Experimental. When true, renders BetterNAT agent config and cloud-init user data for GCP HA using Firestore coordination and optional stable public identity. This remains an alpha validation path until the remaining GCP release gates are complete.",
 			},
 			"betternat_version": schema.StringAttribute{
 				Optional:            true,
