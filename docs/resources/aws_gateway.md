@@ -44,7 +44,7 @@ resource "betternat_aws_gateway" "egress" {
   instance_type       = "t4g.small"
   desired_capacity    = 2
   max_size            = 3
-  betternat_version   = "v0.1.0"
+  betternat_version   = "v0.2.0"
   stable_egress_ip    = true
   prometheus_enabled  = true
   rollback_on_destroy = true

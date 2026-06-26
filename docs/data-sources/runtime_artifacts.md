@@ -9,7 +9,7 @@ source for module authoring, validation, or artifact inspection.
 
 ```hcl
 data "betternat_runtime_artifacts" "current" {
-  version = "v0.1.0"
+  version = "v0.2.0"
   os      = "linux"
   arch    = "arm64"
 }

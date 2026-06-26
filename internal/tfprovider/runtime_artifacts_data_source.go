@@ -38,7 +38,7 @@ func (d *RuntimeArtifactsDataSource) Schema(_ context.Context, _ datasource.Sche
 		Attributes: map[string]schema.Attribute{
 			"version": schema.StringAttribute{
 				Required:            true,
-				MarkdownDescription: "BetterNAT runtime release tag, for example v0.1.0.",
+				MarkdownDescription: "BetterNAT runtime release tag, for example v0.2.0.",
 			},
 			"os": schema.StringAttribute{
 				Required:            true,

@@ -77,7 +77,7 @@ func (r *GatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			},
 			"betternat_version": schema.StringAttribute{
 				Optional:            true,
-				MarkdownDescription: "BetterNAT runtime release tag used to derive agent/CLI GitHub Release artifact URLs and checksums for bootstrap installs. Example: v0.1.0. Explicit agent_binary_url, agent_binary_sha256, cli_binary_url, and cli_binary_sha256 values override derived values.",
+				MarkdownDescription: "BetterNAT runtime release tag used to derive agent/CLI GitHub Release artifact URLs and checksums for bootstrap installs. Example: v0.2.0. Explicit agent_binary_url, agent_binary_sha256, cli_binary_url, and cli_binary_sha256 values override derived values.",
 			},
 			"agent_binary_url": schema.StringAttribute{
 				Optional:            true,
