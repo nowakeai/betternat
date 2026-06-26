@@ -146,3 +146,7 @@ GOCACHE=$PWD/tmp/go-build go test ./internal/agent
 GOCACHE=$PWD/tmp/go-build go test ./internal/ha
 GOCACHE=$PWD/tmp/go-build go test ./internal/cloud/gcp
 ```
+
+Live GCE clock-skew injection is de-scoped from the current GCP GA gate. The
+Firestore lease layer keeps the conservative 2 second skew allowance, and local
+decision tests cover acquire, renew, and transfer boundaries.

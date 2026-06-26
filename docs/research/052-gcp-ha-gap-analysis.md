@@ -199,7 +199,7 @@ the first GCP spike plan:
   lease decision layer now applies a 2 second skew allowance: a different owner
   cannot acquire during that allowance after `expires_at`, while the current
   fenced owner may renew or transfer. Local unit tests cover this decision
-  boundary; live GCE clock-skew injection is still required.
+  boundary; live GCE clock-skew injection is de-scoped from the GA gate.
 - Asymmetric routing and conntrack reset behavior. Route-only failover changes
   the next hop for new flows, but existing flows may be pinned to old conntrack
   state or reset. This needs explicit measurement for TCP, UDP, DNS, and long
@@ -214,8 +214,8 @@ the first GCP spike plan:
   and a clear restore path when delete succeeds but insert or operation polling
   fails.
 - Clock skew and lease TTL margins. Firestore transactions give atomic writes,
-  but the lease expiry decision still depends on agent timestamps. GCP tests
-  should include skew tolerance, slow API operations, and renewal jitter.
+  but the lease expiry decision still depends on agent timestamps. Local tests
+  cover skew tolerance; live skew injection is not a GA gate.
 - Peer API and handover auth. Handover safety depends on trusting standby
   readiness. GCP evidence must prove peer API tokens, local socket permissions,
   service-account identity, and stale peer rejection.
@@ -782,12 +782,9 @@ The next implementation step after the live HA, datapath, stable-public-identity
 capacity-repair, and connectivity-first smoke is deeper failure-injection
 validation plus packaging:
 
-1. Validate deeper split-brain and route-operation failure injections: stale
-   lease generation, delayed or failed Compute operations, restarted old active,
-   stale standby registry, and clock-skew edges.
-2. Package the GCP install path into module/docs/examples that a user can run
+1. Package the GCP install path into module/docs/examples that a user can run
    without relying on scratch fixtures.
-3. Validate GKE/private-node and existing-VPC examples, then document migration
+2. Validate GKE/private-node and existing-VPC examples, then document migration
    boundaries from Cloud NAT.
 
 Until then, GCP should remain explicitly marked as alpha/beta work, not a

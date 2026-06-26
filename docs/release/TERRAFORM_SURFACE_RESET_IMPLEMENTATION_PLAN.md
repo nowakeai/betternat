@@ -233,7 +233,7 @@ Done when:
 
 ## Phase 4: GCP Spike
 
-Status: `route-only live HA, protocol, failure-injection, and LoxiLB datapath proof complete; deeper split-brain injection pending`
+Status: `route-only live HA, protocol, failure-injection, and LoxiLB datapath proof complete`
 
 Goal: validate whether GCP can support the BetterNAT product model before
 committing to a production resource.
@@ -283,8 +283,8 @@ Tasks:
 - [x] Validate that a standby cannot mutate routes while another unexpired
   Firestore lease owner exists.
 - [x] Do not run a raw LoxiLB-on-GCE HA baseline for GA.
-- [ ] Validate remaining GCP split-brain failure injection: live clock-skew
-  edges. Restarted-old-active and stale-registry paths have local coverage.
+- [x] De-scope live GCE clock-skew injection from the GA gate; local lease tests
+  cover the 2 second skew allowance and fencing boundaries.
 - [x] Validate TCP, UDP, DNS, and long-download behavior across route-only
   failover; do not rely only on short HTTP source-IP probes.
 - [x] Validate destroy/rollback after an agent-owned route movement.
@@ -315,7 +315,7 @@ Done when:
 
 ## Phase 5: GCP Provider Alpha
 
-Status: `live GCP HA, stable public identity, capacity repair, LoxiLB restart, failure injection, and connectivity-first handover proof passed; packaging, deeper failure injection, and release-contract validation pending`
+Status: `live GCP HA, stable public identity, capacity repair, LoxiLB restart, failure injection, and connectivity-first handover proof passed; packaging and release-contract validation pending`
 
 Goal: expose a GCP alpha resource only after the spike proves the minimum
 control-plane behavior.
@@ -367,8 +367,8 @@ GCP validation:
 - [x] Proactive handover.
 - [x] LoxiLB-on-GCE datapath counters and restart reconciliation.
 - [x] Raw LoxiLB HA baseline comparison explicitly de-scoped from GA readiness.
-- [ ] GCP failure injection remains open for live clock skew; route, operation,
-  stale generation, stale registry, and restarted-old-active coverage exists.
+- [x] GCP failure injection complete for current GA gate; live clock-skew
+  injection is de-scoped.
 - [x] Cleanup.
 
 Done when:
@@ -753,7 +753,7 @@ Append dated notes here during implementation.
   fencing. Different owners cannot acquire during the skew window after
   `expires_at`, while the current fenced owner can still renew or transfer.
   Local Firestore decision tests cover acquire, renew, and transfer boundaries;
-  live GCE clock-skew injection remains open.
+  live GCE clock-skew injection is de-scoped from the GA gate.
 - Added the first GCP stable-public-identity implementation slice. The runtime
   GCP cloud provider can move an existing regional static external IPv4 address
   by deleting conflicting access configs and adding the static address access
