@@ -95,11 +95,8 @@ func (c StaticHAConfigChecker) Check(context.Context) CheckResult {
 	if len(c.Config.HA.RouteFailover.RouteTableIDs) == 0 {
 		return CheckResult{Name: "ha_config", Status: StatusCritical, Message: "route table ids are required"}
 	}
-	if c.Config.Cloud == "aws" && c.Config.HA.PublicIdentity.Mode == "shared_eip" && c.Config.HA.PublicIdentity.AllocationID == "" {
+	if (c.Config.Cloud == "aws" || c.Config.Cloud == "gcp") && c.Config.HA.PublicIdentity.Mode == "shared_eip" && c.Config.HA.PublicIdentity.AllocationID == "" {
 		return CheckResult{Name: "ha_config", Status: StatusCritical, Message: "shared_eip allocation id is required"}
-	}
-	if c.Config.Cloud == "gcp" && c.Config.HA.PublicIdentity.Mode != "" {
-		return CheckResult{Name: "ha_config", Status: StatusCritical, Message: "GCP HA supports route-only public identity"}
 	}
 	return CheckResult{Name: "ha_config", Status: StatusOK, Message: "HA config is complete"}
 }

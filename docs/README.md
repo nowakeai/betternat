@@ -146,6 +146,7 @@ Read these first when revisiting product or architecture direction:
 - [research/064-gcp-stable-ip-protocol-results.md](research/064-gcp-stable-ip-protocol-results.md) — Live GCP private-client stable public IP protocol validation, initial proactive handover blocker, SSH harness notes, and cleanup evidence.
 - [research/065-gcp-stable-ip-handover-hardening-plan.md](research/065-gcp-stable-ip-handover-hardening-plan.md) — Design, implementation notes, and live results for hardening GCP stable-IP proactive handover after ambiguous Compute operation polling and lease-control failures.
 - [research/066-gcp-management-ip-boundary.md](research/066-gcp-management-ip-boundary.md) — Decision that GCP single-NIC gateways cannot provide AWS-like separate management public IP and movable stable egress IP semantics.
+- [research/067-gcp-connectivity-first-and-multinic-results.md](research/067-gcp-connectivity-first-and-multinic-results.md) — Live GCP control-plane microbenchmarks and connectivity-first handover results showing multi-NIC is not the current latency solution.
 
 ## Supporting Research
 

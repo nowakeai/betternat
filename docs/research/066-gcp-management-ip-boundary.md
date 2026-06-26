@@ -31,10 +31,13 @@ The supported design choices are:
   failover changes the observed egress source IP.
 - Single-NIC stable egress mode: the active gateway owns the stable external
   IP, but standby gateways should not rely on persistent management public IPs.
-- Future multi-NIC management mode: add a separate management interface in a
+- Deferred multi-NIC management mode: add a separate management interface in a
   separate VPC with its own external IP, while keeping the dataplane interface
-  in the workload VPC. This needs explicit VPC design, firewalling, and guest
-  OS route-policy configuration before it is a product feature.
+  in the workload VPC. This is a management-plane isolation candidate, not the
+  current GCP failover-latency solution. Live measurements showed static
+  external IPv4 movement on `nic1` is not faster than movement on `nic0`.
+  Multi-NIC still needs explicit VPC design, firewalling, and guest OS
+  route-policy configuration before it is a product feature.
 
 ## Implementation Implication
 
@@ -55,6 +58,9 @@ SSH to standby gateways must use one of these paths:
   diagnostics.
 - A future multi-NIC management design, after it is explicitly implemented and
   validated.
+
+See [067-gcp-connectivity-first-and-multinic-results.md](067-gcp-connectivity-first-and-multinic-results.md)
+for the live control-plane timings and the connectivity-first handover result.
 
 ## References
 

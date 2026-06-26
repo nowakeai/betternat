@@ -40,7 +40,7 @@ func TestStaticHAConfigCheckerAcceptsGCPFirestore(t *testing.T) {
 	}
 }
 
-func TestStaticHAConfigCheckerRejectsGCPPublicIdentity(t *testing.T) {
+func TestStaticHAConfigCheckerAcceptsGCPPublicIdentity(t *testing.T) {
 	cfg := validStaticConfig()
 	cfg.Cloud = "gcp"
 	cfg.Region = "us-west2"
@@ -48,7 +48,7 @@ func TestStaticHAConfigCheckerRejectsGCPPublicIdentity(t *testing.T) {
 	cfg.HA.Lease = config.LeaseConfig{Backend: "firestore", Key: "prod-egress-a"}
 	cfg.HA.PublicIdentity = config.PublicIdentityConfig{Mode: "shared_eip", AllocationID: "eipalloc-123"}
 	result := StaticHAConfigChecker{Config: cfg}.Check(context.Background())
-	if result.Status != StatusCritical {
+	if result.Status != StatusOK {
 		t.Fatalf("unexpected result: %#v", result)
 	}
 }

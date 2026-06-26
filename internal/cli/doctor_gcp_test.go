@@ -58,7 +58,7 @@ func TestRunDoctorLiveSupportsGCP(t *testing.T) {
 
 	var out bytes.Buffer
 	if err := run(context.Background(), []string{"doctor", "--live", "--config", configPath}, &out); err != nil {
-		t.Fatalf("run gcp live doctor: %v", err)
+		t.Fatalf("run gcp live doctor: %v\n%s", err, out.String())
 	}
 	body := out.String()
 	if strings.Contains(body, "live doctor currently supports cloud=aws only") {
@@ -78,6 +78,63 @@ func TestRunDoctorLiveSupportsGCP(t *testing.T) {
 	}
 	if strings.Contains(body, `"name":"source_dest_check"`) {
 		t.Fatalf("GCP live doctor should not run AWS source/destination check: %s", body)
+	}
+}
+
+func TestRunDoctorLiveChecksGCPSharedPublicIdentity(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "agent.yaml")
+	raw := strings.Replace(validGCPHAConfigYAML(), "  public_identity: {}", `  public_identity:
+    mode: shared_eip
+    allocation_id: eipalloc-123`, 1)
+	if err := os.WriteFile(configPath, []byte(raw), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	restoreDatapath := newDatapathEngine
+	restoreCloud := newLiveGCPCloudProvider
+	restoreLease := newLiveFirestoreLeaseManager
+	restoreResolveInstance := resolveGCPLocalInstanceID
+	restorePromClient := liveDoctorPrometheusClient
+	defer func() {
+		newDatapathEngine = restoreDatapath
+		newLiveGCPCloudProvider = restoreCloud
+		newLiveFirestoreLeaseManager = restoreLease
+		resolveGCPLocalInstanceID = restoreResolveInstance
+		liveDoctorPrometheusClient = restorePromClient
+	}()
+
+	newDatapathEngine = func(config.DatapathConfig) (datapath.Engine, error) {
+		return fakeReadinessEngine{
+			status:   datapath.Status{Engine: "fake", Ready: true, Message: "ready"},
+			counters: datapath.Counters{Rules: []datapath.RuleCounter{{CIDR: "10.0.0.0/8", Packets: 1, Bytes: 2}}},
+		}, nil
+	}
+	newLiveGCPCloudProvider = func(context.Context, config.Config) (cloud.Provider, error) {
+		return fakeLiveCloud{}, nil
+	}
+	newLiveFirestoreLeaseManager = func(context.Context, config.Config) (lease.Manager, error) {
+		manager := lease.NewMemoryManager("prod-egress-a", time.Minute, time.Now)
+		if _, err := manager.Acquire(context.Background(), "i-active"); err != nil {
+			t.Fatalf("acquire fake lease: %v", err)
+		}
+		return manager, nil
+	}
+	resolveGCPLocalInstanceID = func(context.Context, string) (string, error) {
+		return "i-active", nil
+	}
+	liveDoctorPrometheusClient = fakeHTTPClient{status: 200, body: "ok"}
+
+	var out bytes.Buffer
+	if err := run(context.Background(), []string{"doctor", "--live", "--config", configPath}, &out); err != nil {
+		t.Fatalf("run gcp live doctor: %v\n%s", err, out.String())
+	}
+	body := out.String()
+	if !strings.Contains(body, `"name":"public_identity","status":"ok"`) {
+		t.Fatalf("missing GCP public identity live check: %s", body)
+	}
+	if strings.Contains(body, "shared public identity is unsupported") {
+		t.Fatalf("GCP shared public identity should not be reported unsupported: %s", body)
 	}
 }
 

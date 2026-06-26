@@ -165,5 +165,13 @@ GCP residual scan passed
 - Connectivity-first GCP handover now has priority over strict source-IP
   continuity during the transition. The route should move first; stable public
   identity can converge through follow-up ownership repair.
+- Live connectivity-first validation reduced the client-visible failed-sample
+  window from the earlier about `22s` range to `5` failed samples, about `7.6s`
+  from first failed sample to next successful sample by wall-clock timestamps.
+  See [067-gcp-connectivity-first-and-multinic-results.md](067-gcp-connectivity-first-and-multinic-results.md).
+- Do not make multi-NIC the next latency optimization merely to resemble the
+  AWS ENI design. Live GCP measurements showed static external IPv4 movement on
+  `nic1` is not faster than movement on `nic0`; multi-NIC remains a deferred
+  management-plane isolation design.
 - Keep multi-zone/regional capacity validation separate from this single-zone
   MIG hardening result.
