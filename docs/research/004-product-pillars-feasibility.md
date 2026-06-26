@@ -15,15 +15,21 @@ Are these pillars feasible, and what should each pillar actually mean in the pro
 
 ## Executive Summary
 
-Current decision as of 2026-06-20:
+Current decision as of 2026-06-25:
 
-The product pillars remain valid, but the default datapath changed. BetterNAT should now be LoxiLB-first, with nftables/nf_conntrack retained as fallback. The product value still lives above the datapath: Terraform UX, AWS-safe HA, source/destination attribution, cost visibility, and rollback.
+The product pillars remain valid, but the default datapath changed. BetterNAT
+should now be LoxiLB-first with no product fallback datapath. The product value
+still lives above the datapath: Terraform UX, AWS-safe HA,
+source/destination attribution, cost visibility, and rollback.
 
-Superseding architecture: `docs/architecture.md`.
+Superseded fallback note: BetterNAT no longer has a product fallback datapath.
+The current sources of truth are `docs/architecture.md`, `docs/spec-v0.md`,
+and `docs/research/055-no-nftables-fallback-decision.md`. Older fallback
+language in this document is design history only.
 
 The product is feasible if we are disciplined about scope:
 
-- Use LoxiLB standalone egress SNAT as the default NAT datapath, with Linux `nftables`/`nf_conntrack` as fallback.
+- Use LoxiLB standalone egress SNAT as the supported NAT datapath.
 - Make the first cost win come from removing NAT Gateway per-GB processing fees, not from exotic packet processing.
 - Make observability a first-class differentiator: per-source attribution, top talkers, conntrack pressure, drop/error reasons, and AWS failover events.
 - Make HA cloud-native: route/EIP/ENI takeover through AWS APIs, guarded by a lease/fencing mechanism.

@@ -13,7 +13,7 @@ fck-nat is most useful as a reference for product packaging, AMI operations, doc
 It is less useful as a direct datapath or HA blueprint for BetterNAT because BetterNAT's current direction is:
 
 - LoxiLB-first datapath,
-- nftables fallback,
+- no product fallback datapath; legacy nftables diagnostics only while retained,
 - Terraform provider-owned AWS lifecycle,
 - route/EIP failover,
 - richer observability and rollback.
@@ -56,7 +56,9 @@ Recommended BetterNAT action:
 
 - create a Packer-based AMI build path,
 - publish arm64 and x86_64 variants,
-- preinstall LoxiLB, `betternat-agent`, fallback nftables dependencies, SSM agent, diagnostics tools, and systemd units,
+- preinstall LoxiLB, `betternat-agent`, SSM agent, diagnostics tools, and
+  systemd units; legacy nftables tools may remain only as diagnostics while
+  that code is phased out,
 - keep cloud-init limited to small runtime config.
 
 ### 2. Simple Runtime Config Contract
@@ -91,7 +93,9 @@ fck-nat exposes useful production knobs:
 - IPv4 forwarding,
 - reverse path filter disable.
 
-Even with LoxiLB as the primary datapath, BetterNAT still needs Linux forwarding and conntrack visibility for fallback and diagnostics.
+Even with LoxiLB as the supported datapath, BetterNAT still needs Linux
+forwarding. Linux conntrack visibility is useful for host-networking and legacy
+diagnostics while retained, but it is not a product fallback path.
 
 Recommended BetterNAT action:
 
@@ -179,7 +183,7 @@ fck-nat uses iptables MASQUERADE. BetterNAT should not move backward from LoxiLB
 BetterNAT should keep:
 
 - LoxiLB as primary datapath candidate,
-- nftables as fallback and debug baseline,
+- no product fallback datapath; legacy nftables diagnostics only while retained,
 - no custom eBPF in v0.
 
 ### 3. Shell As The Main Control Plane

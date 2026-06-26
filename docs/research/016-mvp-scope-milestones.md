@@ -2,6 +2,10 @@
 
 Date: 2026-06-19
 
+Current note as of 2026-06-25: this milestone document is design history where
+it describes nftables fallback. BetterNAT now has no product fallback datapath;
+see `docs/research/055-no-nftables-fallback-decision.md`.
+
 ## Question
 
 Given the research so far, what should BetterNAT build first, what should be deferred, and how should the work be organized into milestones?
@@ -100,7 +104,7 @@ v0 responsibilities:
 - load generated config,
 - configure/check LoxiLB egress SNAT,
 - reconcile LoxiLB rules after restart or drift,
-- configure/check nftables fallback NAT,
+- keep legacy nftables diagnostics stable while retained,
 - check sysctls/source-dest forwarding prerequisites,
 - renew/acquire DynamoDB lease,
 - execute route failover using AWS SDK,
@@ -119,23 +123,21 @@ v0 default datapath:
 - LoxiLB firewall counters and conntrack reads,
 - configured private CIDR allowlist.
 
-v0 fallback datapath:
+v0 product fallback datapath:
 
-- Linux IP forwarding,
-- nftables SNAT/masquerade,
-- nf_conntrack tuning,
-- dedicated nftables table,
-- configured private CIDR allowlist.
+None. Legacy Linux forwarding, nftables, and nf_conntrack diagnostics may
+remain while the code is phased out, but they are not a product path.
 
 No self-built NAT eBPF in v0.
 
 LoxiLB is now the leading datapath candidate after the M-1 standalone AWS egress spike. v0 should support:
 
 ```hcl
-datapath_engine = "loxilb" # or "nftables"
+datapath_engine = "loxilb"
 ```
 
-nftables remains the mandatory fallback until LoxiLB packaging, observability, HA, and benchmark work are complete.
+nftables is no longer part of the product datapath contract. LoxiLB packaging,
+observability, HA, and benchmark work are product gates.
 
 ### HA
 
@@ -303,7 +305,7 @@ Decision after M-1:
 Current decision:
 
 - Promote LoxiLB to leading v0 datapath target.
-- Keep nftables as mandatory fallback.
+- Keep legacy nftables diagnostics stable only while the code remains.
 - Make `betternat-agent` responsible for LoxiLB rule reconciliation and metrics re-export.
 
 ## M0: Local NAT Appliance Prototype
@@ -546,7 +548,7 @@ Mitigation:
 
 Mitigation:
 
-- nftables fallback baseline,
+- legacy nftables diagnostic baseline while retained,
 - LoxiLB spike before final datapath commitment,
 - benchmark before acceleration,
 - self-built eBPF/VPP deferred.
@@ -557,8 +559,9 @@ Build v0 as an AWS-first, Terraform-provider-first, route-failover NAT appliance
 
 Current default:
 
-- nftables/nf_conntrack remains the safe fallback.
-- LoxiLB gets an M-1 spike before finalizing the v0 datapath.
+- LoxiLB is the supported datapath.
+- There is no product fallback datapath; existing nftables/nf_conntrack code is
+  legacy-only while retained.
 - self-built eBPF NAT and VPP remain deferred.
 
 The fastest credible path is:

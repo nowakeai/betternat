@@ -274,7 +274,7 @@ resource "aws_iam_instance_profile" "private_client" {
   })
 }
 
-resource "betternat_gateway" "egress" {
+resource "betternat_aws_gateway" "egress" {
   name   = var.run_id
   region = var.region
   vpc_id = aws_vpc.main.id
@@ -338,7 +338,7 @@ resource "aws_instance" "private_client" {
   })
 
   depends_on = [
-    betternat_gateway.egress,
+    betternat_aws_gateway.egress,
     aws_iam_role_policy_attachment.private_client_ssm,
   ]
 }
@@ -364,19 +364,19 @@ output "private_client_instance_id" {
 }
 
 output "betternat_status" {
-  value = betternat_gateway.egress.status
+  value = betternat_aws_gateway.egress.status
 }
 
 output "egress_public_ips" {
-  value = betternat_gateway.egress.egress_public_ips
+  value = betternat_aws_gateway.egress.egress_public_ips
 }
 
 output "active_instance_ids" {
-  value = betternat_gateway.egress.active_instance_ids
+  value = betternat_aws_gateway.egress.active_instance_ids
 }
 
 output "standby_instance_ids" {
-  value = betternat_gateway.egress.standby_instance_ids
+  value = betternat_aws_gateway.egress.standby_instance_ids
 }
 
 output "aws_cli_context" {

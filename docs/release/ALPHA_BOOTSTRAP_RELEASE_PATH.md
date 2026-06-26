@@ -189,13 +189,16 @@ Interpretation:
 
 - `ip_forward` is required for the appliance to route private-subnet traffic.
 - `rp_filter=0` avoids reverse-path filtering breaking asymmetric or takeover-related forwarding paths. `all/default` covers policy and future interfaces; the interface sweep covers interfaces that already existed before the sysctl file was applied.
-- `nf_conntrack_max=1048576` gives the nftables fallback and any Linux-netfilter-conntrack-dependent host path a larger baseline connection table.
+- `nf_conntrack_max=1048576` gives legacy nftables code and any
+  Linux-netfilter-conntrack-dependent host path a larger baseline connection
+  table while that code remains.
 
 Important distinction:
 
 - LoxiLB has its own eBPF conntrack state and is inspected with `loxicmd get conntrack -o json`.
 - Linux `nf_conntrack_max` is not the primary LoxiLB NAT capacity knob.
-- This setting is retained for fallback/compatibility and is applied only when the kernel exposes it.
+- This setting is retained only for legacy diagnostics and host compatibility
+  when the kernel exposes it. It is not a fallback datapath setting.
 
 Not included yet:
 

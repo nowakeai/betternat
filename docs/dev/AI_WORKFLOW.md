@@ -17,6 +17,10 @@ Use these files in order:
 5. `docs/architecture.md` and `docs/spec-v0.md` for current product architecture.
 
 Research docs are important evidence, but older research does not override the current architecture/spec pair.
+Any older research that recommends nftables-first or nftables-fallback behavior
+is design history only. The standing rule is global: no product fallback
+datapath, and no nftables fallback work unless a new ADR explicitly supersedes
+`docs/research/055-no-nftables-fallback-decision.md`.
 
 ## Default Working Pattern
 
@@ -39,7 +43,10 @@ Prefer:
 - reliable rollback metadata,
 - explicit cloud cleanup for spikes,
 - normalized BetterNAT metrics over raw implementation detail,
-- LoxiLB/nftables as proven datapath building blocks before custom packet processing.
+- LoxiLB as the supported datapath, without adding or expanding nftables
+  fallback behavior.
+- direct LoxiLB validation for AWS, GCP, and future-cloud work; nftables is not
+  a fallback, acceptance substitute, or topic to re-propose without a new ADR.
 
 Avoid:
 
@@ -57,7 +64,7 @@ Use the lightest useful validation first:
 3. `GOCACHE=$PWD/tmp/go-build go run ./cmd/betternat doctor --config examples/agent-config.yaml`
 4. `GOCACHE=$PWD/tmp/go-build go run ./cmd/betternat failover status --config examples/agent-config.yaml`
 5. Optional shortcut: `./manage verify`
-6. Linux datapath validation for real LoxiLB/nftables behavior.
+6. Linux datapath validation for real LoxiLB behavior.
 7. Isolated AWS integration validation for route/EIP/EC2 behavior.
 
 `./manage` is a convenience wrapper around common checks. It should not be the only documented path for a workflow.
@@ -76,7 +83,8 @@ GOCACHE=$PWD/tmp/go-build go run ./cmd/betternat failover status --config exampl
 - Keep Go build artifacts under `tmp/go-build`.
 - Do not require network access for the default test loop.
 - macOS validation should rely on unit tests, fakes, provider builds, and static CLI smoke checks.
-- Real datapath validation requires Linux with LoxiLB/nftables/conntrack available.
+- Real datapath validation requires Linux with LoxiLB and conntrack available.
+  nftables is only relevant for legacy tests when that code is touched.
 - Linux validation must be environment-agnostic. It may run on OrbStack, Lima, Multipass, Docker-in-VM, a bare Linux host, or EC2, but core scripts and docs must not require one developer-specific VM product.
 - Real AWS validation must use isolated test resources and explicit cleanup.
 

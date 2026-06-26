@@ -10,7 +10,9 @@ Current baseline:
 
 ```text
 Primary datapath: LoxiLB standalone egress SNAT
-Fallback datapath: Linux nftables/nf_conntrack
+Fallback datapath: none. This is a global BetterNAT product decision, not a
+GCP-specific exception. nftables is not a product fallback; existing code may
+remain temporarily as legacy diagnostic code while it is phased out
 Cloud target: AWS
 Runtime control plane: betternat-agent
 User-facing install path: terraform-provider-betternat
@@ -36,7 +38,8 @@ v0 MUST provide:
 
 - AWS private subnet egress through self-owned EC2 nodes.
 - LoxiLB-based egress SNAT as the primary datapath.
-- nftables/nf_conntrack fallback mode.
+- No product fallback datapath on AWS, GCP, or future clouds; LoxiLB is required
+  for supported deployments.
 - Terraform-managed install and lifecycle.
 - Active/standby HA for new connections.
 - Stable public egress IP for new connections after failover when `stable_egress_ip = true`.
@@ -70,7 +73,7 @@ terraform-provider-betternat
 Primary resource:
 
 ```hcl
-resource "betternat_gateway" "egress" {
+resource "betternat_aws_gateway" "egress" {
   name   = "prod-egress"
   cloud  = "aws"
   region = "us-west-2"
@@ -97,9 +100,8 @@ resource "betternat_gateway" "egress" {
   }
 
   datapath = {
-    engine          = "loxilb"
-    fallback_engine = "nftables"
-    private_cidrs   = ["10.0.0.0/8"]
+    engine        = "loxilb"
+    private_cidrs = ["10.0.0.0/8"]
   }
 
   observability = {
@@ -212,7 +214,6 @@ local:
 
 datapath:
   engine: loxilb
-  fallback_engine: nftables
   private_cidrs:
     - 10.0.0.0/8
   loxilb:
@@ -222,9 +223,6 @@ datapath:
     snat_interface: ens5
     rule_preference_base: 100
     reconcile_interval_seconds: 10
-  nftables:
-    table_name: betternat
-    chain_prefix: betternat
 
 ha:
   enabled: true
@@ -304,18 +302,16 @@ loxicmd create firewall \
 
 The LoxiLB engine MUST treat LoxiLB rules as ephemeral. Desired state lives in BetterNAT config, not only inside LoxiLB.
 
-### nftables Fallback Engine
+### nftables Legacy Code
 
-The nftables engine MUST:
+nftables/nf_conntrack code may remain temporarily for existing diagnostics and
+tests, but it is not part of the v0 product contract. It MUST NOT be expanded as
+a fallback mode, required by release acceptance, or used to pass a deployment
+where LoxiLB is not ready. Future cleanup can remove this code gradually.
 
-- enable/check IP forwarding,
-- create a dedicated `betternat` nftables table,
-- configure SNAT or masquerade for configured private CIDRs,
-- read basic nftables counters,
-- read `nf_conntrack` usage,
-- expose fallback health.
-
-The fallback engine SHOULD be simple and conservative. It is not the main performance/observability path.
+This is not a GCP-only restriction. New provider work, Terraform UX, release
+gates, and smoke tests MUST validate LoxiLB directly instead of adding an
+nftables fallback path.
 
 ## HA State Machine
 
@@ -503,7 +499,6 @@ Top-N data SHOULD be exposed through an admin API or bounded metric set, not unl
 - source/destination check disabled,
 - LoxiLB running and API reachable,
 - LoxiLB egress rules present,
-- nftables fallback availability,
 - IP forwarding enabled,
 - DynamoDB lease table reachable,
 - route table target matches expected active,
@@ -568,7 +563,6 @@ Appliance MUST install or start:
 
 - LoxiLB,
 - betternat-agent,
-- nftables fallback prerequisites,
 - metrics endpoint,
 - OS sysctl settings.
 
@@ -605,12 +599,10 @@ v0 HA acceptance:
 - Agent exports failover event and duration metrics.
 - Active connection preservation is not required.
 
-v0 fallback acceptance:
-
-- User can select `datapath.engine = "nftables"`.
-- Private test instance reaches internet.
-- Basic counters and conntrack usage are exported.
-- Doctor clearly reports fallback mode.
+v0 has no fallback acceptance gate. Users must not be asked to select nftables
+to pass a release, support AWS, support GCP, support a future cloud, or recover
+from an unready LoxiLB datapath. Existing nftables code is legacy and can be
+removed gradually.
 
 ## Open Questions
 

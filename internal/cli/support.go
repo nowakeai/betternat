@@ -116,7 +116,7 @@ func runSupportBundle(ctx context.Context, opts supportOptions) (string, error) 
 		writer.addJSON("handover-current.json", handover)
 	}
 
-	for _, command := range supportCommands() {
+	for _, command := range supportCommands(cfg) {
 		writer.addText(command.file, runSupportShellCommand(ctx, opts.timeout, command.name, command.args...))
 	}
 	return outputPath, writer.err
@@ -165,8 +165,8 @@ type supportCommand struct {
 	args []string
 }
 
-func supportCommands() []supportCommand {
-	return []supportCommand{
+func supportCommands(cfg config.Config) []supportCommand {
+	commands := []supportCommand{
 		{file: "systemd/betternat-agent.status.txt", name: "systemctl", args: []string{"status", "betternat-agent", "--no-pager"}},
 		{file: "systemd/betternat-agent.journal.txt", name: "journalctl", args: []string{"-u", "betternat-agent", "--no-pager", "-n", "300"}},
 		{file: "datapath/loxilb-version.txt", name: "loxicmd", args: []string{"get", "lbversion", "-o", "json"}},
@@ -174,6 +174,46 @@ func supportCommands() []supportCommand {
 		{file: "network/ip-addr.txt", name: "ip", args: []string{"addr"}},
 		{file: "network/ip-route.txt", name: "ip", args: []string{"route"}},
 		{file: "network/nft-ruleset.txt", name: "nft", args: []string{"list", "ruleset"}},
+	}
+	if cfg.Cloud == "gcp" {
+		commands = append(commands, gcpSupportCommands(cfg)...)
+	}
+	return commands
+}
+
+func gcpSupportCommands(cfg config.Config) []supportCommand {
+	commands := []supportCommand{
+		{file: "cloud/gcp/metadata-project-id.txt", name: "curl", args: gcpMetadataArgs("project/project-id")},
+		{file: "cloud/gcp/metadata-instance-name.txt", name: "curl", args: gcpMetadataArgs("instance/name")},
+		{file: "cloud/gcp/metadata-zone.txt", name: "curl", args: gcpMetadataArgs("instance/zone")},
+		{file: "cloud/gcp/metadata-service-accounts.txt", name: "curl", args: gcpMetadataArgs("instance/service-accounts/")},
+	}
+	if cfg.GCP.ProjectID != "" {
+		commands = append(commands, supportCommand{
+			file: "cloud/gcp/firestore-databases.json",
+			name: "gcloud",
+			args: []string{"--project", cfg.GCP.ProjectID, "firestore", "databases", "list", "--format=json"},
+		})
+	}
+	for idx, routeName := range cfg.HA.RouteFailover.RouteTableIDs {
+		if cfg.GCP.ProjectID == "" || routeName == "" {
+			continue
+		}
+		commands = append(commands, supportCommand{
+			file: fmt.Sprintf("cloud/gcp/route-%02d.json", idx+1),
+			name: "gcloud",
+			args: []string{"--project", cfg.GCP.ProjectID, "compute", "routes", "describe", routeName, "--format=json"},
+		})
+	}
+	return commands
+}
+
+func gcpMetadataArgs(path string) []string {
+	return []string{
+		"-fsS",
+		"-H",
+		"Metadata-Flavor: Google",
+		"http://metadata.google.internal/computeMetadata/v1/" + path,
 	}
 }
 

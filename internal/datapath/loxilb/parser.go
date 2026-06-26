@@ -45,11 +45,22 @@ type conntrackEntry struct {
 }
 
 func parseFirewall(data []byte) ([]firewallRule, error) {
+	if isEmptyFirewallOutput(data) {
+		return nil, nil
+	}
 	var resp firewallResponse
 	if err := json.Unmarshal(data, &resp); err != nil {
 		return nil, fmt.Errorf("parse loxilb firewall json: %w", err)
 	}
 	return resp.FirewallRules, nil
+}
+
+func isEmptyFirewallOutput(data []byte) bool {
+	text := strings.ToLower(strings.TrimSpace(string(data)))
+	return strings.HasPrefix(text, "error") &&
+		(strings.Contains(text, "no") || strings.Contains(text, "empty")) &&
+		(strings.Contains(text, "firewall") || strings.Contains(text, "fw")) &&
+		strings.Contains(text, "rule")
 }
 
 func parseFirewallCounters(data []byte) (datapath.Counters, error) {

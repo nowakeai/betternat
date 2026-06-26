@@ -236,7 +236,7 @@ The fixture creates:
 - private subnet in `us-west-2a`,
 - private SSM-managed client instance in the private subnet,
 - private route table with an existing default route so rollback can be proven,
-- `betternat_gateway` with:
+- `betternat_aws_gateway` with:
 
 ```hcl
 ami_id        = data.aws_ami.al2023_arm64.id

@@ -9,7 +9,7 @@ terraform {
 
 provider "betternat" {}
 
-resource "betternat_gateway" "egress" {
+resource "betternat_aws_gateway" "egress" {
   name   = "prod-egress"
   region = "us-west-2"
 
@@ -39,19 +39,18 @@ resource "betternat_gateway" "egress" {
 
   private_cidrs = ["10.0.0.0/8"]
 
-  datapath_engine          = "loxilb"
-  fallback_datapath_engine = "nftables"
-  betternat_version        = "v0.1.0"
-  stable_egress_ip         = true
-  ha_profile               = "default"
-  prometheus_enabled       = true
-  rollback_on_destroy      = true
+  datapath_engine     = "loxilb"
+  betternat_version   = "v0.1.0"
+  stable_egress_ip    = true
+  ha_profile          = "default"
+  prometheus_enabled  = true
+  rollback_on_destroy = true
 }
 
 output "agent_config_hash" {
-  value = betternat_gateway.egress.agent_config_hash
+  value = betternat_aws_gateway.egress.agent_config_hash
 }
 
 output "managed_route_table_ids" {
-  value = betternat_gateway.egress.managed_route_table_ids
+  value = betternat_aws_gateway.egress.managed_route_table_ids
 }

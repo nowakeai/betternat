@@ -6,6 +6,11 @@ Date: 2026-06-19
 
 Validate whether standalone LoxiLB can act as BetterNAT's datapath engine for a generic AWS private-subnet NAT Gateway replacement use case.
 
+Current note as of 2026-06-25: later spike results made LoxiLB the supported
+BetterNAT datapath, and BetterNAT has no product fallback datapath. This plan's
+decision template is historical; do not choose or re-propose `nftables only` as
+a fallback path.
+
 The test must answer:
 
 - Can a private EC2 instance route internet-bound traffic through a standalone LoxiLB appliance?
@@ -269,5 +274,5 @@ Decision:
   pass | partial | fail
 
 Recommended BetterNAT action:
-  use loxilb engine | keep as optional integration | nftables only
+  use loxilb engine | product blocker / new ADR required
 ```

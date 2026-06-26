@@ -8,20 +8,29 @@ Is nftables fast enough to use as the first datapath for BetterNAT?
 
 ## Short Answer
 
-Current decision as of 2026-06-20:
+Current decision as of 2026-06-25:
 
-nftables is fast enough to keep as BetterNAT's fallback datapath, but it is not the primary v0 datapath anymore. LoxiLB is now the default target after the AWS standalone egress and failover spikes. Keep this document as the performance and risk model for the fallback engine.
+nftables was fast enough for early datapath experiments, but it is not the
+BetterNAT product datapath and there is no product fallback datapath. LoxiLB is
+the supported datapath after the AWS standalone egress and failover spikes. Keep
+this document as historical performance context for legacy diagnostics only.
 
-Superseding architecture: `docs/architecture.md`.
+Superseded fallback note: BetterNAT no longer has a product fallback datapath.
+This document is retained as historical datapath research and legacy diagnostic
+context only. The current sources of truth are `docs/architecture.md`,
+`docs/spec-v0.md`, and `docs/research/055-no-nftables-fallback-decision.md`.
 
-Yes, nftables is fast enough and mature enough for the first version, as long as we position it correctly:
+Historical answer from the original 2026-06-19 research follows. It is not the
+current product direction:
 
 - It is the right correctness baseline.
 - It can likely handle meaningful NAT Gateway replacement workloads on properly sized EC2 instances.
 - Its real bottleneck is usually not the nftables rule engine itself, but connection tracking, packet rate, instance/network limits, IRQ/RSS tuning, and rule design.
 - It should not be marketed as "eBPF-level" or "AWS NAT Gateway-level" until measured.
 
-The product should start with nftables, benchmark it, and only add an eBPF fast path if the benchmark proves a real need.
+Superseded conclusion: the product should not start with nftables, should not
+add nftables fallback UX, and should not use nftables validation as a release
+substitute. BetterNAT now validates LoxiLB directly.
 
 ## What nftables Actually Is
 
@@ -190,26 +199,34 @@ Minimum benchmark matrix:
 - Flow types: long-lived TCP, short-lived TCP, UDP, DNS-like UDP.
 - Rulesets: single CIDR, multiple CIDRs through sets, intentionally bad linear chain.
 
-## Product Implication
+## Superseded Product Implication
 
-nftables is not a compromise for MVP. It is the right first foundation:
+The original 2026-06-19 implication below is superseded and retained only to
+explain the design history:
 
 - It lets us ship a correct NAT appliance sooner.
-- It provides a stable fallback if eBPF fast path fails to load.
+- It was originally considered as a conservative Linux fallback if a custom
+  eBPF fast path failed to load.
 - It gives us benchmark data before we invest in custom NAT datapath work.
 - It keeps the early product focused on the real differentiators: AWS failover, operational packaging, cost attribution, and observability.
 
-The later eBPF story should be:
+The original later eBPF story was:
 
 1. Use eBPF first for attribution and visibility.
-2. Keep nftables for forwarding.
+2. Keep the Linux NAT path for forwarding.
 3. Add eBPF fast path only for measured bottlenecks.
+
+Current implication: LoxiLB is the supported BetterNAT datapath. nftables may
+remain only as legacy diagnostic code while it is phased out.
 
 ## Decision
 
-Use nftables as the fallback datapath for BetterNAT v0/v1.
+Do not use nftables as a BetterNAT product fallback datapath.
 
-Do not claim fixed throughput numbers before testing on real EC2 instance types. The credible claim is that nftables is mature, production-proven Linux NAT technology, and that BetterNAT keeps it as a conservative fallback if LoxiLB cannot run safely in a given environment.
+Do not claim fixed throughput numbers before testing on real EC2 instance
+types. The credible claim is that nftables is mature, production-proven Linux
+NAT technology, but BetterNAT supportability depends on LoxiLB passing the
+relevant cloud, kernel, packaging, and release gates.
 
 ## Sources
 

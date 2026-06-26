@@ -11,14 +11,15 @@ BetterNAT is decentralized:
 - each gateway instance runs `betternat-agent`,
 - each instance exposes Prometheus metrics,
 - local CLI diagnostics run on each gateway node,
-- cloud state is inspected through AWS APIs, Terraform outputs, or AWS CLI.
+- cloud state is inspected through cloud APIs, Terraform outputs, AWS CLI, or
+  Google Cloud CLI.
 
 There is no central BetterNAT server.
 
 ## First 10 Minutes After Quick Start
 
 After the disposable [Quick Start](../getting-started/QUICK_START.md), use this
-short loop before reading the rest of this guide:
+short AWS loop before reading the rest of this guide:
 
 ```sh
 terraform -chdir=examples/terraform-aws-supplemental output
@@ -49,6 +50,15 @@ Expected:
 - the private client reaches the public internet,
 - no recent failed handover record remains unexplained.
 
+After the disposable [GCP Quick Start](../getting-started/GCP_QUICK_START.md),
+use the same gateway-local commands, then cross-check the GCP route and private
+client probe:
+
+```sh
+gcloud compute routes describe <route-name> --project <project-id>
+curl -fsS https://checkip.amazonaws.com
+```
+
 ## Daily Health Checklist
 
 For each HA group, verify:
@@ -57,10 +67,10 @@ For each HA group, verify:
 - at least one standby gateway node is healthy,
 - private route tables point to the active gateway node,
 - shared EIP is associated to the active gateway node when stable egress IP is enabled,
-- DynamoDB lease owner matches the active gateway node,
+- DynamoDB or Firestore lease owner matches the active gateway node,
 - datapath is ready,
 - Prometheus metrics are fresh,
-- ASG desired capacity equals healthy capacity,
+- ASG or MIG desired capacity equals healthy capacity,
 - client egress still returns the expected public IP.
 
 ## CLI Commands
@@ -85,10 +95,10 @@ betternat version
 
 Current behavior:
 
-- `status` reads the local daemon by default, uses cached registry and metrics data, and prints fleet, active/standby, version, IP, lease, cache freshness, peer control, registry age, and traffic summary data.
+- `status` reads the local daemon by default, uses cached registry and metrics data, and prints fleet, active/standby, version, IP, lease, route match, cache freshness, peer control, registry age, and traffic summary data.
 - `status --watch` refreshes the same view until interrupted. Use `--output json` for newline-delimited machine-readable snapshots.
 - `doctor` performs static/config-level checks.
-- `doctor --live` adds local datapath, IAM runtime permission simulation, lease, route, EIP, source/destination check, Prometheus, and outbound source-IP probe checks where configured. In registry-backed installs, ASG discovery is skipped; use `status` for fleet health.
+- `doctor --live` adds local datapath, lease, route, public identity, Prometheus, and outbound source-IP probe checks where configured. On AWS it also checks IAM runtime permission simulation, ASG health where applicable, EIP ownership, and EC2 source/destination check. On GCP it checks Firestore lease ownership, configured tagged static routes, Prometheus, and stable public identity ownership when configured.
 - `failover status` prints configured HA/failover settings.
 - `datapath status` prints configured datapath settings.
 - `datapath ready` performs live local datapath checks through LoxiLB.
@@ -103,7 +113,9 @@ Important:
 - Gateway-local commands read `/etc/betternat/agent.json` by default. Use
   `--config <path>` only for debugging a non-default config.
 - The CLI does not currently connect to a central BetterNAT API.
-- The CLI now has a live doctor path for AWS IAM/DynamoDB/route/EIP/datapath/Prometheus checks, but it is still node-local. Fleet-level visibility comes from the coordination registry and per-agent metrics.
+- The CLI live status and doctor paths are cloud-aware for AWS and GCP, but they are still node-local. Fleet-level visibility comes from the coordination registry and per-agent metrics.
+- GCP live doctor is still gateway-local. Pair it with GCP route, MIG, address,
+  and Firestore checks for fleet-level incident review.
 
 ## Monitoring Entry Point
 
@@ -175,6 +187,49 @@ The expected healthy state is:
 - Private route target equals current active instance or active ENI.
 - Shared EIP association points to current active instance in stable mode.
 
+## GCP Checks
+
+Use Google Cloud CLI or console to verify cloud state.
+
+Managed Instance Group:
+
+```sh
+gcloud compute instance-groups managed describe <mig-name> \
+  --project <project-id> \
+  --zone <zone>
+```
+
+Route:
+
+```sh
+gcloud compute routes describe <route-name> \
+  --project <project-id>
+```
+
+Stable regional address, when configured:
+
+```sh
+gcloud compute addresses describe <address-name> \
+  --project <project-id> \
+  --region <region>
+```
+
+Firestore lease and handover records are normally inspected through:
+
+```sh
+sudo betternat status
+sudo betternat handover history --limit 20
+```
+
+The expected healthy state is:
+
+- MIG has the desired number of running gateway instances.
+- Firestore lease owner equals current active gateway.
+- Tagged route target equals current active gateway.
+- Stable regional address user points to the active gateway when stable public
+  identity is configured.
+- LoxiLB datapath is ready on active and standby gateways.
+
 ## Accessing A Gateway Node
 
 Preferred access path:
@@ -188,6 +243,12 @@ Default release posture:
 - no public SSH required,
 - no inbound SSH rule by default,
 - no key pair required by default.
+
+On GCP, production deployments should use the organization's normal private
+administration path, such as IAP TCP forwarding or a private bastion, when node
+access is needed. SSH is useful for disposable validation only when explicitly
+enabled by the test fixture; BetterNAT does not require public SSH for the
+runtime control plane.
 
 Useful commands on the gateway node:
 
@@ -218,6 +279,16 @@ The bundle includes:
 - LoxiLB inspection output,
 - local `ip addr`, `ip route`, and nftables snapshots.
 
+When the agent config uses `cloud=gcp`, `status --direct` reads the Firestore
+registry when HA is enabled, reads the configured GCP route target through
+Compute, and reports whether the route target matches the lease owner.
+`doctor --live` reads the Firestore lease, verifies configured GCP route
+objects through Compute, and reports public identity status. The support bundle
+also attempts to collect GCE metadata identity, the configured project's
+Firestore database list, and the configured GCP route objects. These checks are
+best-effort: missing `gcloud`, missing local metadata access, or missing read
+permissions are recorded as command errors inside the bundle.
+
 The command redacts the peer API auth token from the config. Review the archive
 before sharing it outside your organization.
 
@@ -234,11 +305,10 @@ Expected:
 - stable mode: output matches the configured shared EIP before and after failover,
 - non-stable mode: output may change after failover.
 
-The mode choice affects timing. In AWS validation, non-stable
-route-only handover was much faster than stable EIP handover: the visible source
-IP switch completed within about `435 ms` at client probe granularity with `0`
-failed samples. Stable/no-public-IP handover preserved the shared public IP but
-recorded a short timeout window because it also has to move and verify the EIP.
+The mode choice affects timing. In AWS validation, non-stable route-only
+handover was much faster than stable EIP handover. In GCP validation,
+connectivity-first stable identity handover restored useful egress through the
+target gateway before the regional static IP converged back.
 
 ## Failover Interpretation
 
@@ -254,6 +324,8 @@ BetterNAT failover semantics:
   bootstrap and management reachability; stable mode converges back to the
   shared EIP, but a successful new-flow sample may briefly use a node's
   ordinary public IPv4 during transition,
+- on GCP, connectivity-first handover prioritizes route movement and outbound
+  connectivity before stable public identity convergence,
 - observed low-cost AWS tests showed about 12 seconds of outage for owner termination under the tested conditions.
 
 Do not treat the measured timing as a universal SLA. It depends on:
@@ -262,6 +334,7 @@ Do not treat the measured timing as a universal SLA. It depends on:
 - instance health signal,
 - AWS API latency,
 - ASG replacement timing,
+- MIG replacement timing on GCP,
 - datapath readiness,
 - client retry behavior.
 
@@ -362,7 +435,7 @@ Do not manually delete route tables or EIPs before Terraform destroy unless reco
 
 These are known gaps to track:
 
-- `doctor --live` is node-local. Run it on each gateway node or pair it with Prometheus/AWS CLI for fleet-wide review.
+- `doctor --live` is node-local. Run it on each gateway node or pair it with Prometheus and cloud-provider CLI/API checks for fleet-wide review.
 - No central CLI command yet aggregates every HA group across AWS accounts, DynamoDB, ASG, datapath, and metrics.
 - Proactive `betternat handover start` exists, but there is no complete planned
   drain or rolling-upgrade workflow yet.

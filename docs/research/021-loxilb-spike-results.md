@@ -6,6 +6,11 @@ Date: 2026-06-19
 
 Standalone LoxiLB passed the first functional BetterNAT datapath spike for AWS private-subnet egress.
 
+Current decision note: this spike is historical evidence. BetterNAT now has no
+product fallback datapath; LoxiLB readiness is a release gate. Do not use the
+older fallback example below as current Terraform or release guidance. See
+`docs/research/055-no-nftables-fallback-decision.md`.
+
 In an isolated `us-west-2a` VPC, a private EC2 instance successfully routed internet-bound traffic through a public-subnet LoxiLB appliance. After adding a LoxiLB egress SNAT firewall rule, `https://checkip.amazonaws.com` from the private instance returned the appliance EIP:
 
 ```text
@@ -199,13 +204,9 @@ Recommended v0 posture:
 datapath_engine = "loxilb"
 ```
 
-with:
-
-```hcl
-datapath_fallback = "nftables"
-```
-
-Do not delete the nftables path yet. LoxiLB passed functional NAT, but production readiness still depends on packaging, config persistence, metrics integration, failure behavior, and performance under BetterNAT workloads.
+Do not use a product fallback datapath. LoxiLB passed functional NAT, but
+production readiness still depends on packaging, config persistence, metrics
+integration, failure behavior, and performance under BetterNAT workloads.
 
 ## Remaining Work Before Choosing LoxiLB As Default
 

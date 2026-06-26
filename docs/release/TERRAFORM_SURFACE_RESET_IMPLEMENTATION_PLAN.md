@@ -1,0 +1,798 @@
+# Terraform Surface Reset Implementation Plan
+
+Date: 2026-06-25
+
+## Purpose
+
+Track the implementation of the next BetterNAT Terraform surface reset.
+
+The next version is allowed to break the unpromoted `v0.1.1` provider schema in
+order to establish a clean multi-cloud structure before broader public
+promotion.
+
+Design source:
+
+- [Provider And Module Boundary Plan](../research/048-provider-module-boundary-plan.md)
+- GCP support research scratch:
+  `tmp/gcp-betternat-support-research-20260625.md`
+
+## Target End State
+
+Provider source address stays generic:
+
+```hcl
+source = "nowakeai/betternat"
+```
+
+Provider resources become cloud-specific:
+
+```hcl
+resource "betternat_aws_gateway" "this" {}
+resource "betternat_gcp_gateway" "this" {}
+```
+
+Provider data sources:
+
+```hcl
+data "betternat_runtime_artifacts" "this" {}
+data "betternat_aws_gateway_status" "this" {}
+data "betternat_gcp_gateway_status" "this" {}
+```
+
+User-facing modules become cloud-specific:
+
+```hcl
+module "betternat" {
+  source = "nowakeai/betternat/aws"
+}
+
+module "betternat" {
+  source = "nowakeai/betternat/google"
+}
+```
+
+The old `betternat_gateway` resource should be removed from the primary
+provider surface. Keep an undocumented alias only if it is nearly free and does
+not complicate implementation, tests, or docs.
+
+## Release Framing
+
+This is a Terraform surface reset before public promotion.
+
+Release notes must state:
+
+- `v0.1.1` existed but was not promoted and has no known external users.
+- The provider schema intentionally changed.
+- Use cloud-specific resources or modules going forward.
+- Normal SemVer compatibility discipline resumes after this reset.
+
+## Phase 0: Baseline And Branch Hygiene
+
+Status: `complete`
+
+Tasks:
+
+- [x] Commit or explicitly carry current docs-only planning changes.
+- [x] Confirm main repo worktree state.
+- [x] Confirm split provider repo worktree state.
+- [x] Create an implementation branch.
+- [x] Record current provider `v0.1.1` release URL and commit.
+- [x] Record current runtime release version and commit.
+
+Validation:
+
+```sh
+git status --short
+GOCACHE=$PWD/tmp/go-build go test ./...
+```
+
+Done when:
+
+- Work starts from known commits.
+- Existing tests pass before refactor.
+
+## Phase 1: Provider Resource Reset
+
+Status: `complete`
+
+Goal: replace the AWS provider surface with explicit cloud naming.
+
+Tasks:
+
+- [x] Rename provider resource implementation from `GatewayResource` to an AWS
+  specific shape internally where practical.
+- [x] Expose `betternat_aws_gateway`.
+- [x] Remove or hide `betternat_gateway`.
+- [x] Update provider tests from `betternat_gateway` to
+  `betternat_aws_gateway`.
+- [x] Update Terraform examples to use `betternat_aws_gateway`.
+- [x] Update provider Registry docs to document `betternat_aws_gateway`.
+- [x] Remove stale AWS-first language from provider overview.
+
+Validation:
+
+```sh
+GOCACHE=$PWD/tmp/go-build go test ./internal/tfprovider ./internal/install/aws
+GOCACHE=$PWD/tmp/go-build go test ./...
+GOCACHE=$PWD/tmp/go-build go build ./cmd/terraform-provider-betternat
+```
+
+Done when:
+
+- Terraform schema exposes `betternat_aws_gateway`.
+- No product docs recommend `betternat_gateway`.
+- Provider examples validate with local override.
+
+## Phase 2: Provider Data Sources
+
+Status: `complete`
+
+Goal: give modules a clean read-only interface instead of copying provider
+constants or runtime manifests.
+
+Tasks:
+
+- [x] Add `betternat_runtime_artifacts`.
+- [x] Add tests for supported runtime lookup.
+- [x] Add tests for unsupported runtime/version/arch errors.
+- [x] Add `betternat_aws_gateway_status`.
+- [x] Add tests for AWS gateway status read path using fakes.
+- [x] Stub or defer `betternat_gcp_gateway_status` until GCP provider alpha.
+- [x] Add `docs/data-sources/runtime_artifacts.md`.
+- [x] Add `docs/data-sources/aws_gateway_status.md`.
+- [x] Update provider examples to show runtime artifact inspection.
+
+Validation:
+
+```sh
+GOCACHE=$PWD/tmp/go-build go test ./internal/tfprovider
+GOCACHE=$PWD/tmp/go-build go test ./...
+```
+
+Done when:
+
+- Modules can consume runtime artifact metadata from a data source.
+- AWS gateway status can be read without managing a resource.
+
+## Phase 3: AWS Module Repository
+
+Status: `local implementation complete; cloud smoke pending before release`
+
+Goal: make the AWS module the default user-facing install surface.
+
+Repository:
+
+```text
+terraform-aws-betternat
+```
+
+Registry source:
+
+```text
+nowakeai/betternat/aws
+```
+
+Tasks:
+
+- [x] Create module repository.
+- [x] Add `main.tf`, `variables.tf`, `outputs.tf`, `versions.tf`.
+- [x] Wrap `betternat_aws_gateway`.
+- [x] Add AMI lookup for the default non-AMI bootstrap path.
+- [x] Accept common `terraform-aws-modules/vpc/aws` output shapes.
+- [ ] Add examples:
+  - [x] `examples/minimal-existing-vpc`
+  - [x] `examples/eks-vpc-module`
+  - [x] `examples/stable-egress-ip`
+  - [x] `examples/non-stable-egress-ip`
+  - [x] `examples/full-vpc-smoke`
+- [x] Add module README with quick install path.
+- [x] Add input/output descriptions suitable for Terraform Registry.
+- [x] Add CI validation.
+- [x] Add release notes.
+
+Recommended first-screen UX:
+
+```hcl
+module "betternat" {
+  source  = "nowakeai/betternat/aws"
+  version = "~> 0.2"
+
+  name   = "prod-egress"
+  vpc_id = module.vpc.vpc_id
+
+  azs                     = module.vpc.azs
+  public_subnet_ids       = module.vpc.public_subnets
+  private_route_table_ids = module.vpc.private_route_table_ids
+
+  private_cidrs = [module.vpc.vpc_cidr_block]
+}
+```
+
+Validation:
+
+```sh
+terraform fmt -check -recursive
+terraform init
+terraform validate
+```
+
+AWS validation:
+
+- [ ] Disposable VPC apply.
+- [ ] Private client egress.
+- [ ] `betternat status`.
+- [ ] Manual handover.
+- [ ] Single destroy.
+- [ ] Residual scan.
+
+Done when:
+
+- AWS module can replace the provider resource in the main Quick Start.
+- AWS module Registry page has meaningful README, inputs, outputs, resources,
+  and examples.
+
+## Phase 4: GCP Spike
+
+Status: `route-only live HA, protocol, failure-injection, and LoxiLB datapath proof complete`
+
+Goal: validate whether GCP can support the BetterNAT product model before
+committing to a production resource.
+
+BetterNAT's product value over a raw LoxiLB node is HA ownership: lease-fenced
+route and public-identity mutation, passive failover, proactive handover,
+operator-visible status, and safe rollback. GCP forwarding, provider-created
+VMs, and manual route replacement are substrate evidence only.
+
+Scope:
+
+- Disposable GCP VPC.
+- Private client VM without public IP.
+- One or two gateway VMs with `canIpForward=true`.
+- Static route from private subnet egress to the active gateway VM.
+- LoxiLB datapath only for cloud HA acceptance; do not pass any cloud alpha or
+  GA gate using nftables. This is the global BetterNAT product rule, not a
+  GCP-specific exception.
+- Firestore transaction lease backend.
+- Stable public identity is deferred from GCP alpha. Reserved static external
+  IP handover requires a separate access-config handover design and live
+  validation before it can become a GA promise.
+
+Tasks:
+
+- [x] Create durable GCP spike plan from the scratch research memo.
+- [x] Select functional target project.
+- [x] Define cleanup checklist.
+- [x] Validate gateway VM forwarding.
+- [x] Validate private client internet egress.
+- [x] Validate LoxiLB counters.
+- [x] Validate route replacement to standby.
+- [x] Measure new-flow recovery time for startup-script client probes.
+- [x] Reject reserved external IP handover from GCP alpha scope; GA support
+  requires a separate access-config handover design and live validation.
+- [x] Validate coordination backend choice.
+- [x] Run live Firestore contention spike.
+- [x] Render experimental GCP agent HA config and checksum-verified bootstrap
+  user data from the provider.
+- [x] De-scope raw LoxiLB GCP HA baseline comparison from the GCP GA gate:
+  BetterNAT ships an owned HA contract, not unmanaged upstream comparison.
+- [x] Run two-agent GCE HA smoke where route mutation is lease-fenced.
+- [x] Validate passive failover after active crash.
+- [x] Validate proactive handover during graceful shutdown or upgrade.
+- [x] Validate that the active reports `ACTIVE` only after Firestore lease,
+  route target, and local datapath readiness all match.
+- [x] Validate that a standby cannot mutate routes while another unexpired
+  Firestore lease owner exists.
+- [x] Do not run a raw LoxiLB-on-GCE HA baseline for GA.
+- [x] De-scope live GCE clock-skew injection from the GA gate; local lease tests
+  cover the 2 second skew allowance and fencing boundaries.
+- [x] Validate TCP, UDP, DNS, and long-download behavior across route-only
+  failover; do not rely only on short HTTP source-IP probes.
+- [x] Validate destroy/rollback after an agent-owned route movement.
+- [x] Decide GCP capacity repair model: unmanaged instances for alpha only;
+  MIG-backed replacement is the expected GA path unless a later ADR changes it.
+- [x] Add first GCP MIG capacity-repair implementation slice behind
+  `capacity_repair_mode = "mig"`; local tests cover template/MIG rendering and
+  Terraform input propagation, while live termination/replacement validation
+  remains a GA gate.
+- [x] Destroy all resources and scan residuals.
+
+Validation evidence:
+
+- [x] Route mutation behavior.
+- [x] Handover behavior.
+- [x] Public IP behavior for non-stable per-gateway public IPs.
+- [x] Datapath counters.
+- [x] Agent-owned lease and route behavior.
+- [x] Cleanup evidence.
+
+Done when:
+
+- GCP remains explicitly marked as alpha unless live agent-owned route fencing,
+  passive failover, and proactive handover all have evidence.
+- GCP product alpha scope is accepted only with measured limits for public
+  identity, LoxiLB-on-GCE, cleanup after handover, and capacity repair, or is
+  deferred with concrete blockers.
+
+## Phase 5: GCP Provider Alpha
+
+Status: `live GCP HA, stable public identity, capacity repair, LoxiLB restart, failure injection, and connectivity-first handover proof passed; packaging and release-contract validation pending`
+
+Goal: expose a GCP alpha resource only after the spike proves the minimum
+control-plane behavior.
+
+Tasks:
+
+- [x] Add `internal/install/gcp`.
+- [x] Add GCP cloud/runtime interfaces.
+- [x] Add GCP lease/coordination backend.
+- [x] Add `betternat_gcp_gateway`.
+- [x] Add `betternat_gcp_gateway_status`.
+- [x] Add provider docs for GCP alpha.
+- [x] Add GCP IAM docs.
+- [x] Allow explicit runtime service account attachment for GCP gateway VMs.
+- [x] Add opt-in provider-owned runtime service-account lifecycle behind
+  `manage_runtime_service_account`.
+- [x] Expose GCP runtime IAM permission contract from the provider.
+- [x] Add opt-in provider-owned GCP runtime custom role and service-account
+  binding lifecycle behind `manage_runtime_iam`.
+- [x] Add opt-in provider-owned Firestore Native database lifecycle behind
+  `manage_firestore_database`.
+- [x] Live-validate provider-owned GCP runtime service-account, runtime IAM, and
+  Firestore database lifecycle.
+- [x] Add GCP startup-script and model tests.
+- [x] Add read-only GCP HA preflight for APIs, Firestore database presence, and
+  IAM permissions.
+- [x] Add GCP-aware `betternat doctor --live` checks for Firestore lease,
+  configured route, route-only public identity, Prometheus, and source-IP
+  probe.
+- [x] Add GCP-aware `betternat status --direct` checks for Firestore registry,
+  configured route target, and route-target match.
+- [x] Add disposable GCP integration runbook.
+
+Validation:
+
+```sh
+GOCACHE=$PWD/tmp/go-build go test ./...
+GOCACHE=$PWD/tmp/go-build go build ./cmd/betternat ./cmd/betternat-agent ./cmd/terraform-provider-betternat
+```
+
+GCP validation:
+
+- [x] Disposable GCP apply.
+- [x] Private client egress.
+- [x] Route replacement.
+- [x] Live Firestore contention.
+- [x] Two-agent lease-fenced route mutation.
+- [x] Passive failover after active crash.
+- [x] Proactive handover.
+- [x] LoxiLB-on-GCE datapath counters and restart reconciliation.
+- [x] Raw LoxiLB HA baseline comparison explicitly de-scoped from GA readiness.
+- [x] GCP failure injection complete for current GA gate; live clock-skew
+  injection is de-scoped.
+- [x] Cleanup.
+
+Done when:
+
+- GCP forwarding alpha works in a disposable environment.
+- GCP HA is not marketed as BetterNAT-equivalent until live agent-owned HA
+  evidence exists.
+- Docs clearly state alpha limitations and unsupported production guarantees.
+
+## Phase 6: GCP Module Repository
+
+Status: `module PR opened; publish and registry smoke pending`
+
+Repository:
+
+```text
+terraform-google-betternat
+```
+
+Registry source:
+
+```text
+nowakeai/betternat/google
+```
+
+Tasks:
+
+- [x] Create local module repository.
+- [x] Wrap `betternat_gcp_gateway`.
+- [x] Add GKE/VPC-friendly inputs.
+- [x] Add examples:
+  - [x] `examples/minimal-existing-vpc`
+  - [x] `examples/gke-private-nodes`
+  - [x] `examples/non-stable-egress-ip`
+  - [x] `examples/stable-egress-ip`
+- [x] Add README, input docs, output docs.
+- [x] Add CI validation.
+- [ ] Publish alpha module.
+
+Done when:
+
+- GCP module is the default documented GCP alpha install path.
+
+## Phase 7: Main Documentation Reset
+
+Status: `pending`
+
+Tasks:
+
+- [ ] Update root `README.md` to point users to the AWS module by default.
+- [ ] Update `docs/user/getting-started/QUICK_START.md`.
+- [ ] Update `docs/user/getting-started/EXISTING_VPC_INSTALL.md`.
+- [ ] Update `docs/user/getting-started/EKS_TERRAFORM_MODULE_INTEGRATION.md`.
+- [ ] Add GCP alpha docs only after GCP spike/provider alpha validates.
+- [ ] Update `docs/user/reference/CONFIGURATION.md` or equivalent provider
+  reference.
+- [ ] Update `docs/user/reference/IAM_POLICY.md` for AWS provider/module split.
+- [ ] Add GCP IAM docs if GCP alpha ships.
+- [ ] Update release checklist.
+
+Done when:
+
+- A new user sees module-first install docs.
+- Provider docs are clearly advanced/reference docs.
+- No user-facing docs recommend the old `betternat_gateway` resource.
+
+## Phase 8: Release And Registry Validation
+
+Status: `pending`
+
+Tasks:
+
+- [ ] Release main BetterNAT runtime if runtime changes are included.
+- [ ] Release provider reset version.
+- [ ] Release AWS module.
+- [ ] Release GCP module only if GCP alpha is included.
+- [ ] Verify Terraform Registry provider install.
+- [ ] Verify OpenTofu Registry provider install.
+- [ ] Verify AWS module Registry page.
+- [ ] Verify GCP module Registry page if published.
+- [ ] Run AWS smoke through module.
+- [ ] Run GCP smoke through module if published.
+- [ ] Record release notes for every released artifact.
+
+Done when:
+
+- Registry pages show the intended module-first UX.
+- AWS smoke passes through the AWS module.
+- Cleanup passes without manual retry.
+
+## Open Decisions
+
+- [ ] Whether to remove `betternat_gateway` completely or keep an undocumented
+  alias for one release.
+- [ ] Whether `betternat_runtime_artifacts` should support only current runtime
+  or a bounded set of versions.
+- [ ] Whether AWS module default should use AL2023, Ubuntu, or user-supplied
+  AMI until BetterNAT AMIs exist.
+- [x] Whether GCP stable public identity is in the first alpha: no; GCP alpha
+  remains route-only/non-stable.
+- [x] GCP stable public identity first implementation path: use an existing
+  regional static external address name and access-config handover; live GCE
+  validation is still required before GA.
+- [x] GCP capacity repair first implementation path: opt-in zonal MIG mode in
+  `betternat_gcp_gateway`, with unmanaged VM mode retained as the alpha
+  default until live GCE replacement evidence is recorded.
+- [ ] Whether GCP lease backend is Firestore or GCS generation preconditions.
+- [ ] Provider version number for the surface reset.
+- [ ] Module versioning policy while provider and modules are released from
+  separate repositories.
+
+## Tracking Notes
+
+Append dated notes here during implementation.
+
+### 2026-06-25
+
+- Created implementation tracker.
+- Current plan intentionally allows breaking the unpromoted `v0.1.1` provider
+  schema to establish cloud-specific provider resources and module-first UX.
+- Baseline provider release: `v0.1.1`,
+  `https://github.com/nowakeai/terraform-provider-betternat/releases/tag/v0.1.1`,
+  tag commit `1317a2fbd9312a3451ec0a3376d667a7a0f8a93f`, split-provider HEAD
+  before reset `df9f1e4140681e6caebe258a420498f5ea3a5971`.
+- Baseline runtime release: `v0.1.0`,
+  `https://github.com/nowakeai/betternat/releases/tag/v0.1.0`, tag commit
+  `8500643a05f88aefb31b68bce617bf7c8c0ca602`, main repo HEAD before reset
+  `152512d70a635011412dfbf3d0287c31bdcd2ecd`.
+- Implemented main-repo provider surface reset on branch
+  `terraform-surface-reset`: `betternat_aws_gateway`,
+  `betternat_runtime_artifacts`, `betternat_aws_gateway_status`, and reserved
+  `betternat_gcp_gateway_status`.
+- Removed `betternat_gateway` from the registered provider resource surface.
+  Kept internal model names where changing them would add churn without
+  improving the Terraform surface.
+- Split `internal/tfprovider/gateway_resource_schema.go` out of the gateway
+  resource implementation so the touched provider resource file stays under
+  800 lines.
+- Updated active examples and user docs to use `betternat_aws_gateway`; old
+  release notes and historical research remain unchanged as version history.
+- Updated split provider docs/examples on branch `terraform-surface-reset`:
+  resource docs now use `docs/resources/aws_gateway.md`, data source docs live
+  under `docs/data-sources/`, and release notes include `v0.2.0`.
+- Created local AWS module repository `terraform-aws-betternat` with
+  cloud-specific module UX, examples, CI, and release notes. Registry source is
+  intended to be `nowakeai/betternat/aws` after repository creation/push.
+- Added GCP durable planning docs:
+  `docs/testing/GCP_SPIKE_PLAN.md` and
+  `docs/research/049-gcp-alpha-boundary.md`. GCP implementation remains gated
+  on disposable spike evidence.
+- Local validation passed:
+  `GOCACHE=$PWD/tmp/go-build go test ./...`,
+  `GOCACHE=$PWD/tmp/go-build go build ./cmd/betternat ./cmd/betternat-agent ./cmd/terraform-provider-betternat`,
+  `terraform fmt -check -recursive` for main examples,
+  Terraform dev-override `validate` for `examples/terraform` and
+  `examples/terraform-localstack`.
+- AWS module validation passed with a local provider `0.2.0` filesystem mirror:
+  `terraform fmt -check -recursive`, root `terraform init -backend=false` and
+  `terraform validate`, plus validate for all five examples.
+- AWS smoke was later run without publishing by using a local provider
+  filesystem mirror for `nowakeai/betternat v0.2.0`; see
+  `docs/research/050-terraform-surface-reset-aws-smoke.md`.
+- GCP must be invoked with explicit `--project shared-resources-alt`; the GCP
+  implementation remains gated on the spike plan and was not run as part of the
+  AWS Terraform surface smoke.
+- Ran GCP disposable forwarding spike in `shared-resources-alt` with run ID
+  `bnat-gcp-spike-20260625044021`: private client egress through gateway
+  `gw-a` returned `34.168.92.39`; after route replacement to `gw-b`, client
+  egress returned `8.231.221.166`; all disposable resources were destroyed and
+  residual scans were empty. See
+  `docs/research/051-gcp-forwarding-spike-results.md`.
+- Implemented a narrow GCP alpha provider path: `internal/install/gcp`,
+  `betternat_gcp_gateway`, and a read-only `betternat_gcp_gateway_status`.
+  This path manages GCE forwarding VMs and a tagged route only; GCP lease
+  coordination, LoxiLB-on-GCE validation, stable public IP handover, and
+  production GKE migration remain deferred.
+- Ran unpublished Terraform provider GCP smoke with local CLI dev override and
+  run ID `bnat-gcp-tf-20260625045906`: `betternat_gcp_gateway` created two
+  gateway VMs and a tagged route, `betternat_gcp_gateway_status` read the same
+  route target, private client egress returned active gateway IP
+  `34.168.92.39`, `terraform destroy` removed provider-owned resources, and
+  residual scans were empty after deleting precreated VPC/client resources.
+- Reframed GCP scope after HA review: BetterNAT's core value over raw LoxiLB is
+  HA, so the current GCP implementation is only a forwarding substrate alpha.
+  Product-parity GCP work requires Firestore-backed lease/fencing, agent-owned
+  route mutation, proactive and passive handover, LoxiLB-on-GCE validation,
+  public identity decision, IAM, and observability gates. See
+  `docs/research/052-gcp-ha-gap-analysis.md`.
+- Implemented `internal/coordination/firestore` as the GCP equivalent of the
+  DynamoDB lease backend. It implements acquire, renew, release, transfer, and
+  current with Firestore transactions and generation-based fencing. Unit tests
+  cover missing leases, held leases, expired lease takeover, renew fences,
+  release fences, and transfer fences. Live Firestore contention validation is
+  still pending.
+- Added a skipped-by-default live Firestore contention integration test:
+  ```sh
+  BETTERNAT_GCP_FIRESTORE_PROJECT=<project> \
+  BETTERNAT_GCP_FIRESTORE_DATABASE=<database> \
+  go test ./internal/coordination/firestore \
+    -run TestIntegrationFirestoreLeaseContention -count=1
+  ```
+  Live validation later moved to `smooth-calling-490406-d9`, where the
+  `(default)` Firestore Native database exists in `us-west2` and the live
+  contention test now passes.
+- Extracted provider-neutral coordination records and interfaces into
+  `internal/coordination`. Agent registry and handover flows now depend on
+  `coordination.AgentRecord`, `coordination.HandoverRecord`, and reader/store
+  interfaces instead of DynamoDB-specific record types. DynamoDB remains the AWS
+  implementation, but this removes the type-level blocker for Firestore-backed
+  GCP registry and handover support.
+- Extended `internal/coordination/firestore` beyond leases to implement agent
+  registry and handover records under the same per-gateway Firestore records
+  collection. The skipped live smoke now validates lease contention, registry
+  publish/list, and handover create/update/list when a Firestore database is
+  available.
+- Added `internal/cloud/gcp` as the GCP implementation of the provider-neutral
+  `cloud.Provider` route and public-identity methods. It replaces GCP tagged
+  static routes with a handover-only shadow-route fast path, verifies route
+  targets by reading Compute routes, and can move an existing regional static
+  external IPv4 address through access-config detach/attach.
+- Wired the agent runtime selection path for `cloud=gcp`: GCP HA validation now
+  accepts `ha.lease.backend=firestore`, uses Firestore for lease/registry/
+  handover coordination, uses `internal/cloud/gcp` for route mutation and
+  shared public identity, and prefers connectivity-first handover for GCP stable
+  public identity. Live GCE activation, failover, and handover validation passed
+  in docs 054, 056, 063, 064, 065, and 067.
+- Added `scripts/gcp-ha-preflight.sh` for read-only GCP HA preflight.
+  `smooth-calling-490406-d9` now passes preflight for enabled APIs, Firestore
+  database presence, database lifecycle permissions, and runtime custom-role
+  lifecycle permissions. Terraform apply/destroy validation passed in
+  `docs/research/058-gcp-provider-lifecycle-results.md`.
+- Strengthened HA route-mutation fencing in code: activation, active ownership
+  repair, and proactive handover now verify the current lease generation before
+  and after cloud mutations. Local tests cover stopping route repair/handover
+  when the active lease changes mid-operation; live GCE evidence is still
+  pending.
+- Added `docs/testing/GCP_DISPOSABLE_INTEGRATION_RUNBOOK.md` as the executable
+  GCP evidence path for disposable apply, private egress, Firestore contention,
+  two-agent HA, passive failover, proactive handover, datapath restart, failure
+  injection, destroy, and residual scans.
+- Strengthened active degradation behavior: a node with a previous local active
+  lease now reports `DEGRADED` instead of attempting takeover when the lease
+  backend cannot be read, and active ownership verification failures also keep
+  the supervisor out of `ACTIVE`. Live GCE evidence is still pending.
+- Extended `betternat support bundle` for `cloud=gcp`: bundles now attempt
+  best-effort GCE metadata identity, Firestore database list, and configured
+  route describes alongside the existing redacted config, daemon status,
+  handover, metrics, systemd, datapath, and local network snapshots. Follow-up
+  live GCE support-bundle evidence passed in
+  `docs/research/057-gcp-loxilb-restart-results.md`.
+- Added `scripts/gcp-residual-scan.sh` as a read-only post-destroy cleanup gate
+  for disposable GCP validation. It scans Compute instances, routes, firewall
+  rules, addresses, service accounts, and BetterNAT Firestore records for a run
+  name. Live post-destroy evidence is still pending.
+- Deepened the GCP HA review in `docs/research/052-gcp-ha-gap-analysis.md`:
+  raw LoxiLB already has HA primitives, so the BetterNAT-specific GCP gate is
+  now explicitly agent-owned cloud egress ownership: Firestore lease fencing,
+  route mutation, active/standby status, passive failover, proactive handover,
+  datapath readiness, supportability, and cleanup. Single-node forwarding,
+  manual route replacement, provider status reads, and bootstrap rendering are
+  substrate evidence only.
+- Added GCP support to `betternat doctor --live`: static HA validation now
+  accepts `cloud=gcp` with `ha.lease.backend=firestore`, and the live path can
+  check local datapath, Firestore lease owner/generation, configured GCP route
+  targets, route-only public identity status, Prometheus, and source-IP probes.
+  Local unit tests cover the GCP diagnostic path; live GCE evidence is still
+  pending.
+- Hardened GCP route replacement: `internal/cloud/gcp` now snapshots the
+  previous route before delete/recreate and attempts to restore it when the new
+  route insert or insert operation wait fails. This does not make GCP route
+  replacement atomic, but it reduces the dangerous no-route window that remains
+  before live GCE failure-injection evidence exists.
+- Added local HA proof for route-only GCP behavior: activation with a standby
+  node fails before any cloud mutation when another unexpired lease owner
+  exists. This covers the "standby cannot mutate route while another owner
+  holds the lease" invariant locally; live two-agent GCE evidence is still
+  required.
+- Added GCP support to `betternat status --direct`: direct status now resolves
+  GCE `local.node_id=auto`, reads Firestore registry records when GCP HA is
+  enabled, reads the configured GCP route target through Compute, and reports
+  route-target match against the lease owner. Local unit tests cover the GCP
+  direct-status path, and live GCE status evidence is included in the GCP HA,
+  stable-IP, and connectivity-first validation docs.
+- Re-audited the GCP HA plan against raw LoxiLB rather than against a single VM
+  forwarding baseline. Remaining GCP gates are now narrower: raw LoxiLB HA
+  comparison, packaging and release-contract validation, repeatable smoke
+  automation, multi-zone/regional capacity validation, and org-policy
+  constraints.
+- Switched live GCP coordination validation to project `smooth-calling-490406-d9`,
+  enabled Firestore API, created the `(default)` Firestore Native database in
+  `us-west2`, and passed
+  `TestIntegrationFirestoreLeaseContention`. The first live attempt exposed that
+  Firestore document fields cannot use Go `uint64`; the Firestore coordination
+  DTOs now store generation fields as `int64` and convert at the package
+  boundary with overflow checks. Evidence is recorded in
+  `docs/research/053-gcp-firestore-live-contention-results.md`.
+- Opened implementation PRs:
+  - main repo: `https://github.com/nowakeai/betternat/pull/1`
+  - split provider repo:
+    `https://github.com/nowakeai/terraform-provider-betternat/pull/1`
+  - AWS module repo:
+    `https://github.com/nowakeai/terraform-aws-betternat/pull/1`
+- Ran disposable GCP proactive handover validation in
+  `smooth-calling-490406-d9` with run ID `bnat-gcp-ho-20260625093238`.
+  The first live attempt exposed that proactive handover could return a failed
+  result after a slow GCP route mutation had already moved ownership. The HA
+  controller now renews and re-verifies the lease fence during handover route
+  mutations. Fixed live validation completed handover from `gw-a` to `gw-b`
+  at lease generation 3 and reverse handover from `gw-b` to `gw-a` at lease
+  generation 4. `betternat handover history` now supports Firestore-backed GCP
+  coordination records, and live history returned both successful fixed
+  handovers. `status --direct`, `doctor --live`, and client egress all matched
+  the active route target. Terraform destroy, bucket deletion, Firestore record
+  cleanup, and residual scan passed. Evidence is recorded in
+  `docs/research/056-gcp-proactive-handover-results.md`.
+- Ran disposable GCP LoxiLB datapath validation in `smooth-calling-490406-d9`
+  with run ID `bnat-gcp-dp-20260625100635`. Live GCE evidence showed LoxiLB
+  firewall counters increasing for private-client egress, Prometheus counter
+  export, source-IP probe success, and rule replay after active LoxiLB restart.
+  During container restart the active agent may report a short `DEGRADED`
+  window while LoxiLB CLI/API output is warming up; route ownership remained on
+  the active gateway and recovered to `ACTIVE` after the rule was replayed.
+  Support bundle collection captured GCP metadata, Firestore database listing,
+  configured route describe output, LoxiLB firewall state, metrics, status, and
+  systemd logs. Terraform destroy, bucket deletion, manual cleanup of
+  run-scoped Firestore handover history, and residual scan passed. Evidence is
+  recorded in `docs/research/057-gcp-loxilb-restart-results.md`.
+- Ran disposable GCP provider-owned lifecycle validation in
+  `smooth-calling-490406-d9`. The first run
+  `bnat-gcp-lc-20260625104016` proved Firestore database, runtime service
+  account, runtime custom role, IAM binding, gateway, route, destroy, bucket
+  cleanup, and residual scan behavior, but exposed that the fixed
+  `betterNATRuntime` role ID was unsafe for provider-owned lifecycle. The
+  provider now derives and exposes per-gateway `runtime_iam_role_id`. The
+  follow-up run `bnat-gcp-lc2-20260625105420` validated the isolated role
+  `bnatGcpLc220260625105420Runtime`, Firestore database lifecycle, runtime
+  service-account lifecycle, IAM binding cleanup, database deletion, bucket
+  deletion, and residual scan. Evidence is recorded in
+  `docs/research/058-gcp-provider-lifecycle-results.md`.
+- Ran disposable GCP route-only protocol failover validation in
+  `smooth-calling-490406-d9` with run ID `bnat-gcp-proto-20260625114222`.
+  Private-client TCP check-IP, HTTPS status, UDP DNS, and 1 MiB HTTPS download
+  worked before and after proactive handover from `gw-b` to `gw-a`; the
+  continuous new-flow probe recorded `80` samples, `74` ok, `6` failed, one
+  public-IP switch from `34.20.164.68` to `34.94.153.80`, and final residual
+  scan passed. Evidence is recorded in
+  `docs/research/059-gcp-protocol-failover-results.md`.
+- Ran disposable GCP failure-injection validation in `smooth-calling-490406-d9`
+  with run ID `bnat-gcp-fail-20260625120735`. A local `OUTPUT tcp/443 REJECT`
+  on the active gateway forced Firestore/Compute API loss; the active reported
+  `DEGRADED` instead of `ACTIVE`, standby acquired generation `2`, route target
+  moved to `gw-b`, final doctor checks passed, and residual scan passed.
+  Evidence is recorded in `docs/research/060-gcp-failure-injection-results.md`.
+- Documented the GCP stable-public-identity boundary: alpha remains
+  route-only/non-stable, and shared static external IP support requires a
+  separate access-config handover design plus live validation before it can be
+  claimed for GA. See
+  `docs/research/061-gcp-stable-public-identity-decision.md`.
+- Documented the GCP capacity-repair boundary: unmanaged gateway VMs are
+  acceptable for alpha, but GCP GA should use MIG-backed capacity repair unless
+  a later ADR changes the direction. See
+  `docs/research/062-gcp-capacity-repair-decision.md`.
+- Added local HA controller coverage for two GCP route-only failure modes:
+  handover route replacement that does not converge is now reverted without
+  transferring the lease, and a stale lease generation after route mutation
+  stops lease transfer and attempts route ownership rollback. Live GCE coverage
+  is still required for route delete/insert operation failure, stale registry,
+  restarted old active, and clock-skew scenarios.
+- Added daemon handover target selection coverage for stale registry data:
+  registry status now exposes per-peer lease generation and route-target-match
+  fields, and handover target selection rejects a standby whose lease
+  generation is missing or older than the current lease for GCP. The target
+  selection helpers were split out of `control.go` to keep file size below the
+  project limit. Live GCE stale-registry and restarted-old-active validation
+  remains open.
+- Hardened GCP route replacement rollback for another non-atomic route window:
+  if Compute route deletion starts but the delete operation reports failure,
+  `internal/cloud/gcp` now attempts to restore the previous route snapshot.
+  Local tests cover restore after delete-operation, insert, and insert-operation
+  failures; live GCE route-operation failure injection remains open.
+- Added a conservative 2 second Firestore lease clock-skew allowance for GCP HA
+  fencing. Different owners cannot acquire during the skew window after
+  `expires_at`, while the current fenced owner can still renew or transfer.
+  Local Firestore decision tests cover acquire, renew, and transfer boundaries;
+  live GCE clock-skew injection is de-scoped from the GA gate.
+- Added the first GCP stable-public-identity implementation slice. The runtime
+  GCP cloud provider can move an existing regional static external IPv4 address
+  by deleting conflicting access configs and adding the static address access
+  config to the target instance. `betternat_gcp_gateway` can now render this
+  through `stable_public_identity_address_name` when `enable_agent_ha=true`.
+  Local tests cover detach/attach ordering, describe behavior, IAM permission
+  expansion, and rendered agent config. Live GCE stable-IP activation,
+  failover, strict handover hardening, and connectivity-first handover
+  validation passed in docs 063, 064, 065, and 067. Static-address lifecycle
+  management remains outside the provider-owned resource for now; users pass an
+  existing regional static external IPv4 address name.
+- Decided the GCP GA handover structure: keep single-NIC gateways as the current
+  default and use connectivity-first handover. Route ownership moves before
+  stable public identity convergence, preserving private workload internet
+  connectivity even if the egress source IP is briefly non-stable. Live
+  microbenchmarks showed moving static external IPv4 on `nic1` is not faster
+  than moving it on `nic0`, so multi-NIC is deferred as a management-plane
+  isolation design rather than the current latency solution. Evidence is in
+  `docs/research/067-gcp-connectivity-first-and-multinic-results.md`.
+- Re-ran the GCP connectivity-first protocol smoke in
+  `smooth-calling-490406-d9` with run ID `bnat-gcp-cf2-20260626085310`. The
+  first attempt exposed a smoke-harness race where normal ownership convergence
+  changed the active gateway before the trigger; the script now refreshes route
+  owner and standby immediately before proactive handover. The rerun passed
+  with `220` samples, `214` successful, `6` failed, stable IP -> target
+  ephemeral IP -> stable IP behavior, and a final zero-residual GCP scan. The
+  run also exposed and fixed a CLI live-doctor bug where the GCP cloud provider
+  factory did not pass `region` for public-identity diagnostics.
+- Re-locked the global no-nftables-fallback decision across architecture,
+  development, testing, and historical research docs. This is a BetterNAT-wide
+  product rule, not a GCP exception: LoxiLB is the supported datapath, existing
+  nftables/nf_conntrack code may remain temporarily as legacy diagnostics only,
+  and legacy scripts or `fallback_datapath_engine` must not be used as release,
+  recovery, or cloud-acceptance fallback evidence.
+- Ran combined GCP MIG capacity-repair and stable-public-identity validation in
+  `smooth-calling-490406-d9` with run ID `bnat-gcp-migpi-20260625141300`.
+  The run proved opt-in zonal MIG creation, non-owner replacement without route
+  or static-IP drift, active deletion with route plus static-IP takeover,
+  expanded runtime IAM permissions, and final residual cleanup. It also proved
+  that stable public identity requires Private Google Access or an equivalent
+  private Google API path on the gateway subnet. Evidence is recorded in
+  `docs/research/063-gcp-mig-stable-ip-results.md`.

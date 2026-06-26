@@ -11,7 +11,6 @@ local:
 
 datapath:
   engine: loxilb
-  fallback_engine: nftables
   private_cidrs:
     - 10.0.0.0/8
   loxilb:
@@ -21,9 +20,6 @@ datapath:
     snat_interface: ens5
     rule_preference_base: 100
     reconcile_interval_seconds: 10
-  nftables:
-    table_name: betternat
-    chain_prefix: betternat
 
 ha:
   enabled: true

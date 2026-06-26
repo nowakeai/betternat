@@ -17,7 +17,7 @@ Recommended alpha behavior:
 - always enable IPv4 forwarding,
 - always disable reverse path filtering for forwarding safety, including already-existing interfaces,
 - set Linux `nf_conntrack_max` only if the kernel exposes that sysctl,
-- document `nf_conntrack_max` as fallback/compatibility tuning, not LoxiLB tuning,
+- document `nf_conntrack_max` as legacy/compatibility tuning, not LoxiLB tuning,
 - defer advanced tuning profiles until benchmark evidence exists.
 
 ## Why
@@ -42,16 +42,17 @@ In the LoxiLB reference code:
 
 Therefore, Linux `net.netfilter.nf_conntrack_max` is not the limit for LoxiLB's eBPF conntrack map.
 
-### Linux nf_conntrack still matters for fallback and host behavior
+### Linux nf_conntrack still matters for legacy diagnostics and host behavior
 
-BetterNAT still has a nftables fallback engine. That path uses Linux NAT and Linux conntrack:
+BetterNAT still has legacy nftables diagnostic code while it is being phased
+out. That path uses Linux NAT and Linux conntrack:
 
 ```text
 nft ... masquerade
 conntrack -L
 ```
 
-For that fallback path, `nf_conntrack_max` is relevant.
+For that legacy diagnostic path, `nf_conntrack_max` is relevant.
 
 It may also matter for unrelated host networking features that use kernel netfilter conntrack, such as Docker or security-group-observed host flows, but it should not be described as the LoxiLB NAT capacity control.
 
@@ -114,7 +115,8 @@ And should append this only if `/proc/sys/net/netfilter/nf_conntrack_max` exists
 net.netfilter.nf_conntrack_max = 1048576
 ```
 
-This gives the nftables fallback a better baseline without making bootstrap depend on a non-primary sysctl being present.
+This gives the legacy nftables diagnostic path a better baseline without making
+bootstrap depend on a non-primary sysctl being present.
 
 ## Do Not Default Yet
 
@@ -142,8 +144,9 @@ Reasons:
 User-facing docs should say:
 
 - BetterNAT uses LoxiLB/eBPF as the primary datapath.
-- BetterNAT also keeps nftables/nf_conntrack as a fallback.
+- BetterNAT has no product fallback datapath; existing nftables/nf_conntrack
+  code is legacy-only while retained.
 - The alpha bootstrap applies minimal gateway sysctls.
-- `nf_conntrack_max` is a fallback/compatibility setting when available.
+- `nf_conntrack_max` is a legacy/compatibility setting when available.
 - LoxiLB conntrack should be inspected through BetterNAT metrics or `loxicmd get conntrack -o json`.
 - High-volume tuning will be benchmark-backed in a later release.

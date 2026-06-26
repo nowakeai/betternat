@@ -5,6 +5,9 @@ Date: 2026-06-22
 This guide explains how to safely remove or roll back a BetterNAT deployment.
 
 Use this guide before deleting gateway instances, route tables, EIPs, Auto Scaling groups, or DynamoDB tables by hand.
+For GCP, use it before deleting gateway instances, routes, regional static
+addresses, Managed Instance Groups, service accounts, or Firestore records by
+hand.
 
 ## Emergency Route Restore
 
@@ -71,13 +74,18 @@ tables, EIPs, or the coordination table by hand before route state is safe.
 
 ## What Rollback Means
 
-BetterNAT sends private-subnet egress through AWS private route table entries such as:
+BetterNAT sends private-subnet egress through cloud routes such as:
 
 ```text
 0.0.0.0/0 -> active BetterNAT gateway node
 ```
 
 During install, the provider snapshots the previous target for every managed private route table. During destroy, it can restore those routes before deleting BetterNAT-managed resources.
+
+On GCP, BetterNAT owns the tagged static route named by `route_name`. The
+module does not create or delete an existing regional static external IPv4
+address used for stable public identity, so that address remains in the calling
+Terraform stack or infra-admin stack.
 
 Supported rollback targets include:
 
@@ -97,7 +105,7 @@ If the previous target is missing or unknown, BetterNAT will not silently destro
 The relevant resource fields are:
 
 ```hcl
-resource "betternat_gateway" "egress" {
+resource "betternat_aws_gateway" "egress" {
   rollback_on_destroy              = true
   allow_destroy_without_rollback   = false
 }
@@ -121,6 +129,7 @@ Keep these defaults unless you have manually restored the private route table st
 | `terraform destroy` refuses to continue because rollback metadata is missing. | Use [If Destroy Refuses To Roll Back](#if-destroy-refuses-to-roll-back). |
 | The previous route target was deleted. | Read [Stale Rollback Targets](#stale-rollback-targets) before destroying anything else. |
 | You are migrating production from NAT Gateway to BetterNAT. | Follow [Production Rollback Pattern](#production-rollback-pattern). |
+| You are testing GCP in a disposable VPC. | Use [GCP Destroy And Cleanup](#gcp-destroy-and-cleanup). |
 
 ## Normal Destroy
 
@@ -167,6 +176,42 @@ aws resourcegroupstaggingapi get-resources \
 
 Terminated EC2 instances may remain visible briefly. Check direct EC2 state before treating them as live resources.
 
+## GCP Destroy And Cleanup
+
+For a disposable GCP deployment, use Terraform destroy first:
+
+```sh
+terraform destroy
+```
+
+Expected order:
+
+1. Terraform removes BetterNAT gateway capacity.
+2. The provider removes the tagged route it owns.
+3. The provider removes instance templates, MIGs, service accounts, custom IAM
+   bindings, and Firestore database only when those lifecycles were enabled in
+   the same stack.
+4. Terraform removes surrounding VPC fixture resources if the example created
+   them.
+
+After destroy, verify no run-scoped resources remain:
+
+```sh
+gcloud compute instances list --filter="name~<run-id>"
+gcloud compute routes list --filter="name~<run-id>"
+gcloud compute firewall-rules list --filter="name~<run-id>"
+gcloud iam service-accounts list --filter="email~<run-id>"
+```
+
+If stable public identity used a regional static external IPv4 address owned by
+the calling stack, confirm whether that address should remain reserved or be
+destroyed by its owning Terraform resource. Do not delete a shared address by
+hand while another route or allowlist still depends on it.
+
+Firestore handover records may outlive a destroyed disposable gateway when the
+Firestore database is shared. Delete only run-scoped BetterNAT documents after
+confirming the gateway stack is gone.
+
 ## If Destroy Refuses To Roll Back
 
 You may see an error like:
@@ -186,7 +231,7 @@ Do not immediately set `allow_destroy_without_rollback = true`.
 First inspect the route tables:
 
 ```sh
-terraform -chdir=<your-config-dir> state show betternat_gateway.egress
+terraform -chdir=<your-config-dir> state show betternat_aws_gateway.egress
 
 aws ec2 describe-route-tables \
   --profile "$AWS_PROFILE" \
@@ -237,6 +282,8 @@ Avoid these actions unless you are following a deliberate manual recovery plan:
 - Do not delete BetterNAT EC2 instances before route rollback.
 - Do not delete the DynamoDB lease table while agents are still running.
 - Do not delete EIPs before checking which public identity private subnets should use after rollback.
+- Do not delete GCP Firestore records, MIGs, routes, or regional static
+  addresses before route ownership is understood.
 - Do not delete route tables managed by another Terraform stack.
 - Do not run competing Terraform resources that also manage the same `0.0.0.0/0` route while BetterNAT is active.
 

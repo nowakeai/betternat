@@ -8,11 +8,17 @@ Besides Cilium/Hubble, what existing wheels can BetterNAT reuse for datapath, ob
 
 ## Short Answer
 
-Current decision as of 2026-06-20:
+Current decision as of 2026-06-25:
 
-The v0 architecture is now LoxiLB-first. Standalone LoxiLB passed AWS route-through egress NAT, DNS/UDP, high-response download, and EIP + `ReplaceRoute` failover spikes. `nftables` + `nf_conntrack` remains a mandatory fallback and debugging baseline, but it is no longer the primary datapath investment.
+The v0 architecture is now LoxiLB-first with no product fallback datapath.
+Standalone LoxiLB passed AWS route-through egress NAT, DNS/UDP, high-response
+download, and EIP + `ReplaceRoute` failover spikes. `nftables` +
+`nf_conntrack` may remain only as legacy diagnostic code while it is phased out.
 
-Superseding architecture: `docs/architecture.md`.
+Superseded fallback note: BetterNAT no longer has a product fallback datapath.
+The current sources of truth are `docs/architecture.md`, `docs/spec-v0.md`,
+and `docs/research/055-no-nftables-fallback-decision.md`. Older fallback
+language in this document is design history only.
 
 There are useful existing components, but no obvious turnkey open-source "AWS NAT Gateway replacement with eBPF observability and EIP failover."
 
@@ -30,8 +36,8 @@ High-performance alternatives like VPP are real, but they make the appliance a d
 
 | Component | What It Gives Us | Fit | Recommendation |
 | --- | --- | --- | --- |
-| nftables + nf_conntrack | Kernel NAT, masquerade, stateful conntrack | Excellent baseline | Use for MVP datapath |
-| iptables + nf_conntrack | Older but widely known kernel NAT | Good fallback | Support only if needed |
+| nftables + nf_conntrack | Kernel NAT, masquerade, stateful conntrack | Historical baseline | Legacy diagnostics only while retained |
+| iptables + nf_conntrack | Older but widely known kernel NAT | Historical alternative | Do not add unless a new architecture decision supersedes LoxiLB |
 | conntrack-tools / conntrackd | Conntrack inspection and HA state sync | Useful for HA experiments | Optional; do not require initially |
 | Keepalived / VRRP | Classic virtual IP failover | Weak fit on AWS VPC | Borrow health-check ideas, not VRRP design |
 | AWS EIP / route / ENI APIs | Cloud-native failover primitive | Required | Implement directly in Go agent |
@@ -68,7 +74,8 @@ Why this is the right first wheel:
 - Debugging is understandable.
 - Kernel handles TCP/UDP/ICMP and related conntrack behavior.
 - We can benchmark against it before writing any mutating eBPF datapath.
-- It gives us a fallback path even after eBPF fast path exists.
+- Historically, it gave the project a simple diagnostic baseline before the
+  LoxiLB decision. It is not a product fallback path.
 
 Downside:
 
@@ -316,7 +323,7 @@ Forwarding remains nftables.
 Add optional fast path:
 
 - TC eBPF SNAT/DNAT for selected flows.
-- Keep nftables fallback.
+- Keep legacy nftables diagnostics stable only while the code remains.
 - Benchmark before enabling by default.
 
 ### Version 3 / Alternate Edition

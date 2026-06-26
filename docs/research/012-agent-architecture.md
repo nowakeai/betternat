@@ -8,11 +8,17 @@ What should `betternat-agent` do at runtime, and how should it interact with the
 
 ## Short Answer
 
-Current decision as of 2026-06-20:
+Current decision as of 2026-06-25:
 
-`betternat-agent` is now responsible for a LoxiLB-first datapath. It must reconcile LoxiLB egress SNAT rules, re-export LoxiLB-derived metrics, and keep nftables as fallback. Older nftables-first examples below should be read as fallback-mode examples unless explicitly updated.
+`betternat-agent` is now responsible for a LoxiLB-first datapath. It must
+reconcile LoxiLB egress SNAT rules and re-export LoxiLB-derived metrics.
+nftables is not a product fallback; older nftables-first examples below are
+design history unless explicitly updated.
 
-Superseding architecture: `docs/architecture.md`.
+Superseded fallback note: BetterNAT no longer has a product fallback datapath.
+The current sources of truth are `docs/architecture.md`, `docs/spec-v0.md`,
+and `docs/research/055-no-nftables-fallback-decision.md`. Older fallback
+language in this document is design history only.
 
 `betternat-agent` is the runtime control plane on each NAT appliance.
 
@@ -24,7 +30,7 @@ It should own:
 - cloud failover operations through official SDKs,
 - route/EIP verification,
 - LoxiLB health and rule reconciliation,
-- nftables/sysctl fallback health,
+- legacy nftables/sysctl diagnostics while retained,
 - optional eBPF flow accounting,
 - Prometheus metrics,
 - local doctor API.
@@ -108,7 +114,6 @@ local:
 
 datapath:
   mode: loxilb
-  fallback_mode: nftables
   allowed_private_cidrs:
     - 10.0.0.0/8
   loxilb:

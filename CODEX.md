@@ -17,7 +17,9 @@ Repository bootstrap notes for Codex sessions.
 - Purpose: lower-cost, observable, highly available egress for high-volume private subnet workloads.
 - Language: Go.
 - Primary datapath: LoxiLB standalone egress SNAT.
-- Fallback datapath: nftables/nf_conntrack.
+- Fallback datapath: none. This is a global BetterNAT decision, not a
+  cloud-specific exception. nftables code may remain temporarily as legacy
+  diagnostic code while it is phased out.
 - Cloud target: AWS first.
 - Runtime control plane: `betternat-agent`.
 - Install UX: `terraform-provider-betternat`.
@@ -29,7 +31,8 @@ Repository bootstrap notes for Codex sessions.
 - `cmd/terraform-provider-betternat/`: Terraform provider binary.
 - `internal/agent/`: reconcile loop and metrics serving.
 - `internal/datapath/loxilb/`: LoxiLB command wrapper and JSON parsing.
-- `internal/datapath/nftables/`: fallback datapath wrapper and conntrack parsing.
+- `internal/datapath/nftables/`: legacy nftables diagnostic wrapper retained
+  temporarily; do not add, test around, or document product fallback behavior.
 - `internal/ha/`: failover controller.
 - `internal/install/aws/`: AWS install applier.
 - `internal/tfprovider/`: Terraform provider resource and install wiring.
@@ -65,7 +68,10 @@ GOCACHE=$PWD/tmp/go-build go run ./cmd/betternat failover status --config exampl
 ## Environment Assumptions
 
 - macOS can run unit tests, provider builds, and static CLI smoke checks.
-- Linux is required for real LoxiLB/nftables datapath execution. Any suitable Linux host is acceptable; OrbStack is only one local option.
+- Linux is required for real LoxiLB datapath execution. Any suitable Linux host
+  is acceptable; OrbStack is only one local option. nftables code is
+  legacy/diagnostic only while it remains and must not be used to pass a
+  release gate where LoxiLB is not ready.
 - AWS integration tests must use isolated disposable resources and explicit cleanup.
 - Network-dependent dependency checks may require the local proxy configured outside the sandbox.
 

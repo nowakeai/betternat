@@ -74,14 +74,14 @@ Expected:
 - the old `aws_route` default route resource is removed or no longer planned,
 - `aws_nat_gateway.main` and `aws_eip.nat` are destroyed when the backend is
   `betternat`,
-- one `betternat_gateway` resource is created,
+- one `betternat_aws_gateway` resource is created,
 - EKS cluster and node group subnet IDs do not change,
 - private route table IDs do not change,
 - unrelated IAM, EKS, node group, and security group changes are not bundled
   into the same apply.
 
 Do not apply if Terraform still plans to manage the same private
-`0.0.0.0/0` route through both `aws_route` and `betternat_gateway`.
+`0.0.0.0/0` route through both `aws_route` and `betternat_aws_gateway`.
 
 ## Make The Existing NAT Gateway Conditional
 
@@ -158,7 +158,7 @@ Add BetterNAT in the networking module, using the same public subnet and
 private route table:
 
 ```hcl
-resource "betternat_gateway" "egress" {
+resource "betternat_aws_gateway" "egress" {
   count = var.enable_nat_gateway && var.nat_backend == "betternat" ? 1 : 0
 
   name   = "${var.project_name}-egress-a"
@@ -198,7 +198,7 @@ output "nat_gateway_ip" {
   value = try(
     var.enable_nat_gateway && var.nat_backend == "aws_nat_gateway" ?
     aws_eip.nat[0].public_ip :
-    values(betternat_gateway.egress[0].egress_public_ips)[0],
+    values(betternat_aws_gateway.egress[0].egress_public_ips)[0],
     null
   )
 }
@@ -212,7 +212,7 @@ output "private_route_table_ids" {
 }
 
 output "rollback_route_targets_json" {
-  value = try(betternat_gateway.egress[0].rollback_route_targets_json, null)
+  value = try(betternat_aws_gateway.egress[0].rollback_route_targets_json, null)
 }
 ```
 

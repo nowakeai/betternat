@@ -10,12 +10,22 @@ type GatewaySpec struct {
 	Name          string
 	Cloud         string
 	Region        string
+	GCP           GCPSpec
 	PrivateCIDRs  []string
 	Datapath      DatapathSpec
 	HA            HASpec
 	Coordination  CoordinationSpec
 	Control       ControlSpec
 	Observability ObservabilitySpec
+}
+
+type GCPSpec struct {
+	ProjectID           string
+	Zone                string
+	Network             string
+	ClientTag           string
+	RoutePriority       int64
+	FirestoreDatabaseID string
 }
 
 type DatapathSpec struct {
@@ -106,6 +116,14 @@ func RenderAgentConfig(gateway GatewaySpec, node NodeSpec) (config.Config, error
 		HAGroupID: node.HAGroupID,
 		Cloud:     gateway.Cloud,
 		Region:    gateway.Region,
+		GCP: config.GCPConfig{
+			ProjectID:           gateway.GCP.ProjectID,
+			Zone:                defaultString(gateway.GCP.Zone, node.AvailabilityZone),
+			Network:             gateway.GCP.Network,
+			ClientTag:           gateway.GCP.ClientTag,
+			RoutePriority:       gateway.GCP.RoutePriority,
+			FirestoreDatabaseID: gateway.GCP.FirestoreDatabaseID,
+		},
 		Local: config.LocalConfig{
 			NodeID:           defaultString(node.InstanceID, "auto"),
 			AvailabilityZone: defaultString(node.AvailabilityZone, "auto"),

@@ -61,7 +61,7 @@ terraform {
 
 This controls:
 
-- `betternat_gateway` schema,
+- `betternat_aws_gateway` schema,
 - provider create/read/update/delete behavior,
 - state migration behavior,
 - Terraform/OpenTofu plugin protocol implementation.
@@ -79,7 +79,7 @@ Specified by the gateway resource install path.
 Current production-preview bootstrap shape:
 
 ```hcl
-resource "betternat_gateway" "egress" {
+resource "betternat_aws_gateway" "egress" {
   # ...
 
   betternat_version = "v0.1.0-alpha.6"
@@ -91,7 +91,7 @@ its built-in release manifest. Users can still override explicit URLs/checksums
 for air-gapped, mirrored, or development builds:
 
 ```hcl
-resource "betternat_gateway" "egress" {
+resource "betternat_aws_gateway" "egress" {
   # ...
 
   betternat_version   = "v0.1.0-alpha.6"
@@ -103,7 +103,7 @@ resource "betternat_gateway" "egress" {
 Production AMI path:
 
 ```hcl
-resource "betternat_gateway" "egress" {
+resource "betternat_aws_gateway" "egress" {
   # ...
 
   ami_channel       = "stable"
@@ -460,13 +460,13 @@ Registry ingestion or manual resync caught up. Later on 2026-06-24, Terraform
 Registry reported latest `0.1.0-alpha.4` with `overview` and `gateway` docs.
 
 Provider `0.1.0-alpha.5` was published to GitHub on 2026-06-24 to expand the
-Registry `betternat_gateway` resource documentation with lifecycle, HA,
+Registry `betternat_aws_gateway` resource documentation with lifecycle, HA,
 bootstrap, route ownership, EIP mode, rollback, and per-field guidance. GitHub
 release artifact checksum verification passed for the Linux amd64 zip. At
 publication time, Terraform Registry had not yet ingested `0.1.0-alpha.5`.
 
 Provider `0.1.0-alpha.6` was published to GitHub on 2026-06-24 to add
-`betternat_version` to `betternat_gateway` and let the provider derive the
+`betternat_version` to `betternat_aws_gateway` and let the provider derive the
 agent/CLI release artifact URLs and checksums from its built-in runtime
 manifest. GitHub release artifact checksum verification passed for the Linux
 amd64 zip. At publication time, Terraform Registry had not yet ingested

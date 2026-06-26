@@ -2,6 +2,10 @@
 
 Date: 2026-06-19
 
+Current note as of 2026-06-25: fallback recommendations in this evaluation are
+superseded. BetterNAT now has no product fallback datapath; see
+`docs/research/055-no-nftables-fallback-decision.md`.
+
 ## Question
 
 Could LoxiLB be used as the core datapath or HA foundation for BetterNAT?
@@ -12,7 +16,8 @@ LoxiLB should be the primary BetterNAT v0 datapath target.
 
 The AWS spikes validated the exact route-through NAT Gateway replacement use case: standalone LoxiLB can SNAT private-subnet traffic, preserve a stable EIP for new connections after EIP + `ReplaceRoute` failover, handle TCP/HTTPS/DNS/UDP, and expose useful firewall/conntrack state for BetterNAT observability.
 
-nftables/nf_conntrack should remain a mandatory fallback, but not the main product investment.
+nftables/nf_conntrack should remain only as legacy diagnostic code while it is
+phased out, not as a product fallback.
 
 It is stronger than the earlier "study only" candidates because it already has:
 
@@ -31,7 +36,7 @@ However, LoxiLB is still only one layer. BetterNAT's primary v0 target is a comp
 Recommendation:
 
 1. Treat LoxiLB as the default datapath target for v0 implementation.
-2. Keep nftables as the required fallback.
+2. Do not add nftables as a required or supported product fallback.
 3. Keep the product-level Terraform provider, cost calculator, security model, and observability UX as BetterNAT-owned.
 4. Do not assume LoxiLB solves generic VPC route failover, FinOps attribution, Terraform provider UX, or AWS least-privilege/security requirements out of the box.
 
@@ -166,7 +171,7 @@ Pros:
 
 - Reuses existing eBPF NAT datapath.
 - Keeps BetterNAT product differentiation.
-- Allows fallback to nftables.
+- Avoids adding a second supported datapath contract.
 
 Cons:
 
@@ -269,7 +274,7 @@ Earlier decision:
 
 Revised decision:
 
-> Use LoxiLB as the primary v0 datapath target. Keep nftables as safe fallback. The standalone AWS spikes validated generic outbound SNAT, DNS/UDP, larger response downloads, and basic EIP + `ReplaceRoute` failover for new connections.
+> Use LoxiLB as the primary v0 datapath target with no product fallback datapath. The standalone AWS spikes validated generic outbound SNAT, DNS/UDP, larger response downloads, and basic EIP + `ReplaceRoute` failover for new connections.
 
 ### HA decision
 
@@ -362,12 +367,10 @@ LoxiLB:
   owns datapath conntrack/maps
 ```
 
-Keep nftables fallback:
+Do not add nftables fallback UX:
 
 ```hcl
-resource "betternat_gateway" "egress" {
-  datapath_engine = "loxilb" # or "nftables"
-}
+datapath_engine = "loxilb"
 ```
 
 ## Decision

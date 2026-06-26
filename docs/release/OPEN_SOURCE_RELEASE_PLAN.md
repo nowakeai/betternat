@@ -24,7 +24,7 @@ Core claims:
 - supports active/standby failover for new connections,
 - supports stable public egress IP when shared EIP mode is enabled,
 - exports Prometheus metrics,
-- uses LoxiLB as the primary datapath and nftables as fallback.
+- uses LoxiLB as the supported datapath; there is no product fallback datapath.
 
 Do not claim:
 

@@ -4,10 +4,10 @@ Date: 2026-06-24
 
 ## Purpose
 
-This document describes the AWS IAM permissions needed by the BetterNAT
-Terraform install path.
+This document describes the cloud IAM permissions needed by BetterNAT Terraform
+install paths and gateway runtimes.
 
-There are two IAM surfaces:
+There are two AWS IAM surfaces:
 
 - Terraform execution identity: creates and destroys the BetterNAT infrastructure.
 - Gateway runtime role: attached to BetterNAT EC2 nodes and used by `betternat-agent`.
@@ -141,3 +141,113 @@ If a required permission is denied:
 
 Use [Security Hardening](SECURITY_HARDENING.md) for broader security posture,
 network exposure, artifact integrity, and production hardening checklist.
+
+## GCP Runtime Service Account
+
+`betternat_gcp_gateway` uses a runtime service account when
+`enable_agent_ha = true`. The GCP module enables Firestore-backed agent HA by
+default, so normal GCP module installs need a runtime service account.
+
+When `enable_agent_ha = true`, set:
+
+```hcl
+manage_firestore_database      = true
+manage_runtime_service_account = true
+manage_runtime_iam             = true
+```
+
+Alternatively, leave `manage_runtime_service_account = false` and provide an
+existing service account:
+
+```hcl
+service_account_email = "betternat-runtime@PROJECT_ID.iam.gserviceaccount.com"
+manage_runtime_iam    = true
+```
+
+Attach the following permissions to that service account, ideally through a
+project custom role scoped to the validation project:
+
+| Permission | Why |
+| --- | --- |
+| `compute.globalOperations.get` | Wait for route delete/create operations. |
+| `compute.addresses.get` | Resolve the configured regional static external IPv4 address for shared public identity validation. |
+| `compute.addresses.use` | Attach the configured regional static external IPv4 address to the active gateway access config. |
+| `compute.instances.get` | Read gateway instance metadata during route validation and diagnostics. |
+| `compute.instances.addAccessConfig` | Attach a GCP external access config during shared public identity handover. |
+| `compute.instances.deleteAccessConfig` | Detach an old or conflicting GCP external access config during shared public identity handover. |
+| `compute.instances.use` | Use a gateway instance as a static route `nextHopInstance`. |
+| `compute.networks.get` | Read the configured VPC network referenced by route creation. |
+| `compute.networks.updatePolicy` | Validate or repair network policy state required by the GCP HA preflight path. |
+| `compute.routes.create` | Move route ownership to the active gateway by creating the replacement static route. |
+| `compute.routes.delete` | Delete the old static route before recreating it for the new owner. |
+| `compute.routes.get` | Verify the current route target. |
+| `compute.subnetworks.useExternalIp` | Permit the runtime service account to add an external access config on the gateway subnet. |
+| `compute.zoneOperations.get` | Wait for instance access-config attach/detach operations. |
+| `datastore.databases.get` | Open the configured Firestore Native database. |
+| `datastore.entities.create` | Create lease, registry, and handover documents. |
+| `datastore.entities.delete` | Release leases and clean local registry/handover documents. |
+| `datastore.entities.get` | Read the current lease, agent registry, and handover records. |
+| `datastore.entities.list` | List fresh agent and handover records. |
+| `datastore.entities.update` | Renew/transfer leases and update registry/handover records. |
+
+The provider exposes the same list as
+`betternat_gcp_gateway.runtime_iam_permissions` so validation stacks can render
+custom roles from the provider's runtime contract.
+
+When `manage_runtime_iam = true`, `betternat_gcp_gateway` manages a
+project-level custom role and adds an IAM binding for:
+
+```text
+serviceAccount:SERVICE_ACCOUNT_EMAIL
+```
+
+Use this only when the Terraform execution identity is intentionally allowed to
+manage project custom roles and project IAM policy bindings. Leave
+`manage_runtime_iam = false` when an infra-admin stack owns IAM.
+
+By default, the provider derives `runtime_iam_role_id` from the gateway name so
+provider-owned IAM lifecycle is isolated per gateway. Set it explicitly only
+when a project naming policy requires a different role ID. GCP keeps deleted
+custom roles in a soft-deleted state for a period after destroy; that is normal
+and the provider can recreate or undelete its own role on a later apply.
+
+When `manage_runtime_service_account = true`, the provider also creates and
+deletes the runtime service account. The Terraform execution identity then
+needs:
+
+| Permission | Why |
+| --- | --- |
+| `iam.serviceAccounts.create` | Create the runtime service account. |
+| `iam.serviceAccounts.delete` | Remove the provider-owned runtime service account on destroy. |
+| `iam.serviceAccounts.get` | Check whether the runtime service account already exists. |
+| `iam.serviceAccounts.actAs` | Attach the runtime service account to gateway VMs. |
+
+Leave `manage_runtime_service_account = false` when service-account lifecycle is
+owned by another Terraform stack or infra-admin workflow.
+
+When `manage_firestore_database = true`, the provider creates and deletes the
+Firestore Native database used for GCP HA coordination. The Terraform execution
+identity then needs:
+
+| Permission | Why |
+| --- | --- |
+| `datastore.databases.create` | Create the provider-owned Firestore Native database before HA smoke resources start. |
+| `datastore.databases.delete` | Remove the provider-owned Firestore Native database on destroy. |
+| `datastore.databases.get` | Check existing database state and poll database operation results. |
+
+Leave `manage_firestore_database = false` when Firestore database lifecycle is
+owned by another Terraform stack or infra-admin workflow.
+
+When `capacity_repair_mode = "mig"`, the Terraform execution identity also
+needs Compute Engine permissions to create, read, and delete the provider-owned
+instance template and zonal managed instance group, and to list managed
+instances while selecting the initial route target. This is the expected GCP
+capacity repair mode for user-facing installs. `unmanaged` remains an escape
+hatch for narrow validation and debugging.
+
+Stable public egress IP handover uses an existing regional static external IPv4
+address. BetterNAT does not create or delete that address yet; manage it in the
+calling Terraform stack or an infra-admin stack. The gateway subnet also needs
+Private Google Access or an equivalent private path to Google APIs; otherwise a
+gateway can lose API access after deleting its temporary external access config
+and before attaching the shared static address.

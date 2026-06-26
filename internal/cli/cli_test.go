@@ -1,9 +1,7 @@
 package cli
 
 import (
-	"archive/tar"
 	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/json"
 	"io"
@@ -19,7 +17,7 @@ import (
 	"github.com/nowakeai/betternat/internal/agentapi"
 	"github.com/nowakeai/betternat/internal/cloud"
 	"github.com/nowakeai/betternat/internal/config"
-	dynamodbcoord "github.com/nowakeai/betternat/internal/coordination/dynamodb"
+	"github.com/nowakeai/betternat/internal/coordination"
 	"github.com/nowakeai/betternat/internal/datapath"
 	"github.com/nowakeai/betternat/internal/doctor"
 	"github.com/nowakeai/betternat/internal/iamcheck"
@@ -254,7 +252,7 @@ func TestRunStatusUsesRegistryWhenConfigured(t *testing.T) {
 		newStatusRegistry = restoreRegistry
 		resolveLocalInstanceID = restoreResolveInstance
 	}()
-	newStatusRegistry = func(context.Context, config.Config) (statusRegistry, error) {
+	newStatusRegistry = func(context.Context, config.Config) (coordination.AgentReader, error) {
 		return fakeStatusRegistry{}, nil
 	}
 	resolveLocalInstanceID = func(context.Context, string) (string, error) {
@@ -375,324 +373,6 @@ func TestRunStatusWatchUsesDaemonUntilContextCancel(t *testing.T) {
 	}
 }
 
-func TestRunHandoverStartUsesDaemon(t *testing.T) {
-	var sawPost bool
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != agentapi.HandoverPath {
-			t.Fatalf("unexpected path %s", r.URL.Path)
-		}
-		if r.Method != http.MethodPost {
-			t.Fatalf("unexpected method %s", r.Method)
-		}
-		sawPost = true
-		_ = json.NewEncoder(w).Encode(agentapi.HandoverResponse{
-			SchemaVersion:   "v1",
-			Status:          "completed",
-			SourceNodeID:    "i-active",
-			TargetNodeID:    "i-standby",
-			LeaseGeneration: 2,
-		})
-	}))
-	defer server.Close()
-
-	var out bytes.Buffer
-	if err := run(context.Background(), []string{"handover", "start", "--host", server.URL, "--to", "i-standby", "--output", "json"}, &out); err != nil {
-		t.Fatalf("run handover start: %v", err)
-	}
-	if !sawPost {
-		t.Fatal("daemon was not called")
-	}
-	if !strings.Contains(out.String(), `"status":"completed"`) {
-		t.Fatalf("missing completion response: %s", out.String())
-	}
-}
-
-func TestRunHandoverStartReturnsDaemonRejection(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusConflict)
-		_ = json.NewEncoder(w).Encode(agentapi.HandoverResponse{
-			SchemaVersion: "v1",
-			Status:        "rejected",
-			Error:         "local daemon is not the active route target",
-		})
-	}))
-	defer server.Close()
-
-	var out bytes.Buffer
-	err := run(context.Background(), []string{"handover", "start", "--host", server.URL, "--to", "i-standby"}, &out)
-	if err == nil {
-		t.Fatal("expected handover rejection")
-	}
-	if !strings.Contains(err.Error(), "not the active") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestRunHandoverHistoryUsesCoordinationRecords(t *testing.T) {
-	dir := t.TempDir()
-	configPath := filepath.Join(dir, "agent.json")
-	raw := strings.Replace(validConfigJSON(), `"observability": {}`, `"coordination":{"backend":"dynamodb","table":"coordination"},"observability": {}`, 1)
-	if err := os.WriteFile(configPath, []byte(raw), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	restore := newHandoverStoreReader
-	defer func() { newHandoverStoreReader = restore }()
-	newHandoverStoreReader = func(context.Context, config.Config) (handoverStoreReader, error) {
-		return fakeHandoverReader{currentGeneration: 2, records: []dynamodbcoord.HandoverRecord{
-			{
-				RequestID:       "old",
-				Status:          "failed",
-				SourceNodeID:    "i-old",
-				TargetNodeID:    "i-standby",
-				LeaseGeneration: 1,
-				UpdatedAt:       time.Unix(100, 0),
-			},
-			{
-				RequestID:       "new",
-				Status:          "completed",
-				SourceNodeID:    "i-active",
-				TargetNodeID:    "i-standby",
-				LeaseGeneration: 2,
-				UpdatedAt:       time.Unix(200, 0),
-			},
-		}}, nil
-	}
-
-	var out bytes.Buffer
-	if err := run(context.Background(), []string{"handover", "history", "--config", configPath, "--status", "completed", "--output", "json"}, &out); err != nil {
-		t.Fatalf("run handover history: %v", err)
-	}
-	body := out.String()
-	if !strings.Contains(body, `"request_id":"new"`) || strings.Contains(body, `"request_id":"old"`) {
-		t.Fatalf("unexpected history output: %s", body)
-	}
-	if !strings.Contains(body, `"source_node_id":"i-active"`) {
-		t.Fatalf("missing source node: %s", body)
-	}
-}
-
-func TestRunHandoverHistoryHidesStaleIntermediateRecords(t *testing.T) {
-	dir := t.TempDir()
-	configPath := filepath.Join(dir, "agent.json")
-	raw := strings.Replace(validConfigJSON(), `"observability": {}`, `"coordination":{"backend":"dynamodb","table":"coordination"},"observability": {}`, 1)
-	if err := os.WriteFile(configPath, []byte(raw), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	restore := newHandoverStoreReader
-	defer func() { newHandoverStoreReader = restore }()
-	newHandoverStoreReader = func(context.Context, config.Config) (handoverStoreReader, error) {
-		return fakeHandoverReader{currentGeneration: 3, records: []dynamodbcoord.HandoverRecord{
-			{
-				RequestID:       "stale-preparing",
-				Status:          "preparing",
-				SourceNodeID:    "i-old-active",
-				TargetNodeID:    "i-old-standby",
-				LeaseGeneration: 2,
-				UpdatedAt:       time.Unix(200, 0),
-			},
-			{
-				RequestID:       "completed",
-				Status:          "completed",
-				SourceNodeID:    "i-active",
-				TargetNodeID:    "i-standby",
-				LeaseGeneration: 3,
-				UpdatedAt:       time.Unix(300, 0),
-			},
-		}}, nil
-	}
-
-	var out bytes.Buffer
-	if err := run(context.Background(), []string{"handover", "history", "--config", configPath, "--output", "json"}, &out); err != nil {
-		t.Fatalf("run handover history: %v", err)
-	}
-	body := out.String()
-	if strings.Contains(body, `"request_id":"stale-preparing"`) {
-		t.Fatalf("stale intermediate record should be hidden by default: %s", body)
-	}
-	if !strings.Contains(body, `"request_id":"completed"`) {
-		t.Fatalf("current completed record missing: %s", body)
-	}
-
-	out.Reset()
-	if err := run(context.Background(), []string{"handover", "history", "--config", configPath, "--output", "json", "--include-stale"}, &out); err != nil {
-		t.Fatalf("run handover history include stale: %v", err)
-	}
-	body = out.String()
-	if !strings.Contains(body, `"request_id":"stale-preparing"`) || !strings.Contains(body, `"request_id":"completed"`) {
-		t.Fatalf("include-stale should show both records: %s", body)
-	}
-}
-
-func TestRunHandoverHistoryDefaultsToTable(t *testing.T) {
-	dir := t.TempDir()
-	configPath := filepath.Join(dir, "agent.json")
-	raw := strings.Replace(validConfigJSON(), `"observability": {}`, `"coordination":{"backend":"dynamodb","table":"coordination"},"observability": {}`, 1)
-	if err := os.WriteFile(configPath, []byte(raw), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	restore := newHandoverStoreReader
-	defer func() { newHandoverStoreReader = restore }()
-	newHandoverStoreReader = func(context.Context, config.Config) (handoverStoreReader, error) {
-		return fakeHandoverReader{records: []dynamodbcoord.HandoverRecord{{
-			RequestID:       "req-1",
-			Status:          "completed",
-			SourceNodeID:    "i-active",
-			TargetNodeID:    "i-standby",
-			LeaseGeneration: 2,
-			UpdatedAt:       time.Unix(200, 0),
-		}}}, nil
-	}
-
-	var out bytes.Buffer
-	if err := run(context.Background(), []string{"handover", "history", "--config", configPath}, &out); err != nil {
-		t.Fatalf("run handover history: %v", err)
-	}
-	body := out.String()
-	if strings.Contains(body, `"records"`) {
-		t.Fatalf("expected table output, got json: %s", body)
-	}
-	for _, want := range []string{"REQUEST", "STATUS", "req-1", "completed", "i-active", "i-standby"} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("missing %q in table output: %s", want, body)
-		}
-	}
-}
-
-func TestRunHandoverInspectUsesCoordinationRecord(t *testing.T) {
-	dir := t.TempDir()
-	configPath := filepath.Join(dir, "agent.json")
-	raw := strings.Replace(validConfigJSON(), `"observability": {}`, `"coordination":{"backend":"dynamodb","table":"coordination"},"observability": {}`, 1)
-	if err := os.WriteFile(configPath, []byte(raw), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	restore := newHandoverStoreReader
-	defer func() { newHandoverStoreReader = restore }()
-	newHandoverStoreReader = func(context.Context, config.Config) (handoverStoreReader, error) {
-		return fakeHandoverReader{records: []dynamodbcoord.HandoverRecord{{
-			RequestID:       "req-1",
-			Status:          "completed",
-			SourceNodeID:    "i-active",
-			TargetNodeID:    "i-standby",
-			LeaseGeneration: 2,
-			Message:         "handover completed",
-		}}}, nil
-	}
-
-	var out bytes.Buffer
-	if err := run(context.Background(), []string{"handover", "inspect", "handover#req-1", "--config", configPath, "--output", "json"}, &out); err != nil {
-		t.Fatalf("run handover inspect: %v", err)
-	}
-	if !strings.Contains(out.String(), `"request_id":"req-1"`) || !strings.Contains(out.String(), `"message":"handover completed"`) {
-		t.Fatalf("unexpected inspect output: %s", out.String())
-	}
-}
-
-func TestRunSupportBundleRedactsConfigAndCollectsCommands(t *testing.T) {
-	dir := t.TempDir()
-	configPath := filepath.Join(dir, "agent.json")
-	raw := strings.Replace(validConfigJSON(), `"observability": {}`, `"control":{"peer_api":{"enabled":true,"listen_address":"0.0.0.0","listen_port":9109,"auth_token":"secret-token"}},"observability":{"prometheus":{"listen_address":"127.0.0.1","listen_port":0}}`, 1)
-	if err := os.WriteFile(configPath, []byte(raw), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	outputPath := filepath.Join(dir, "support.tar.gz")
-	restore := runSupportCommand
-	defer func() { runSupportCommand = restore }()
-	runSupportCommand = func(_ context.Context, name string, args ...string) (supportCommandResult, error) {
-		return supportCommandResult{Stdout: []byte(name + " " + strings.Join(args, " ") + "\n")}, nil
-	}
-
-	var out bytes.Buffer
-	err := run(context.Background(), []string{"support", "bundle", "--config", configPath, "--output", outputPath, "--host", "http://127.0.0.1:1", "--timeout", "1ms"}, &out)
-	if err != nil {
-		t.Fatalf("run support bundle: %v", err)
-	}
-	files := readSupportBundle(t, outputPath)
-	configBody := string(files["config.redacted.json"])
-	if strings.Contains(configBody, "secret-token") {
-		t.Fatalf("support bundle leaked token: %s", configBody)
-	}
-	if !strings.Contains(configBody, "[REDACTED]") {
-		t.Fatalf("support bundle did not redact token: %s", configBody)
-	}
-	if !strings.Contains(string(files["systemd/betternat-agent.status.txt"]), "systemctl status betternat-agent") {
-		t.Fatalf("missing systemctl output: %s", string(files["systemd/betternat-agent.status.txt"]))
-	}
-	if !strings.Contains(out.String(), outputPath) {
-		t.Fatalf("missing output path: %s", out.String())
-	}
-}
-
-func TestRunDatapathStatus(t *testing.T) {
-	dir := t.TempDir()
-	configPath := filepath.Join(dir, "agent.json")
-	if err := os.WriteFile(configPath, []byte(validConfigJSON()), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	var out bytes.Buffer
-	if err := run(context.Background(), []string{"datapath", "status", "--config", configPath}, &out); err != nil {
-		t.Fatalf("run datapath status: %v", err)
-	}
-	if !strings.Contains(out.String(), "loxilb") {
-		t.Fatalf("missing datapath engine: %s", out.String())
-	}
-	if strings.Contains(out.String(), "fallback") {
-		t.Fatalf("fallback should be hidden in table output: %s", out.String())
-	}
-}
-
-func TestRunDatapathStatusJSONIncludesFallback(t *testing.T) {
-	dir := t.TempDir()
-	configPath := filepath.Join(dir, "agent.json")
-	if err := os.WriteFile(configPath, []byte(validConfigJSON()), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	var out bytes.Buffer
-	if err := run(context.Background(), []string{"datapath", "status", "--config", configPath, "--output", "json"}, &out); err != nil {
-		t.Fatalf("run datapath status: %v", err)
-	}
-	if !strings.Contains(out.String(), `"fallback_engine":"nftables"`) {
-		t.Fatalf("missing fallback engine in json output: %s", out.String())
-	}
-}
-
-func TestDatapathReadinessReportsExpectedRules(t *testing.T) {
-	engine := fakeReadinessEngine{
-		status:   datapath.Status{Engine: "fake", Ready: true, Message: "ready"},
-		counters: datapath.Counters{Rules: []datapath.RuleCounter{{CIDR: "10.0.0.0/8"}}},
-	}
-	result, err := datapathReadiness(context.Background(), config.DatapathConfig{
-		PrivateCIDRs: []string{"10.0.0.0/8"},
-	}, engine)
-	if err != nil {
-		t.Fatalf("readiness: %v", err)
-	}
-	if !result.Ready {
-		t.Fatalf("expected ready: %#v", result)
-	}
-	if len(result.MissingSNATCIDRs) != 0 {
-		t.Fatalf("unexpected missing rules: %#v", result)
-	}
-}
-
-func TestDatapathReadinessReportsMissingRules(t *testing.T) {
-	engine := fakeReadinessEngine{
-		status:   datapath.Status{Engine: "fake", Ready: true, Message: "ready"},
-		counters: datapath.Counters{Rules: []datapath.RuleCounter{{CIDR: "10.1.0.0/16"}}},
-	}
-	result, err := datapathReadiness(context.Background(), config.DatapathConfig{
-		PrivateCIDRs: []string{"10.0.0.0/8"},
-	}, engine)
-	if err != nil {
-		t.Fatalf("readiness: %v", err)
-	}
-	if result.Ready {
-		t.Fatalf("expected not ready: %#v", result)
-	}
-	if len(result.MissingSNATCIDRs) != 1 || result.MissingSNATCIDRs[0] != "10.0.0.0/8" {
-		t.Fatalf("unexpected missing rules: %#v", result)
-	}
-}
-
 func TestRunFailoverStatus(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "agent.yaml")
@@ -724,37 +404,12 @@ type fakeReadinessEngine struct {
 
 type fakeStatusRegistry struct{}
 
-type fakeHandoverReader struct {
-	currentGeneration uint64
-	records           []dynamodbcoord.HandoverRecord
-}
-
-func (f fakeHandoverReader) GetHandover(_ context.Context, requestID string) (dynamodbcoord.HandoverRecord, error) {
-	for _, record := range f.records {
-		if record.RequestID == requestID {
-			return record, nil
-		}
-	}
-	return dynamodbcoord.HandoverRecord{}, os.ErrNotExist
-}
-
-func (f fakeHandoverReader) ListHandovers(context.Context) ([]dynamodbcoord.HandoverRecord, error) {
-	return append([]dynamodbcoord.HandoverRecord(nil), f.records...), nil
-}
-
-func (f fakeHandoverReader) Current(context.Context) (lease.Record, error) {
-	if f.currentGeneration == 0 {
-		return lease.Record{}, os.ErrNotExist
-	}
-	return lease.Record{HAGroupID: "prod-egress-a", OwnerInstanceID: "i-active", Generation: f.currentGeneration}, nil
-}
-
 func (fakeStatusRegistry) Current(context.Context) (lease.Record, error) {
 	return lease.Record{HAGroupID: "prod-egress-a", OwnerInstanceID: "i-active", Generation: 3}, nil
 }
 
-func (fakeStatusRegistry) ListAgents(context.Context) ([]dynamodbcoord.AgentRecord, error) {
-	return []dynamodbcoord.AgentRecord{
+func (fakeStatusRegistry) ListAgents(context.Context) ([]coordination.AgentRecord, error) {
+	return []coordination.AgentRecord{
 		{NodeID: "i-active", PrivateIP: "10.0.1.10", PublicIP: "35.85.131.212", Version: "v-registry", DatapathReady: true, HAState: "active"},
 		{NodeID: "i-standby", PrivateIP: "10.0.1.11", Version: "v-registry", DatapathReady: true, HAState: "standby"},
 	}, nil
@@ -802,37 +457,6 @@ func (fakeLiveCloud) DescribeInstance(context.Context, string) (cloud.InstanceIn
 
 func (fakeLiveCloud) SourceDestCheckEnabled(context.Context, string) (bool, error) {
 	return false, nil
-}
-
-func readSupportBundle(t *testing.T, path string) map[string][]byte {
-	t.Helper()
-	file, err := os.Open(path)
-	if err != nil {
-		t.Fatalf("open support bundle: %v", err)
-	}
-	defer file.Close()
-	gzipReader, err := gzip.NewReader(file)
-	if err != nil {
-		t.Fatalf("open gzip: %v", err)
-	}
-	defer gzipReader.Close()
-	tarReader := tar.NewReader(gzipReader)
-	files := map[string][]byte{}
-	for {
-		header, err := tarReader.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			t.Fatalf("read tar: %v", err)
-		}
-		body, err := io.ReadAll(tarReader)
-		if err != nil {
-			t.Fatalf("read %s: %v", header.Name, err)
-		}
-		files[header.Name] = body
-	}
-	return files
 }
 
 type fakeASGInspector struct{}

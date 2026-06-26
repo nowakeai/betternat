@@ -11,7 +11,15 @@ This directory is split by audience and document lifecycle.
 - `dev-logs/` is for dated implementation notes and session summaries.
 - `assets/` is for shared diagrams and images referenced by user and maintainer docs.
 
-Older research may describe nftables-first or custom-eBPF-first thinking. Treat those as history when they conflict with the current architecture and spec.
+Older research may describe nftables-first, nftables fallback, or
+custom-eBPF-first thinking. Treat those as history when they conflict with the
+current architecture and spec. Current BetterNAT has no product fallback
+datapath on AWS, GCP, or future clouds; LoxiLB readiness is a release gate.
+Do not reintroduce nftables fallback UX, tests, or release acceptance paths
+without a new architecture decision record.
+Existing nftables/nf_conntrack code and smoke scripts may remain temporarily
+for legacy diagnostics and cleanup only; their existence is not evidence of a
+supported fallback path.
 
 ## Start Here
 
@@ -20,6 +28,7 @@ Older research may describe nftables-first or custom-eBPF-first thinking. Treat 
 - [spec-v0.md](spec-v0.md) — v0 product and implementation spec.
 - [user/README.md](user/README.md) — User documentation index by task.
 - [user/getting-started/QUICK_START.md](user/getting-started/QUICK_START.md) — Disposable-VPC install, verification, destroy, and cleanup guide.
+- [user/getting-started/GCP_QUICK_START.md](user/getting-started/GCP_QUICK_START.md) — Disposable GCP install, verification, destroy, and cleanup guide.
 - [release/RELEASE_CHECKLIST.md](release/RELEASE_CHECKLIST.md) — Release gates.
 
 ## User Docs
@@ -31,10 +40,12 @@ Read them in this order for the first full pass:
 - [user/reference/COST_MODEL.md](user/reference/COST_MODEL.md) — NAT Gateway processing-fee model, BetterNAT cost formula, example savings, endpoint guidance, and CLI estimate usage.
 - [user/reference/LIMITATIONS.md](user/reference/LIMITATIONS.md) — SLA, failover, cost, performance, bootstrap, and tuning limitations.
 - [user/getting-started/QUICK_START.md](user/getting-started/QUICK_START.md) — Quick start for a disposable AWS VPC.
+- [user/getting-started/GCP_QUICK_START.md](user/getting-started/GCP_QUICK_START.md) — Quick start for a disposable GCP VPC.
 - [user/operations/OPERATIONS_GUIDE.md](user/operations/OPERATIONS_GUIDE.md) — Day-2 operations: CLI, metrics, alerts, AWS checks, SSM access, troubleshooting, and cleanup.
 - [user/getting-started/EKS_TERRAFORM_MODULE_INTEGRATION.md](user/getting-started/EKS_TERRAFORM_MODULE_INTEGRATION.md) — Module-level `nat_backend` switch for existing EKS/networking Terraform repos.
 - [user/getting-started/EXISTING_VPC_INSTALL.md](user/getting-started/EXISTING_VPC_INSTALL.md) — Existing-VPC install and route ownership warnings.
-- [user/getting-started/CONFIGURATION.md](user/getting-started/CONFIGURATION.md) — `betternat_gateway` Terraform input reference and runtime configuration notes.
+- [user/getting-started/CONFIGURATION.md](user/getting-started/CONFIGURATION.md) — `betternat_aws_gateway` Terraform input reference and runtime configuration notes.
+- [user/reference/PROVIDER_DATA_SOURCES.md](user/reference/PROVIDER_DATA_SOURCES.md) — BetterNAT provider data sources for runtime artifact metadata and gateway status reads.
 - [user/reference/IAM_POLICY.md](user/reference/IAM_POLICY.md) — Terraform execution and gateway runtime IAM requirements.
 - [user/reference/SECURITY_HARDENING.md](user/reference/SECURITY_HARDENING.md) — Current security posture, IAM/network/bootstrap hardening, artifact integrity, and production checklist.
 - [user/operations/OBSERVABILITY_GUIDE.md](user/operations/OBSERVABILITY_GUIDE.md) — Prometheus metrics, CLI checks, AWS cross-checks, alerts, attribution scope, and current observability limits.
@@ -42,6 +53,7 @@ Read them in this order for the first full pass:
 - [user/operations/UPGRADE_REPLACEMENT_GUIDE.md](user/operations/UPGRADE_REPLACEMENT_GUIDE.md) — In-place capacity updates, explicit replacement, blue/green upgrade workflow, and rolling-upgrade limits.
 - [user/operations/FAILURE_MODES.md](user/operations/FAILURE_MODES.md) — Failure-mode behavior and recovery signals.
 - [user/releases/README.md](user/releases/README.md) — Release notes index and release-note rules.
+- [user/releases/v0.2/v0.2.0.md](user/releases/v0.2/v0.2.0.md) — Draft 0.2.0 release notes for Terraform surface reset and GCP support.
 - [user/releases/v0.1/v0.1.0.md](user/releases/v0.1/v0.1.0.md) — 0.1.0 GA release notes.
 - [user/releases/v0.1/v0.1.0-alpha.8.md](user/releases/v0.1/v0.1.0-alpha.8.md) — Runtime alpha release notes and validation caveats.
 - [user/releases/v0.1/v0.1.0-alpha.7.md](user/releases/v0.1/v0.1.0-alpha.7.md) — Provider-module support release notes for split provider alpha8.
@@ -53,6 +65,13 @@ Read them in this order for the first full pass:
 
 These are maintainer-facing release documents.
 
+- [index.md](index.md) — Terraform Registry provider overview.
+- [resources/aws_gateway.md](resources/aws_gateway.md) — Terraform Registry docs for `betternat_aws_gateway`.
+- [resources/gcp_gateway.md](resources/gcp_gateway.md) — Terraform Registry docs for `betternat_gcp_gateway`.
+- [data-sources/runtime_artifacts.md](data-sources/runtime_artifacts.md) — Terraform Registry docs for `betternat_runtime_artifacts`.
+- [data-sources/aws_gateway_status.md](data-sources/aws_gateway_status.md) — Terraform Registry docs for `betternat_aws_gateway_status`.
+- [data-sources/gcp_gateway_status.md](data-sources/gcp_gateway_status.md) — Terraform Registry docs for `betternat_gcp_gateway_status`.
+
 - [release/RELEASE_CHECKLIST.md](release/RELEASE_CHECKLIST.md) — Release gates, evidence requirements, validation commands, and decision template.
 - [release/ALPHA_RELEASE_DECISION_2026-06-24.md](release/ALPHA_RELEASE_DECISION_2026-06-24.md) — Current alpha ship decision, evidence, limitations, and deferred work.
 - [release/OPEN_SOURCE_RELEASE_PLAN.md](release/OPEN_SOURCE_RELEASE_PLAN.md) — First public release plan for the free/open-source edition.
@@ -63,6 +82,8 @@ These are maintainer-facing release documents.
 - [release/ARTIFACT_SIGNING_DECISION.md](release/ARTIFACT_SIGNING_DECISION.md) — Alpha checksum-only decision and production signing target.
 - [release/CLOUDFORMATION_DELIVERY_DECISION.md](release/CLOUDFORMATION_DELIVERY_DECISION.md) — Decision to defer CloudFormation while Terraform remains the supported install path.
 - [release/TERRAFORM_PROVIDER_DISTRIBUTION_PLAN.md](release/TERRAFORM_PROVIDER_DISTRIBUTION_PLAN.md) — Split-repo provider publishing plan, Registry release model, versioning, and OpenTofu compatibility.
+- [release/TERRAFORM_SURFACE_RESET_IMPLEMENTATION_PLAN.md](release/TERRAFORM_SURFACE_RESET_IMPLEMENTATION_PLAN.md) — Implementation tracker for the provider/module split, Terraform surface reset, and GCP alpha path.
+- [release/GCP_GA_USER_DOCS_CHECKLIST.md](release/GCP_GA_USER_DOCS_CHECKLIST.md) — User-facing documentation checklist for GCP GA and Terraform Registry readiness.
 
 ## Testing
 
@@ -72,6 +93,8 @@ These are executable plans and runbooks, not product docs.
 - [testing/AWS_SUPPLEMENTAL_TEST_PLAN.md](testing/AWS_SUPPLEMENTAL_TEST_PLAN.md) — Low-cost supplemental AWS tests and deferred expensive work.
 - [testing/AWS_SUPPLEMENTAL_RUNBOOK.md](testing/AWS_SUPPLEMENTAL_RUNBOOK.md) — Execution checklist for the low-cost AWS supplemental test pass.
 - [testing/LOW_COST_SOAK_RUNBOOK.md](testing/LOW_COST_SOAK_RUNBOOK.md) — Low-cost soak runbook with periodic egress probes, agent restarts, LoxiLB restart checks, and handover evidence collection.
+- [testing/GCP_SPIKE_PLAN.md](testing/GCP_SPIKE_PLAN.md) — Disposable GCP validation plan before any GCP alpha provider implementation.
+- [testing/GCP_DISPOSABLE_INTEGRATION_RUNBOOK.md](testing/GCP_DISPOSABLE_INTEGRATION_RUNBOOK.md) — Disposable GCP apply, Firestore contention, two-agent HA, failover, handover, datapath, and cleanup evidence checklist.
 
 ## Development
 
@@ -80,7 +103,7 @@ These documents guide contributors and agents working in the repo.
 - [dev/AI_WORKFLOW.md](dev/AI_WORKFLOW.md) — AI-assisted workflow, validation ladder, documentation update rules, and product bias.
 - [dev/DEPENDENCY_POLICY.md](dev/DEPENDENCY_POLICY.md) — Dependency freshness, mature-component preference, and upgrade policy.
 - [dev/LOCAL_VM_TEST_MATRIX.md](dev/LOCAL_VM_TEST_MATRIX.md) — Local VM test matrix and AWS boundaries.
-- [dev/LINUX_DATAPATH_VALIDATION.md](dev/LINUX_DATAPATH_VALIDATION.md) — Environment-agnostic Linux validation plan for nftables, conntrack, and LoxiLB.
+- [dev/LINUX_DATAPATH_VALIDATION.md](dev/LINUX_DATAPATH_VALIDATION.md) — Environment-agnostic Linux validation plan for LoxiLB plus legacy nftables/conntrack diagnostics while retained.
 - [dev/TERRAFORM_PROVIDER_LOCAL_TESTING.md](dev/TERRAFORM_PROVIDER_LOCAL_TESTING.md) — Local provider testing layers: Go tests, Terraform CLI dev overrides, LocalStack, and AWS acceptance.
 - [dev/USER_DOCUMENTATION_GUIDE.md](dev/USER_DOCUMENTATION_GUIDE.md) — User-facing documentation rules based on fck-nat and LoxiLB references.
 
@@ -115,6 +138,26 @@ Read these first when revisiting product or architecture direction:
 - [research/045-ga-release-artifact-governance-review.md](research/045-ga-release-artifact-governance-review.md) — GA release artifact governance review for checksums, notes, compatibility, SemVer, pins, and signing decision.
 - [research/046-provider-alpha8-ga-soak-results.md](research/046-provider-alpha8-ga-soak-results.md) — Provider alpha8 Terraform Registry soak with runtime alpha6, restart/handover events, ASG lifecycle finding, destroy, and residual scan.
 - [research/047-runtime-alpha8-asg-lifecycle-validation.md](research/047-runtime-alpha8-asg-lifecycle-validation.md) — Runtime alpha8 ASG lifecycle validation through provider artifact overrides, completed durable handover, client probe, and cleanup evidence.
+- [research/048-provider-module-boundary-plan.md](research/048-provider-module-boundary-plan.md) — Provider/module responsibility split, AWS module migration path, and multi-cloud naming decision.
+- [research/049-gcp-alpha-boundary.md](research/049-gcp-alpha-boundary.md) — GCP alpha scope boundary, business signal, and spike gate.
+- [research/050-terraform-surface-reset-aws-smoke.md](research/050-terraform-surface-reset-aws-smoke.md) — Unpublished provider `v0.2.0` local-mirror AWS smoke for `betternat_aws_gateway`, handover, data source reads, destroy, and residual scan.
+- [research/051-gcp-forwarding-spike-results.md](research/051-gcp-forwarding-spike-results.md) — Disposable GCP forwarding substrate spike proving GCE `canIpForward`, tagged route replacement, and cleanup.
+- [research/052-gcp-ha-gap-analysis.md](research/052-gcp-ha-gap-analysis.md) — GCP HA gap analysis covering Firestore coordination, route fencing, public identity, LoxiLB, IAM, observability, and release gates.
+- [research/053-gcp-firestore-live-contention-results.md](research/053-gcp-firestore-live-contention-results.md) — Live Firestore Native contention validation for GCP lease, registry, handover records, and cleanup.
+- [research/054-gcp-agent-ha-smoke-results.md](research/054-gcp-agent-ha-smoke-results.md) — Live GCP two-agent HA smoke covering Firestore ownership, route repair, passive failover, cleanup, and remaining GCP alpha gaps.
+- [research/055-no-nftables-fallback-decision.md](research/055-no-nftables-fallback-decision.md) — Decision record that BetterNAT has no product nftables fallback; legacy code may remain only while phased out.
+- [research/056-gcp-proactive-handover-results.md](research/056-gcp-proactive-handover-results.md) — Live GCP proactive handover validation, lease-renewal fix, Firestore handover history support, client egress, and cleanup.
+- [research/057-gcp-loxilb-restart-results.md](research/057-gcp-loxilb-restart-results.md) — Live GCP LoxiLB datapath counter, restart replay, support bundle, and cleanup validation.
+- [research/058-gcp-provider-lifecycle-results.md](research/058-gcp-provider-lifecycle-results.md) — Live GCP provider-owned runtime IAM, service-account, Firestore database lifecycle validation and per-gateway role fix.
+- [research/059-gcp-protocol-failover-results.md](research/059-gcp-protocol-failover-results.md) — Live GCP route-only protocol failover validation for TCP, HTTPS, UDP DNS, long download, public-IP switch, and cleanup.
+- [research/060-gcp-failure-injection-results.md](research/060-gcp-failure-injection-results.md) — Live GCP failure-injection validation proving active gateway degradation when Firestore/Compute API access is unavailable.
+- [research/061-gcp-stable-public-identity-decision.md](research/061-gcp-stable-public-identity-decision.md) — Decision that GCP alpha remains route-only/non-stable until access-config handover is designed and live-validated.
+- [research/062-gcp-capacity-repair-decision.md](research/062-gcp-capacity-repair-decision.md) — Decision that GCP alpha may use unmanaged VMs, while GA should use MIG-backed capacity repair unless a later ADR changes that direction.
+- [research/063-gcp-mig-stable-ip-results.md](research/063-gcp-mig-stable-ip-results.md) — Live GCP combined MIG capacity repair and static external IPv4 handover validation, including Private Google Access and IAM findings.
+- [research/064-gcp-stable-ip-protocol-results.md](research/064-gcp-stable-ip-protocol-results.md) — Live GCP private-client stable public IP protocol validation, initial proactive handover blocker, SSH harness notes, and cleanup evidence.
+- [research/065-gcp-stable-ip-handover-hardening-plan.md](research/065-gcp-stable-ip-handover-hardening-plan.md) — Design, implementation notes, and live results for hardening GCP stable-IP proactive handover after ambiguous Compute operation polling and lease-control failures.
+- [research/066-gcp-management-ip-boundary.md](research/066-gcp-management-ip-boundary.md) — Decision that GCP single-NIC gateways cannot provide AWS-like separate management public IP and movable stable egress IP semantics.
+- [research/067-gcp-connectivity-first-and-multinic-results.md](research/067-gcp-connectivity-first-and-multinic-results.md) — Live GCP control-plane microbenchmarks and connectivity-first handover results showing multi-NIC is not the current latency solution.
 
 ## Supporting Research
 

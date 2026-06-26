@@ -68,11 +68,26 @@ func (c StaticHAConfigChecker) Check(context.Context) CheckResult {
 	if !c.Config.HA.Enabled {
 		return CheckResult{Name: "ha_config", Status: StatusWarning, Message: "HA is disabled"}
 	}
-	if c.Config.HA.Lease.Backend != "dynamodb" {
-		return CheckResult{Name: "ha_config", Status: StatusCritical, Message: "v0 HA requires dynamodb lease backend"}
+	switch c.Config.Cloud {
+	case "aws":
+		if c.Config.HA.Lease.Backend != "dynamodb" {
+			return CheckResult{Name: "ha_config", Status: StatusCritical, Message: "AWS HA requires dynamodb lease backend"}
+		}
+		if c.Config.HA.Lease.Table == "" {
+			return CheckResult{Name: "ha_config", Status: StatusCritical, Message: "lease table is required"}
+		}
+	case "gcp":
+		if c.Config.HA.Lease.Backend != "firestore" {
+			return CheckResult{Name: "ha_config", Status: StatusCritical, Message: "GCP HA requires firestore lease backend"}
+		}
+		if c.Config.GCP.ProjectID == "" {
+			return CheckResult{Name: "ha_config", Status: StatusCritical, Message: "gcp.project_id is required"}
+		}
+	default:
+		return CheckResult{Name: "ha_config", Status: StatusCritical, Message: fmt.Sprintf("unsupported HA cloud %q", c.Config.Cloud)}
 	}
-	if c.Config.HA.Lease.Table == "" {
-		return CheckResult{Name: "ha_config", Status: StatusCritical, Message: "lease table is required"}
+	if c.Config.HA.Lease.Key == "" && c.Config.HAGroupID == "" {
+		return CheckResult{Name: "ha_config", Status: StatusCritical, Message: "ha.lease.key or ha_group_id is required"}
 	}
 	if c.Config.HA.RouteFailover.Mode != "replace_route" {
 		return CheckResult{Name: "ha_config", Status: StatusCritical, Message: "v0 HA requires replace_route failover"}
@@ -80,7 +95,7 @@ func (c StaticHAConfigChecker) Check(context.Context) CheckResult {
 	if len(c.Config.HA.RouteFailover.RouteTableIDs) == 0 {
 		return CheckResult{Name: "ha_config", Status: StatusCritical, Message: "route table ids are required"}
 	}
-	if c.Config.HA.PublicIdentity.Mode == "shared_eip" && c.Config.HA.PublicIdentity.AllocationID == "" {
+	if (c.Config.Cloud == "aws" || c.Config.Cloud == "gcp") && c.Config.HA.PublicIdentity.Mode == "shared_eip" && c.Config.HA.PublicIdentity.AllocationID == "" {
 		return CheckResult{Name: "ha_config", Status: StatusCritical, Message: "shared_eip allocation id is required"}
 	}
 	return CheckResult{Name: "ha_config", Status: StatusOK, Message: "HA config is complete"}

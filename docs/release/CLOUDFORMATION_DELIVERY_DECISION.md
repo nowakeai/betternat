@@ -10,7 +10,7 @@ alpha and production-readiness push.
 The supported install path remains:
 
 ```text
-Terraform Registry provider -> betternat_gateway -> AWS resources + agent config
+Terraform Registry provider -> betternat_aws_gateway -> AWS resources + agent config
 ```
 
 Do not create a first-alpha CloudFormation template.

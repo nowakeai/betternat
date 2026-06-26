@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
+	"github.com/nowakeai/betternat/internal/coordination"
 	"github.com/nowakeai/betternat/internal/lease"
 )
 
@@ -41,7 +42,7 @@ func TestPutAgentUsesAgentRecord(t *testing.T) {
 	db := &fakeDynamoDB{}
 	backend := NewFromClient(db, "coordination", "ha-a", 20*time.Second, func() time.Time { return now })
 
-	err := backend.PutAgent(context.Background(), AgentRecord{
+	err := backend.PutAgent(context.Background(), coordination.AgentRecord{
 		GatewayID:     "prod",
 		NodeID:        "node-a",
 		PrivateIP:     "10.0.1.10",
@@ -133,7 +134,7 @@ func TestCreateHandoverUsesConditionalRecord(t *testing.T) {
 	db := &fakeDynamoDB{}
 	backend := NewFromClient(db, "coordination", "ha-a", 20*time.Second, func() time.Time { return now })
 
-	record, err := backend.CreateHandover(context.Background(), HandoverRecord{
+	record, err := backend.CreateHandover(context.Background(), coordination.HandoverRecord{
 		RequestID:       "req-1",
 		SourceNodeID:    "i-active",
 		TargetNodeID:    "i-standby",
@@ -159,7 +160,7 @@ func TestUpdateHandoverUsesOnlyUpdateExpressionNames(t *testing.T) {
 	db := &fakeDynamoDB{}
 	backend := NewFromClient(db, "coordination", "ha-a", 20*time.Second, func() time.Time { return now })
 
-	record, err := backend.UpdateHandover(context.Background(), HandoverRecord{
+	record, err := backend.UpdateHandover(context.Background(), coordination.HandoverRecord{
 		RequestID:       "req-1",
 		Status:          "completed",
 		TargetNodeID:    "i-standby",

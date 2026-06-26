@@ -33,7 +33,9 @@ When failover happens:
 - new connections should recover after standby takeover,
 - existing flows may reset,
 - stable EIP mode should converge new connections back to the shared public EIP,
-- non-stable mode may change public source IP.
+- non-stable mode may change public source IP,
+- GCP stable public identity handover prioritizes route movement and outbound
+  connectivity before static public IP convergence.
 
 In the current handover path, route and EIP ownership are both verified after
 mutation, but AWS control-plane convergence is not perfectly atomic. Stable EIP
@@ -54,6 +56,10 @@ environment-specific evidence, not SLAs.
 | `ReplaceRoute` fails | Lease may move but traffic still points to old target | New traffic may fail or continue through old node | route target mismatch | Agent retry; use rollback guide if route remains wrong |
 | EIP association fails | Route may move but stable public IP not attached | Stable mode can leak different public IP or lose egress | public identity mismatch, outbound probe mismatch | Agent retry; manual AWS check |
 | ASG cannot launch replacement | Active may continue, but HA remains degraded | No standby protection | ASG activity failure | Fix capacity/quota/AMI/subnet/IAM |
+| GCP Firestore unavailable | Active cannot safely renew or verify HA lease | Availability may degrade; split-brain should be avoided | lease read/renew errors, status degraded | Restore Firestore/API/IAM access |
+| GCP route mutation fails | Lease may remain fenced but route target does not move | Private clients may continue through old owner or lose egress | route target mismatch, Compute API errors | Agent retry; use rollback guide if route remains wrong |
+| GCP stable address handover slow or fails | Route can move before static public IP convergence | Temporary source-IP change or short outage while address converges | public identity mismatch, address user mismatch | Agent retry; verify Private Google Access and IAM |
+| GCP MIG cannot repair capacity | Active may continue, but HA remains degraded | No standby protection | MIG target/actual mismatch | Fix quota, image, subnet, IAM, or health policy |
 | Terraform destroy interrupted | Some resources may remain | Cost leak or route drift | residual resource scan | Rerun destroy or manual cleanup |
 | Bad AMI/agent rollout | New instances may fail readiness | HA degraded or failover failure | service logs, datapath readiness, ASG health | Roll back AMI/config |
 
@@ -229,6 +235,83 @@ Mitigations:
 - DynamoDB capacity/on-demand mode,
 - least-privilege IAM validation,
 - alerts on renew errors and lease expiry.
+
+## GCP Firestore Or Compute API Failure
+
+Scenario:
+
+- Firestore API is unavailable or denied,
+- Compute route or address APIs are unavailable, throttled, or denied,
+- gateway subnet lacks a reliable private path to Google APIs during stable
+  public identity handover.
+
+Expected:
+
+- active gateway avoids claiming healthy active state if it cannot verify the
+  lease or route ownership,
+- standby does not take over without a valid Firestore fence,
+- route and public identity repair retry after transient API errors,
+- split-brain prevention takes priority over optimistic failover.
+
+Impact:
+
+- private-client egress can degrade until API access recovers or a rollback is
+  performed,
+- stable public identity can temporarily mismatch while route ownership has
+  already moved,
+- active flows may reset.
+
+Signals:
+
+```text
+sudo betternat status
+sudo betternat doctor --live
+sudo betternat handover history --limit 20
+betternat_lease_renew_errors_total
+betternat_route_target_match
+betternat_public_identity_match
+```
+
+Operator response:
+
+1. Verify Firestore and Compute APIs are enabled and reachable.
+2. Verify runtime service account permissions from the IAM reference.
+3. Verify the gateway subnet has Private Google Access when stable public
+   identity is enabled.
+4. Check GCP route target and regional address user.
+5. Use the rollback guide if the route remains wrong and private egress is down.
+
+## GCP MIG Capacity Failure
+
+Scenario:
+
+- the zonal MIG cannot launch or repair a gateway instance.
+
+Expected:
+
+- an existing active gateway can continue serving,
+- HA remains degraded until a standby is healthy,
+- Terraform/provider state may still show the intended gateway group, but MIG
+  actual capacity is below target.
+
+Impact:
+
+- no immediate outage if the active gateway is healthy,
+- failover protection is reduced or absent.
+
+Signals:
+
+```sh
+gcloud compute instance-groups managed describe <mig-name> --zone <zone>
+sudo betternat status
+```
+
+Operator response:
+
+1. Check quota, image, subnet, service account, and firewall errors in MIG
+   events.
+2. Fix the underlying GCP capacity or IAM issue.
+3. Wait for a healthy standby before planned handover or maintenance.
 
 ## AWS Route Replacement Failure
 

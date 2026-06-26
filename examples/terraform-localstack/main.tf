@@ -80,7 +80,7 @@ resource "aws_route" "initial_private_default" {
   gateway_id             = aws_internet_gateway.rollback_target.id
 }
 
-resource "betternat_gateway" "egress" {
+resource "betternat_aws_gateway" "egress" {
   name   = "localstack-egress"
   region = "us-east-1"
   vpc_id = aws_vpc.main.id
@@ -113,9 +113,9 @@ resource "betternat_gateway" "egress" {
 }
 
 output "betternat_status" {
-  value = betternat_gateway.egress.status
+  value = betternat_aws_gateway.egress.status
 }
 
 output "betternat_control_plane_status_json" {
-  value = betternat_gateway.egress.control_plane_status_json
+  value = betternat_aws_gateway.egress.control_plane_status_json
 }

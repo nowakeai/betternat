@@ -160,7 +160,7 @@ Evidence:
 - [x] agent starts metrics endpoint.
 - [x] agent disables source/destination check on AWS.
 - [x] agent reconciles LoxiLB SNAT.
-- [x] agent supports nftables fallback path.
+- [x] legacy nftables code remains covered while retained; it is not a product fallback path.
 - [x] agent runs decentralized HA supervisor.
 - [x] stale HA metrics do not report false active.
 - [x] HA step timeouts prevent stuck SDK/datapath calls from freezing the loop.
@@ -249,8 +249,8 @@ Production-preview requirement:
 
 - [x] Bootstrap path is the primary path.
 - [x] Users can provide an explicit Linux `ami_id`.
-- [x] Bootstrap installs BetterNAT agent, CLI, LoxiLB/Docker path, nftables
-  fallback tools, and systemd units.
+- [x] Bootstrap installs BetterNAT agent, CLI, LoxiLB/Docker path, legacy
+  nftables tools while retained, and systemd units.
 - [x] Runtime artifacts are checksum-verified when checksums are provided.
 - [x] Provider or helper workflow makes runtime artifact URLs/checksums easy to
   derive for a released BetterNAT runtime version.
@@ -983,15 +983,14 @@ P2 items are valuable, but should not block alpha or early P1 hardening.
 ### Performance And Tuning
 
 - [ ] Create reproducible benchmark harness:
-  - [ ] nftables fallback,
   - [ ] LoxiLB/eBPF,
   - [ ] different instance families,
   - [ ] connection churn,
   - [ ] large-response workloads.
 - [ ] Define benchmark-backed instance sizing guidance.
 - [ ] Add optional advanced tuning profile:
-  - [ ] conntrack hash buckets for fallback,
-  - [ ] conntrack timeout profile for fallback,
+  - [ ] benchmark-backed LoxiLB/eBPF conntrack capacity profile,
+  - [ ] Linux host conntrack diagnostics only where they affect host behavior,
   - [ ] ephemeral port range,
   - [ ] backlog settings,
   - [ ] ENA/RSS/IRQ guidance.

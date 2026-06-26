@@ -9,14 +9,10 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
-	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/nowakeai/betternat/internal/bootstrap"
@@ -45,6 +41,10 @@ func NewGatewayResourceWithInstaller(factory InstallerFactory) resource.Resource
 }
 
 func NewGatewayResourceWithFactories(installerFactory InstallerFactory, rollbackerFactory RollbackerFactory, cleanerFactory CleanerFactory, readerFactory ReaderFactory) resource.Resource {
+	return &GatewayResource{installerFactory: installerFactory, rollbackerFactory: rollbackerFactory, cleanerFactory: cleanerFactory, readerFactory: readerFactory}
+}
+
+func NewAWSGatewayResourceWithFactories(installerFactory InstallerFactory, rollbackerFactory RollbackerFactory, cleanerFactory CleanerFactory, readerFactory ReaderFactory) resource.Resource {
 	return &GatewayResource{installerFactory: installerFactory, rollbackerFactory: rollbackerFactory, cleanerFactory: cleanerFactory, readerFactory: readerFactory}
 }
 
@@ -104,7 +104,7 @@ type GatewayResourceModel struct {
 }
 
 func (r *GatewayResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_gateway"
+	resp.TypeName = req.ProviderTypeName + "_aws_gateway"
 }
 
 func (r *GatewayResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
@@ -120,242 +120,6 @@ func (r *GatewayResource) Configure(_ context.Context, req resource.ConfigureReq
 	r.rollbackerFactory = data.RollbackerFactory
 	r.cleanerFactory = data.CleanerFactory
 	r.readerFactory = data.ReaderFactory
-}
-
-func (r *GatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
-	resp.Schema = schema.Schema{
-		MarkdownDescription: "BetterNAT gateway resource. Installs gateway node infrastructure and records runtime metadata.",
-		Attributes: map[string]schema.Attribute{
-			"id": schema.StringAttribute{
-				Computed: true,
-			},
-			"name": schema.StringAttribute{
-				Required: true,
-			},
-			"cloud": schema.StringAttribute{
-				Optional: true,
-				Computed: true,
-				Default:  stringdefault.StaticString("aws"),
-			},
-			"region": schema.StringAttribute{
-				Required: true,
-			},
-			"vpc_id": schema.StringAttribute{
-				Required: true,
-			},
-			"ami_id": schema.StringAttribute{
-				MarkdownDescription: "Explicit Linux AMI ID for gateway nodes. Required for the cloud_init install path because BetterNAT does not currently resolve ami_channel into a public AMI.",
-				Optional:            true,
-			},
-			"ami_channel": schema.StringAttribute{
-				MarkdownDescription: "Reserved AMI channel selector. Accepted values are stable, candidate, and dev, but current installs should set ami_id explicitly.",
-				Optional:            true,
-				Computed:            true,
-				Default:             stringdefault.StaticString("stable"),
-			},
-			"bootstrap_mode": schema.StringAttribute{
-				MarkdownDescription: "Gateway node bootstrap mode. Use cloud_init for ordinary Linux AMIs that install BetterNAT at first boot. Use prebaked_ami only for BetterNAT AMIs that already contain Docker, LoxiLB, betternat, betternat-agent, loxicmd, and systemd units.",
-				Optional:            true,
-				Computed:            true,
-				Default:             stringdefault.StaticString("cloud_init"),
-			},
-			"associate_public_ip_address": schema.BoolAttribute{
-				MarkdownDescription: "Whether gateway node network interfaces should receive auto-assigned public IPv4 addresses. Leave unset to let the provider choose: cloud_init uses true, prebaked_ami with stable_egress_ip uses false, and prebaked_ami without stable_egress_ip uses true.",
-				Optional:            true,
-				Computed:            true,
-			},
-			"instance_type": schema.StringAttribute{
-				Optional: true,
-				Computed: true,
-				Default:  stringdefault.StaticString("t3.small"),
-			},
-			"use_spot": schema.BoolAttribute{
-				Optional: true,
-				Computed: true,
-				Default:  booldefault.StaticBool(false),
-			},
-			"min_size": schema.Int64Attribute{
-				Optional: true,
-				Computed: true,
-			},
-			"desired_capacity": schema.Int64Attribute{
-				Optional: true,
-				Computed: true,
-			},
-			"max_size": schema.Int64Attribute{
-				Optional: true,
-				Computed: true,
-			},
-			"betternat_version": schema.StringAttribute{
-				Optional:            true,
-				MarkdownDescription: "BetterNAT runtime release tag used to derive agent/CLI GitHub Release artifact URLs and checksums for bootstrap installs. Example: v0.1.0. Explicit agent_binary_url, agent_binary_sha256, cli_binary_url, and cli_binary_sha256 values override derived values.",
-			},
-			"agent_binary_url": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				Sensitive:           true,
-				MarkdownDescription: "Optional URL for the betternat-agent binary. When betternat_version is set and this field is empty, the provider derives the URL from its built-in release artifact manifest.",
-			},
-			"agent_binary_sha256": schema.StringAttribute{
-				Computed:            true,
-				Optional:            true,
-				MarkdownDescription: "Optional SHA256 checksum for agent_binary_url. When betternat_version is set and this field is empty, the provider derives the checksum from its built-in release artifact manifest.",
-			},
-			"cli_binary_url": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				Sensitive:           true,
-				MarkdownDescription: "Optional URL for the BetterNAT CLI binary installed on each gateway node. When betternat_version is set and this field is empty, the provider derives the URL from its built-in release artifact manifest.",
-			},
-			"cli_binary_sha256": schema.StringAttribute{
-				Computed:            true,
-				Optional:            true,
-				MarkdownDescription: "Optional SHA256 checksum for cli_binary_url. When betternat_version is set and this field is empty, the provider derives the checksum from its built-in release artifact manifest.",
-			},
-			"loxicmd_binary_url": schema.StringAttribute{
-				Optional:  true,
-				Sensitive: true,
-			},
-			"loxicmd_binary_sha256": schema.StringAttribute{
-				Optional:            true,
-				MarkdownDescription: "Optional SHA256 checksum for loxicmd_binary_url. When set, cloud-init verifies the downloaded loxicmd before execution.",
-			},
-			"public_subnet_ids": schema.MapAttribute{
-				ElementType: types.StringType,
-				Required:    true,
-			},
-			"private_route_table_ids": schema.MapAttribute{
-				ElementType: types.ListType{ElemType: types.StringType},
-				Required:    true,
-			},
-			"private_cidrs": schema.ListAttribute{
-				ElementType: types.StringType,
-				Required:    true,
-			},
-			"datapath_engine": schema.StringAttribute{
-				Optional: true,
-				Computed: true,
-				Default:  stringdefault.StaticString("loxilb"),
-			},
-			"fallback_datapath_engine": schema.StringAttribute{
-				Optional: true,
-				Computed: true,
-				Default:  stringdefault.StaticString("nftables"),
-			},
-			"stable_egress_ip": schema.BoolAttribute{
-				Optional: true,
-				Computed: true,
-				Default:  booldefault.StaticBool(true),
-			},
-			"ha_profile": schema.StringAttribute{
-				MarkdownDescription: "High availability timing profile. Use default. Legacy values stable, balanced, and fast are accepted as aliases for default.",
-				Optional:            true,
-				Computed:            true,
-				Default:             stringdefault.StaticString("default"),
-			},
-			"ha_lease_ttl_seconds": schema.Int64Attribute{
-				MarkdownDescription: "Advanced override for the HA lease TTL in seconds. Leave unset to use ha_profile defaults.",
-				Optional:            true,
-				Computed:            true,
-			},
-			"ha_renew_interval_seconds": schema.Int64Attribute{
-				MarkdownDescription: "Advanced override for the HA lease renew interval in seconds. Leave unset to use ha_profile defaults.",
-				Optional:            true,
-				Computed:            true,
-			},
-			"prometheus_enabled": schema.BoolAttribute{
-				Optional: true,
-				Computed: true,
-				Default:  booldefault.StaticBool(true),
-			},
-			"route_mode": schema.StringAttribute{
-				Optional: true,
-				Computed: true,
-				Default:  stringdefault.StaticString("replace_route"),
-			},
-			"route_destination_cidr": schema.StringAttribute{
-				Optional: true,
-				Computed: true,
-				Default:  stringdefault.StaticString("0.0.0.0/0"),
-			},
-			"route_target_type": schema.StringAttribute{
-				Optional: true,
-				Computed: true,
-				Default:  stringdefault.StaticString("instance"),
-			},
-			"rollback_on_destroy": schema.BoolAttribute{
-				Optional: true,
-				Computed: true,
-				Default:  booldefault.StaticBool(true),
-			},
-			"allow_destroy_without_rollback": schema.BoolAttribute{
-				Optional: true,
-				Computed: true,
-				Default:  booldefault.StaticBool(false),
-			},
-			"tags": schema.MapAttribute{
-				ElementType: types.StringType,
-				Optional:    true,
-			},
-			"lease_table_name": schema.StringAttribute{
-				Computed: true,
-			},
-			"coordination_table_name": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "Provider-owned coordination table used for HA lease, agent registry, and future backend-mediated agent coordination records.",
-			},
-			"peer_api_auth_token": schema.StringAttribute{
-				Computed:            true,
-				Sensitive:           true,
-				MarkdownDescription: "Provider-generated peer API bearer token stored in state and rendered into node config for authenticated agent-to-agent handover coordination.",
-			},
-			"provider_infrastructure_revision": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
-				Default:             stringdefault.StaticString(providerInfrastructureRevision),
-				MarkdownDescription: "Internal provider-owned infrastructure revision. Provider upgrades may change this to trigger an in-place reconciliation of safe supporting resources such as IAM policy and coordination tables.",
-			},
-			"agent_config_json": schema.StringAttribute{
-				Computed:  true,
-				Sensitive: true,
-			},
-			"agent_config_hash": schema.StringAttribute{
-				Computed: true,
-			},
-			"user_data": schema.StringAttribute{
-				Computed:  true,
-				Sensitive: true,
-			},
-			"install_plan_json": schema.StringAttribute{
-				Computed: true,
-			},
-			"managed_route_table_ids": schema.ListAttribute{
-				ElementType: types.StringType,
-				Computed:    true,
-			},
-			"egress_public_ips": schema.MapAttribute{
-				ElementType: types.StringType,
-				Computed:    true,
-			},
-			"active_instance_ids": schema.MapAttribute{
-				ElementType: types.StringType,
-				Computed:    true,
-			},
-			"standby_instance_ids": schema.MapAttribute{
-				ElementType: types.StringType,
-				Computed:    true,
-			},
-			"rollback_route_targets_json": schema.StringAttribute{
-				Computed: true,
-			},
-			"control_plane_status_json": schema.StringAttribute{
-				Computed: true,
-			},
-			"status": schema.StringAttribute{
-				Computed: true,
-			},
-		},
-	}
 }
 
 func (r *GatewayResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -424,7 +188,7 @@ func (r *GatewayResource) Update(ctx context.Context, req resource.UpdateRequest
 	}
 	resp.Diagnostics.AddError(
 		"BetterNAT gateway replacement required",
-		"Only min_size, desired_capacity, and max_size can be updated in-place in this provider version. Changes to betternat_version, agent_binary_url, cli_binary_url, loxicmd_binary_url, AMI, instance type, subnets, routes, private CIDRs, datapath settings, stable egress IP mode, HA timing, tags, or other installation inputs require replacing the betternat_gateway resource, for example with terraform apply -replace=betternat_gateway.<name>.",
+		"Only min_size, desired_capacity, and max_size can be updated in-place in this provider version. Changes to betternat_version, agent_binary_url, cli_binary_url, loxicmd_binary_url, AMI, instance type, subnets, routes, private CIDRs, datapath settings, stable egress IP mode, HA timing, tags, or other installation inputs require replacing the betternat_aws_gateway resource, for example with terraform apply -replace=betternat_aws_gateway.<name>.",
 	)
 }
 
@@ -787,51 +551,6 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	return result, nil
 }
 
-type bootstrapArtifacts struct {
-	AgentBinaryURL    string
-	AgentBinarySHA256 string
-	CLIBinaryURL      string
-	CLIBinarySHA256   string
-}
-
-type runtimeArtifactSet struct {
-	AgentSHA256 string
-	CLISHA256   string
-}
-
-var supportedRuntimeArtifacts = map[string]map[string]runtimeArtifactSet{
-	"v0.1.0-alpha.2": {
-		"arm64": {
-			AgentSHA256: "94c96e730035070f7c4aab291b30e2c14c91d980fc334c6aae28aa4199fef89c",
-			CLISHA256:   "003f422c7e44aacc7ed78b3abc3b439e17e73d31b752e8b56b9d5fc5b63527e5",
-		},
-		"amd64": {
-			AgentSHA256: "5c49231100870243f0f31af0703d765f79af5dc8f7248e59f7df36afd48ef5a7",
-			CLISHA256:   "0e671ebeb1b2a93fd88a1e2bcdb5c93de01d35313b10ce776ef6dcc49885d200",
-		},
-	},
-	"v0.1.0-alpha.6": {
-		"arm64": {
-			AgentSHA256: "e5ed963c523a84fb5e496b8a13358662cb80afaf228182cc8e3379741cc8b8c5",
-			CLISHA256:   "ff4663fa49daeb42113f015c886c77680472a4c32ad3f29122dd95a703bb4f59",
-		},
-		"amd64": {
-			AgentSHA256: "93ff333bb50d52aca6536eadc8abe8e6f9bf1ec02c56155195f40129525dde56",
-			CLISHA256:   "5d5c5cf6a216cab0f12eef3c3c8163c3673f794a427b30fcfb024acd2a87fe66",
-		},
-	},
-	"v0.1.0": {
-		"arm64": {
-			AgentSHA256: "68ef98b9b55fb7e1eb6874331c91d5755e77d5a27ad8a6af6c0eb742bc0c0305",
-			CLISHA256:   "e2608e894adf30097c49ba14e0babf8a365491d5f56f3c6ea1b82b857b39ce1d",
-		},
-		"amd64": {
-			AgentSHA256: "1443bb7c069d5674238d95ebae6656e0931df296d2067f38caa2b6fbca8970c5",
-			CLISHA256:   "9118b3e620a5eed0cb5e551faf5293e2b6ad2f9856cdf9d834bcdb675b959946",
-		},
-	},
-}
-
 func resolveBootstrapArtifacts(plan *GatewayResourceModel, version string, instanceType string) (bootstrapArtifacts, error) {
 	result := bootstrapArtifacts{
 		AgentBinaryURL:    stringDefault(plan.AgentBinaryURL, ""),
@@ -842,30 +561,22 @@ func resolveBootstrapArtifacts(plan *GatewayResourceModel, version string, insta
 	if version == "" {
 		return result, nil
 	}
-	if !strings.HasPrefix(version, "v") {
-		return bootstrapArtifacts{}, fmt.Errorf("betternat_version must start with v, got %q", version)
-	}
 	arch := runtimeArchForInstanceType(instanceType)
-	byArch, ok := supportedRuntimeArtifacts[version]
-	if !ok {
-		return bootstrapArtifacts{}, fmt.Errorf("unsupported betternat_version %q; supported versions: %s", version, strings.Join(sortedRuntimeVersions(), ", "))
+	artifactSet, err := runtimeArtifacts(version, "linux", arch)
+	if err != nil {
+		return bootstrapArtifacts{}, err
 	}
-	artifactSet, ok := byArch[arch]
-	if !ok {
-		return bootstrapArtifacts{}, fmt.Errorf("unsupported runtime artifact architecture %q for betternat_version %q", arch, version)
-	}
-	releaseBase := "https://github.com/nowakeai/betternat/releases/download/" + version
 	if result.AgentBinaryURL == "" {
-		result.AgentBinaryURL = releaseBase + "/betternat-agent_" + version + "_linux_" + arch
+		result.AgentBinaryURL = artifactSet.AgentBinaryURL
 	}
 	if result.AgentBinarySHA256 == "" {
-		result.AgentBinarySHA256 = artifactSet.AgentSHA256
+		result.AgentBinarySHA256 = artifactSet.AgentBinarySHA256
 	}
 	if result.CLIBinaryURL == "" {
-		result.CLIBinaryURL = releaseBase + "/betternat_" + version + "_linux_" + arch
+		result.CLIBinaryURL = artifactSet.CLIBinaryURL
 	}
 	if result.CLIBinarySHA256 == "" {
-		result.CLIBinarySHA256 = artifactSet.CLISHA256
+		result.CLIBinarySHA256 = artifactSet.CLIBinarySHA256
 	}
 	return result, nil
 }
@@ -877,23 +588,6 @@ func hasBootstrapArtifactOverride(plan *GatewayResourceModel) bool {
 		stringDefault(plan.CLIBinarySHA256, "") != "" ||
 		stringDefault(plan.LoxiCMDBinaryURL, "") != "" ||
 		stringDefault(plan.LoxiCMDBinarySHA256, "") != ""
-}
-
-func sortedRuntimeVersions() []string {
-	versions := make([]string, 0, len(supportedRuntimeArtifacts))
-	for version := range supportedRuntimeArtifacts {
-		versions = append(versions, version)
-	}
-	sort.Strings(versions)
-	return versions
-}
-
-func runtimeArchForInstanceType(instanceType string) string {
-	family := strings.Split(instanceType, ".")[0]
-	if family == "a1" || strings.HasSuffix(family, "g") || strings.HasSuffix(family, "gd") || strings.HasSuffix(family, "gn") || strings.HasSuffix(family, "gen") {
-		return "arm64"
-	}
-	return "amd64"
 }
 
 func peerAPIAuthTokenForPlan(plan *GatewayResourceModel) (string, error) {

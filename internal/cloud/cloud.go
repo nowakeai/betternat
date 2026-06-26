@@ -2,6 +2,21 @@ package cloud
 
 import "context"
 
+type routeReplacementPreferenceKey struct{}
+
+// WithFastRouteReplacement requests a lower-disruption route replacement path
+// for explicit handover operations. Providers may ignore this preference.
+func WithFastRouteReplacement(ctx context.Context) context.Context {
+	return context.WithValue(ctx, routeReplacementPreferenceKey{}, true)
+}
+
+// FastRouteReplacementRequested reports whether the caller requested a
+// lower-disruption route replacement path.
+func FastRouteReplacementRequested(ctx context.Context) bool {
+	requested, _ := ctx.Value(routeReplacementPreferenceKey{}).(bool)
+	return requested
+}
+
 type RouteTarget struct {
 	RouteTableID    string
 	DestinationCIDR string

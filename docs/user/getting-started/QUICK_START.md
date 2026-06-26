@@ -75,7 +75,7 @@ Expected AWS costs:
 
 ## Select Runtime Version
 
-Set `betternat_version` on the `betternat_gateway` resource. The provider uses
+Set `betternat_version` on the `betternat_aws_gateway` resource. The provider uses
 that version plus `instance_type` to select the correct Linux release artifacts
 and built-in SHA256 checksums for bootstrap.
 

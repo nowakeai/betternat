@@ -4,7 +4,7 @@ Date: 2026-06-21
 
 ## Terraform Provider Inputs
 
-Use `betternat_gateway` to deploy the AWS gateway stack.
+Use `betternat_aws_gateway` to deploy the AWS gateway stack.
 
 Provider version is specified in Terraform/OpenTofu `required_providers`, not on the resource itself:
 
@@ -32,7 +32,6 @@ the provider is registered in the OpenTofu Registry.
 | Name | Description |
 | --- | --- |
 | `name` | Gateway name. Used in resource names and HA group identity. |
-| `cloud` | Optional cloud selector. Defaults to `aws`; BetterNAT currently supports AWS. |
 | `region` | AWS region. |
 | `vpc_id` | Target VPC ID. |
 | `public_subnet_ids` | Map of AZ name to public subnet ID. |
@@ -93,9 +92,10 @@ Capacity-only updates are intended to be in-place. Other topology or bootstrap c
 | Name | Default | Description |
 | --- | --- | --- |
 | `datapath_engine` | `loxilb` | BetterNAT node datapath. |
-| `fallback_datapath_engine` | `nftables` | Fallback/debug datapath engine value rendered into runtime config. Currently accepts `nftables`. |
 
-LoxiLB has its own eBPF conntrack state. Linux `nf_conntrack_max` is not the primary LoxiLB capacity knob.
+LoxiLB is the supported BetterNAT datapath. BetterNAT does not expose nftables
+fallback behavior as a product path. LoxiLB has its own eBPF conntrack state;
+Linux `nf_conntrack_max` is not the primary LoxiLB capacity knob.
 
 ### Egress Identity
 
@@ -169,14 +169,192 @@ Internal/sensitive computed values include `agent_config_json`,
 and `provider_infrastructure_revision`. Treat them as provider state, not as
 operator inputs.
 
+## Provider Data Sources
+
+Use `betternat_runtime_artifacts` to inspect the provider's built-in runtime
+artifact manifest:
+
+```hcl
+data "betternat_runtime_artifacts" "current" {
+  version = "v0.1.0"
+  os      = "linux"
+  arch    = "arm64"
+}
+```
+
+Use `betternat_aws_gateway_status` for read-only AWS control-plane status when
+you already have the provider-generated install plan:
+
+```hcl
+data "betternat_aws_gateway_status" "egress" {
+  name              = betternat_aws_gateway.egress.name
+  region            = betternat_aws_gateway.egress.region
+  install_plan_json = betternat_aws_gateway.egress.install_plan_json
+}
+```
+
+Use `betternat_gcp_gateway_status` for read-only GCP alpha Compute status:
+
+```hcl
+data "betternat_gcp_gateway_status" "egress" {
+  name       = betternat_gcp_gateway.egress.name
+  project_id = betternat_gcp_gateway.egress.project_id
+  region     = betternat_gcp_gateway.egress.region
+  zone       = betternat_gcp_gateway.egress.zone
+  network    = betternat_gcp_gateway.egress.network
+  subnetwork = betternat_gcp_gateway.egress.subnetwork
+  client_tag = betternat_gcp_gateway.egress.client_tag
+  route_name = betternat_gcp_gateway.egress.route_name
+}
+```
+
+## GCP Resource
+
+Prefer the `nowakeai/betternat/google` module for GCP installs. The
+`betternat_gcp_gateway` resource is the lower-level provider primitive for
+module authors and advanced validation workflows.
+
+It manages provider-owned GCE forwarding gateways or a zonal MIG, LoxiLB
+bootstrap, Firestore-backed agent HA when enabled, one tagged default route to
+the active gateway, and optional stable public identity through an existing
+regional static external IPv4 address.
+
+Minimal shape:
+
+```hcl
+resource "betternat_gcp_gateway" "egress" {
+  name       = "lab-egress"
+  project_id = var.project_id
+  region     = "us-west2"
+  zone       = "us-west2-a"
+
+  network    = google_compute_network.lab.name
+  subnetwork = google_compute_subnetwork.lab.name
+  client_tag = "lab-private-client"
+
+  private_cidrs = ["10.91.0.0/24"]
+}
+```
+
+Private client VMs must have the configured `client_tag` and no broader route
+with a higher priority that bypasses the BetterNAT route.
+
+Provider-rendered GCP agent HA bootstrap is available behind an explicit
+switch:
+
+```hcl
+resource "betternat_gcp_gateway" "egress" {
+  name       = "lab-egress"
+  project_id = "shared-resources-alt"
+  region     = "us-west2"
+  zone       = "us-west2-a"
+
+  network    = google_compute_network.lab.name
+  subnetwork = google_compute_subnetwork.lab.name
+  client_tag = "lab-private-client"
+
+  private_cidrs = ["10.91.0.0/24"]
+
+  enable_agent_ha                = true
+  manage_firestore_database      = true
+  firestore_database_id          = "(default)"
+  firestore_location_id          = "us-west2"
+  manage_runtime_service_account = true
+  manage_runtime_iam             = true
+  betternat_version              = "v0.2.0"
+}
+```
+
+When `enable_agent_ha = true`, either set `service_account_email` explicitly or
+set `manage_runtime_service_account = true` so the provider derives and creates
+a runtime service account. The service account is attached to the gateway VMs
+and must be granted enough access to read/write the Firestore gateway
+coordination records, describe/delete/create the configured static route, read
+route operation status, and read instance metadata. The provider renders
+`agent_config_json`, `agent_config_hash`, `peer_api_auth_token`, runtime
+artifact URLs/checksums, and `startup_script` for a Firestore-backed,
+route-only agent HA smoke.
+The required permission list is exposed as computed
+`runtime_iam_permissions`; see [IAM Policy](../reference/IAM_POLICY.md#gcp-alpha-runtime-service-account).
+Set `manage_runtime_iam = true` to let this resource create or update the
+project-level BetterNAT runtime custom role and bind `service_account_email` to
+it. The default custom role ID is derived from the gateway name and exposed as
+`runtime_iam_role_id`. Leave it false when IAM is managed by a separate
+Terraform stack or an infra-admin workflow.
+Set `manage_firestore_database = true` only in disposable validation projects
+where this resource should create and delete the Firestore Native database used
+for HA coordination. Leave it false when the database is created by a platform
+or infra-admin stack. `firestore_location_id` defaults to `region` when
+database management is enabled.
+Set `runtime_service_account_id` only when the derived service-account ID is not
+acceptable for the project.
+Set `capacity_repair_mode = "mig"` only for disposable GCP GA-readiness
+validation. The default remains `unmanaged`; MIG mode creates a zonal instance
+template and managed instance group so GCE can replace lost gateway capacity,
+but live termination, failover, replacement, and cleanup evidence is still
+required before this becomes the documented GCP default.
+Explicit `agent_binary_url`, `agent_binary_sha256`, `cli_binary_url`, and
+`cli_binary_sha256` overrides are supported for local mirrors and unreleased
+test builds. This path is still experimental until live two-agent route
+fencing, passive failover, proactive handover, LoxiLB-on-GCE, IAM, and cleanup
+evidence are complete.
+
+The rendered GCP agent config leaves `local.node_id = "auto"`. At runtime the
+agent resolves that value from GCE metadata to the local instance name, which is
+the same identifier used as the GCP static route `nextHopInstance` target.
+
+Experimental GCP agent HA config uses Firestore coordination and route-only
+public identity:
+
+```yaml
+cloud: gcp
+region: us-west2
+gcp:
+  project_id: shared-resources-alt
+  zone: us-west2-a
+  network: lab-vpc
+  client_tag: lab-private-client
+  route_priority: 800
+  firestore_database_id: betternat-test
+ha:
+  enabled: true
+  lease:
+    backend: firestore
+    key: lab-egress-us-west2-a
+  route_failover:
+    mode: replace_route
+    route_table_ids:
+      - lab-egress-default-via-gateway
+    destination_cidr: 0.0.0.0/0
+    target_type: instance
+  public_identity: {}
+coordination:
+  backend: firestore
+```
+
+For GCP, `route_table_ids` currently means GCP static route names. Existing
+regional static external IPv4 address handover can be rendered with
+`stable_public_identity_address_name` when `enable_agent_ha = true`. Live GCE
+stable-IP activation, failover, and connectivity-first handover have been
+validated, but GCP remains alpha until the remaining release-contract and
+repeatable-smoke gates close. Provider-owned static-address lifecycle
+management remains out of scope; pass an existing regional static external IPv4
+address name. The gateway subnet must provide Private Google Access or an
+equivalent private path to Google APIs before testing this mode; the agent may
+need to call Compute and Firestore after its temporary external access config is
+removed.
+
 ## Update Behavior
 
 The provider updates only `min_size`, `desired_capacity`, and `max_size` in
-place. Most other input changes require replacing the `betternat_gateway`
+place. Most other input changes require replacing the `betternat_aws_gateway`
 resource.
 Use the [Upgrade And Replacement Guide](../operations/UPGRADE_REPLACEMENT_GUIDE.md)
 before changing runtime, AMI, subnet, route, datapath, EIP, HA timing, tag, or
 bootstrap fields.
+
+`betternat_gcp_gateway` updates are intentionally not implemented in the first
+alpha. Replace the resource to change GCP gateway topology.
 
 ## Runtime Config
 

@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
 	awscloud "github.com/nowakeai/betternat/internal/cloud/aws"
+	"github.com/nowakeai/betternat/internal/coordination"
 	"github.com/nowakeai/betternat/internal/lease"
 )
 
@@ -36,46 +37,14 @@ type Backend struct {
 	db        API
 }
 
-type AgentRecord struct {
-	GatewayID           string
-	HAGroupID           string
-	NodeID              string
-	InstanceID          string
-	Cloud               string
-	Region              string
-	AvailabilityZone    string
-	PrivateIP           string
-	PublicIP            string
-	MetricsURL          string
-	ControlURL          string
-	Version             string
-	Commit              string
-	DatapathEngine      string
-	DatapathReady       bool
-	HAState             string
-	LeaseGeneration     uint64
-	RouteTargetMatch    bool
-	PublicIdentityMatch bool
-	UpdatedAt           time.Time
-	ExpiresAt           time.Time
-}
-
-type HandoverRecord struct {
-	RequestID        string
-	HAGroupID        string
-	Status           string
-	SourceNodeID     string
-	TargetNodeID     string
-	SourceInstanceID string
-	TargetInstanceID string
-	Reason           string
-	LeaseGeneration  uint64
-	Message          string
-	Error            string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-	ExpiresAt        time.Time
-}
+var (
+	_ lease.Manager               = (*Backend)(nil)
+	_ lease.Transferer            = (*Backend)(nil)
+	_ coordination.AgentRegistry  = (*Backend)(nil)
+	_ coordination.AgentReader    = (*Backend)(nil)
+	_ coordination.HandoverStore  = (*Backend)(nil)
+	_ coordination.HandoverReader = (*Backend)(nil)
+)
 
 func New(ctx context.Context, region string, table string, haGroupID string, ttl time.Duration) (*Backend, error) {
 	cfg, err := awscloud.LoadConfig(ctx, region)
@@ -205,7 +174,7 @@ func (b *Backend) Current(ctx context.Context) (lease.Record, error) {
 	return leaseRecordFromItem(output.Item)
 }
 
-func (b *Backend) PutAgent(ctx context.Context, record AgentRecord, ttl time.Duration) error {
+func (b *Backend) PutAgent(ctx context.Context, record coordination.AgentRecord, ttl time.Duration) error {
 	if b.db == nil {
 		return fmt.Errorf("dynamodb client is required")
 	}
@@ -299,7 +268,7 @@ func (b *Backend) DeleteAgent(ctx context.Context, nodeID string) error {
 	return nil
 }
 
-func (b *Backend) ListAgents(ctx context.Context) ([]AgentRecord, error) {
+func (b *Backend) ListAgents(ctx context.Context) ([]coordination.AgentRecord, error) {
 	if b.db == nil {
 		return nil, fmt.Errorf("dynamodb client is required")
 	}
@@ -315,7 +284,7 @@ func (b *Backend) ListAgents(ctx context.Context) ([]AgentRecord, error) {
 		return nil, fmt.Errorf("dynamodb list agent records: %w", err)
 	}
 	now := b.now().Add(time.Duration(defaultNowSlack))
-	records := make([]AgentRecord, 0, len(output.Items))
+	records := make([]coordination.AgentRecord, 0, len(output.Items))
 	for _, item := range output.Items {
 		record := agentRecordFromItem(item)
 		if !record.ExpiresAt.IsZero() && record.ExpiresAt.Before(now) {
@@ -326,12 +295,12 @@ func (b *Backend) ListAgents(ctx context.Context) ([]AgentRecord, error) {
 	return records, nil
 }
 
-func (b *Backend) CreateHandover(ctx context.Context, record HandoverRecord, ttl time.Duration) (HandoverRecord, error) {
+func (b *Backend) CreateHandover(ctx context.Context, record coordination.HandoverRecord, ttl time.Duration) (coordination.HandoverRecord, error) {
 	if b.db == nil {
-		return HandoverRecord{}, fmt.Errorf("dynamodb client is required")
+		return coordination.HandoverRecord{}, fmt.Errorf("dynamodb client is required")
 	}
 	if record.RequestID == "" {
-		return HandoverRecord{}, fmt.Errorf("handover request id is required")
+		return coordination.HandoverRecord{}, fmt.Errorf("handover request id is required")
 	}
 	if record.SourceNodeID == "" && record.SourceInstanceID != "" {
 		record.SourceNodeID = record.SourceInstanceID
@@ -340,7 +309,7 @@ func (b *Backend) CreateHandover(ctx context.Context, record HandoverRecord, ttl
 		record.TargetNodeID = record.TargetInstanceID
 	}
 	if record.SourceNodeID == "" {
-		return HandoverRecord{}, fmt.Errorf("handover source node id is required")
+		return coordination.HandoverRecord{}, fmt.Errorf("handover source node id is required")
 	}
 	now := b.now()
 	if record.HAGroupID == "" {
@@ -382,17 +351,17 @@ func (b *Backend) CreateHandover(ctx context.Context, record HandoverRecord, ttl
 		},
 	})
 	if err != nil {
-		return HandoverRecord{}, fmt.Errorf("dynamodb create handover record: %w", err)
+		return coordination.HandoverRecord{}, fmt.Errorf("dynamodb create handover record: %w", err)
 	}
 	return record, nil
 }
 
-func (b *Backend) UpdateHandover(ctx context.Context, record HandoverRecord, ttl time.Duration) (HandoverRecord, error) {
+func (b *Backend) UpdateHandover(ctx context.Context, record coordination.HandoverRecord, ttl time.Duration) (coordination.HandoverRecord, error) {
 	if b.db == nil {
-		return HandoverRecord{}, fmt.Errorf("dynamodb client is required")
+		return coordination.HandoverRecord{}, fmt.Errorf("dynamodb client is required")
 	}
 	if record.RequestID == "" {
-		return HandoverRecord{}, fmt.Errorf("handover request id is required")
+		return coordination.HandoverRecord{}, fmt.Errorf("handover request id is required")
 	}
 	if record.TargetNodeID == "" && record.TargetInstanceID != "" {
 		record.TargetNodeID = record.TargetInstanceID
@@ -423,37 +392,37 @@ func (b *Backend) UpdateHandover(ctx context.Context, record HandoverRecord, ttl
 		},
 	})
 	if err != nil {
-		return HandoverRecord{}, fmt.Errorf("dynamodb update handover record: %w", err)
+		return coordination.HandoverRecord{}, fmt.Errorf("dynamodb update handover record: %w", err)
 	}
 	return record, nil
 }
 
-func (b *Backend) GetHandover(ctx context.Context, requestID string) (HandoverRecord, error) {
+func (b *Backend) GetHandover(ctx context.Context, requestID string) (coordination.HandoverRecord, error) {
 	if b.db == nil {
-		return HandoverRecord{}, fmt.Errorf("dynamodb client is required")
+		return coordination.HandoverRecord{}, fmt.Errorf("dynamodb client is required")
 	}
 	if requestID == "" {
-		return HandoverRecord{}, fmt.Errorf("handover request id is required")
+		return coordination.HandoverRecord{}, fmt.Errorf("handover request id is required")
 	}
 	output, err := b.db.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &b.table,
 		Key:       b.key(handoverRecordID(requestID)),
 	})
 	if err != nil {
-		return HandoverRecord{}, fmt.Errorf("dynamodb get handover record: %w", err)
+		return coordination.HandoverRecord{}, fmt.Errorf("dynamodb get handover record: %w", err)
 	}
 	if len(output.Item) == 0 {
-		return HandoverRecord{}, fmt.Errorf("handover request %q not found", requestID)
+		return coordination.HandoverRecord{}, fmt.Errorf("handover request %q not found", requestID)
 	}
 	record := handoverRecordFromItem(output.Item)
 	if b.handoverRecordExpired(record) {
 		_ = b.deleteHandoverRecord(ctx, requestID)
-		return HandoverRecord{}, fmt.Errorf("handover request %q expired", requestID)
+		return coordination.HandoverRecord{}, fmt.Errorf("handover request %q expired", requestID)
 	}
 	return record, nil
 }
 
-func (b *Backend) ListHandovers(ctx context.Context) ([]HandoverRecord, error) {
+func (b *Backend) ListHandovers(ctx context.Context) ([]coordination.HandoverRecord, error) {
 	if b.db == nil {
 		return nil, fmt.Errorf("dynamodb client is required")
 	}
@@ -468,7 +437,7 @@ func (b *Backend) ListHandovers(ctx context.Context) ([]HandoverRecord, error) {
 	if err != nil {
 		return nil, fmt.Errorf("dynamodb list handover records: %w", err)
 	}
-	records := make([]HandoverRecord, 0, len(output.Items))
+	records := make([]coordination.HandoverRecord, 0, len(output.Items))
 	for _, item := range output.Items {
 		record := handoverRecordFromItem(item)
 		if b.handoverRecordExpired(record) {
@@ -480,7 +449,7 @@ func (b *Backend) ListHandovers(ctx context.Context) ([]HandoverRecord, error) {
 	return records, nil
 }
 
-func (b *Backend) handoverRecordExpired(record HandoverRecord) bool {
+func (b *Backend) handoverRecordExpired(record coordination.HandoverRecord) bool {
 	if record.ExpiresAt.IsZero() || record.ExpiresAt.Unix() <= 0 {
 		return false
 	}
@@ -554,11 +523,11 @@ func leaseRecordFromItem(item map[string]types.AttributeValue) (lease.Record, er
 	}, nil
 }
 
-func agentRecordFromItem(item map[string]types.AttributeValue) AgentRecord {
+func agentRecordFromItem(item map[string]types.AttributeValue) coordination.AgentRecord {
 	updatedAt, _ := number(item, "updated_at")
 	expiresAt, _ := number(item, "expires_at")
 	generation, _ := number(item, "lease_generation")
-	return AgentRecord{
+	return coordination.AgentRecord{
 		GatewayID:           stringValue(item, "gateway_id"),
 		HAGroupID:           stringValue(item, "ha_group_id"),
 		NodeID:              firstStringValue(item, "node_id", "instance_id"),
@@ -583,12 +552,12 @@ func agentRecordFromItem(item map[string]types.AttributeValue) AgentRecord {
 	}
 }
 
-func handoverRecordFromItem(item map[string]types.AttributeValue) HandoverRecord {
+func handoverRecordFromItem(item map[string]types.AttributeValue) coordination.HandoverRecord {
 	createdAt, _ := number(item, "created_at")
 	updatedAt, _ := number(item, "updated_at")
 	expiresAt, _ := number(item, "expires_at")
 	generation, _ := number(item, "lease_generation")
-	return HandoverRecord{
+	return coordination.HandoverRecord{
 		RequestID:        stringValue(item, "request_id"),
 		HAGroupID:        stringValue(item, "ha_group_id"),
 		Status:           stringValue(item, "status"),

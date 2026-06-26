@@ -23,7 +23,7 @@ Each BetterNAT AMI should contain:
 - `betternat` CLI,
 - LoxiLB runtime,
 - `loxicmd`,
-- nftables fallback dependencies,
+- legacy nftables diagnostic tools while retained,
 - conntrack diagnostics,
 - Docker or the selected LoxiLB service runtime,
 - SSM agent,
@@ -218,7 +218,9 @@ Ubuntu 24.04 Noble build validation then found a release blocker on 2026-06-23:
   eBPF object loading and restarts.
 - In-place upgrade to LoxiLB `v0.9.8-1` with a BetterNAT override
   `ExecStart=/usr/local/sbin/loxilb --api --fallback` still fails eBPF object
-  loading and never exposes the API on `127.0.0.1:11111`.
+  loading and never exposes the API on `127.0.0.1:11111`. The upstream
+  `--fallback` flag here is historical AMI evidence only; BetterNAT does not
+  support a product fallback datapath.
 - LoxiLB issue `#953` and PR `#956` indicate the kernel `6.12+` fix landed
   after the latest public `.deb` asset, while newer Docker images continue to
   be published.
@@ -257,7 +259,8 @@ Before marking an AMI stable:
 2. Verify SSM access without public SSH.
 3. Verify `betternat-agent.service` starts.
 4. Verify LoxiLB readiness.
-5. Verify nftables fallback tools are present.
+5. Verify legacy nftables diagnostic tools are present while retained, without
+   treating them as a release fallback path.
 6. Verify `betternat doctor` output.
 7. Verify private client egress through the appliance.
 8. Verify route-only failover to a second appliance.

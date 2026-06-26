@@ -18,14 +18,12 @@ import (
 	"github.com/nowakeai/betternat/internal/buildinfo"
 	"github.com/nowakeai/betternat/internal/cloud"
 	awscloud "github.com/nowakeai/betternat/internal/cloud/aws"
+	gcpcloud "github.com/nowakeai/betternat/internal/cloud/gcp"
 	"github.com/nowakeai/betternat/internal/config"
-	dynamodbcoord "github.com/nowakeai/betternat/internal/coordination/dynamodb"
 	"github.com/nowakeai/betternat/internal/datapath"
 	"github.com/nowakeai/betternat/internal/datapath/loxilb"
 	"github.com/nowakeai/betternat/internal/datapath/nftables"
 	"github.com/nowakeai/betternat/internal/ha"
-	"github.com/nowakeai/betternat/internal/lease"
-	dynamodblease "github.com/nowakeai/betternat/internal/lease/dynamodb"
 	"github.com/nowakeai/betternat/internal/metrics"
 )
 
@@ -92,15 +90,11 @@ func (DefaultHASupervisorFactory) NewSupervisor(ctx context.Context, cfg config.
 	if err := validateHAConfig(cfg); err != nil {
 		return nil, err
 	}
-	cloudProvider, err := awscloud.New(ctx, cfg.Region)
+	cloudProvider, err := defaultCloudProvider(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
-	var leaseManager lease.Manager
-	leaseManager, err = dynamodblease.New(ctx, cfg.Region, cfg.HA.Lease.Table, leaseKey(cfg), leaseTTL(cfg))
-	if coordinationTable(cfg) != "" {
-		leaseManager, err = dynamodbcoord.New(ctx, cfg.Region, coordinationTable(cfg), leaseKey(cfg), leaseTTL(cfg))
-	}
+	leaseManager, err := defaultLeaseManager(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -194,16 +188,29 @@ func (r Runtime) Run(ctx context.Context, opts Options) error {
 }
 
 func (r Runtime) prepareLocalInstance(ctx context.Context, cfg config.Config) (config.Config, error) {
-	if cfg.Cloud != "aws" || cfg.Local.NodeID != "auto" {
+	if cfg.Local.NodeID != "auto" {
 		return cfg, nil
 	}
 	resolve := r.ResolveInstanceID
-	if resolve == nil {
-		resolve = awscloud.ResolveLocalInstanceID
+	switch cfg.Cloud {
+	case "aws":
+		if resolve == nil {
+			resolve = awscloud.ResolveLocalInstanceID
+		}
+	case "gcp":
+		if resolve == nil {
+			resolve = gcpcloud.ResolveLocalInstanceID
+		}
+	default:
+		return cfg, nil
 	}
 	instanceID, err := resolve(ctx, cfg.Region)
 	if err != nil {
 		return config.Config{}, err
+	}
+	cfg.Local.NodeID = instanceID
+	if cfg.Cloud != "aws" {
+		return cfg, nil
 	}
 	preparer := r.InstancePreparer
 	if preparer == nil {
@@ -215,7 +222,6 @@ func (r Runtime) prepareLocalInstance(ctx context.Context, cfg config.Config) (c
 	if err := preparer.DisableSourceDestCheck(ctx, instanceID); err != nil {
 		return config.Config{}, err
 	}
-	cfg.Local.NodeID = instanceID
 	if cfg.HA.PublicIdentity.Mode == "shared_eip" && cfg.HA.PublicIdentity.AllocationID == "auto" {
 		resolveEIP := r.ResolveSharedEIP
 		if resolveEIP == nil {
@@ -266,13 +272,11 @@ func runContinuous(ctx context.Context, cfg config.Config, engine datapath.Engin
 		defer shutdownServer(server)
 		defer listener.Close()
 	}
-	var registry *dynamodbcoord.Backend
-	if coordinationTable(cfg) != "" {
-		var err error
-		registry, err = dynamodbcoord.New(ctx, cfg.Region, coordinationTable(cfg), leaseKey(cfg), registryTTL(cfg))
-		if err != nil {
-			return err
-		}
+	registry, err := defaultCoordinationStore(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	if registry != nil {
 		go runAgentRegistry(ctx, registry, cfg, engine, haStatus, metricsAddress)
 		defer func() {
 			if cfg.Local.NodeID == "" || cfg.Local.NodeID == "auto" {
@@ -341,7 +345,7 @@ func runContinuous(ctx context.Context, cfg config.Config, engine datapath.Engin
 				}
 				lifecycleActions = watchTermination(runCtx, terminationWatcher, func(action cloud.LifecycleAction) {
 					if handoverHandler != nil {
-						handoverCtx, handoverCancel := context.WithTimeout(context.Background(), handoverTimeout+5*time.Second)
+						handoverCtx, handoverCancel := detachedHandoverContext()
 						req := agentapi.HandoverRequest{
 							RequestID:    terminationHandoverRequestID(action),
 							TargetNodeID: "auto",
@@ -397,144 +401,6 @@ func runContinuous(ctx context.Context, cfg config.Config, engine datapath.Engin
 		case <-ticker.C:
 		}
 	}
-}
-
-func defaultTerminationHandling(ctx context.Context, cfg config.Config, watcher TerminationWatcher, completer LifecycleCompleter) (TerminationWatcher, LifecycleCompleter) {
-	if cfg.Cloud != "aws" || !cfg.HA.Enabled {
-		return watcher, completer
-	}
-	if watcher == nil {
-		created, err := awscloud.NewTerminationWatcher(ctx, cfg.Region, cfg.GatewayID, cfg.Local.AvailabilityZone, cfg.Local.NodeID)
-		if err != nil {
-			return nil, completer
-		}
-		watcher = created
-	}
-	if completer == nil {
-		created, err := awscloud.NewASGProvider(ctx, cfg.Region)
-		if err != nil {
-			return watcher, nil
-		}
-		completer = created
-	}
-	return watcher, completer
-}
-
-func watchTermination(ctx context.Context, watcher TerminationWatcher, handle func(cloud.LifecycleAction)) <-chan cloud.LifecycleAction {
-	actions := make(chan cloud.LifecycleAction, 1)
-	go func() {
-		action, err := watcher.Run(ctx)
-		if err != nil {
-			return
-		}
-		logTermination(action)
-		actions <- action
-		if handle != nil {
-			handle(action)
-		}
-	}()
-	return actions
-}
-
-func watchGracefulStop(ctx context.Context, cancel context.CancelFunc, handover func(context.Context, agentapi.HandoverRequest) agentapi.HandoverResponse) {
-	go func() {
-		<-ctx.Done()
-		if handover != nil {
-			handoverCtx, handoverCancel := context.WithTimeout(context.Background(), handoverTimeout+5*time.Second)
-			defer handoverCancel()
-			resp := handover(handoverCtx, agentapi.HandoverRequest{
-				RequestID:    fmt.Sprintf("systemd-stop-%d", time.Now().UnixNano()),
-				TargetNodeID: "auto",
-				Reason:       "systemd-stop",
-			})
-			if resp.Error != "" {
-				_, _ = fmt.Fprintf(os.Stderr, "betternat-agent: graceful stop handover failed: %s\n", resp.Error)
-			}
-		}
-		cancel()
-	}()
-}
-
-func logTermination(action cloud.LifecycleAction) {
-	_, _ = fmt.Fprintf(
-		os.Stderr,
-		"betternat-agent: termination event reason=%s asg=%s hook=%s instance=%s\n",
-		action.Reason,
-		action.AutoScalingGroupName,
-		action.LifecycleHookName,
-		action.InstanceID,
-	)
-}
-
-func terminationHandoverRequestID(action cloud.LifecycleAction) string {
-	parts := []string{"termination", action.InstanceID, action.Reason}
-	if action.LifecycleHookName != "" {
-		parts = append(parts, action.LifecycleHookName)
-	}
-	for i, part := range parts {
-		parts[i] = strings.NewReplacer(" ", "-", "/", "-", ":", "-").Replace(part)
-	}
-	return strings.Join(parts, "-")
-}
-
-func validateHAConfig(cfg config.Config) error {
-	if !cfg.HA.Enabled {
-		return nil
-	}
-	if cfg.Cloud != "aws" {
-		return fmt.Errorf("ha.enabled requires cloud=aws")
-	}
-	if cfg.Region == "" {
-		return fmt.Errorf("ha.enabled requires region")
-	}
-	if cfg.Local.NodeID == "" || cfg.Local.NodeID == "auto" {
-		return fmt.Errorf("ha.enabled requires resolved local.node_id")
-	}
-	if cfg.HA.Lease.Backend != "dynamodb" {
-		return fmt.Errorf("unsupported ha.lease.backend %q", cfg.HA.Lease.Backend)
-	}
-	if cfg.HA.Lease.Table == "" {
-		return fmt.Errorf("ha.lease.table is required")
-	}
-	if leaseKey(cfg) == "" {
-		return fmt.Errorf("ha.lease.key or ha_group_id is required")
-	}
-	if cfg.HA.RouteFailover.Mode == "" {
-		return fmt.Errorf("ha.route_failover.mode is required")
-	}
-	if cfg.HA.RouteFailover.Mode != "replace_route" {
-		return fmt.Errorf("unsupported ha.route_failover.mode %q", cfg.HA.RouteFailover.Mode)
-	}
-	if cfg.HA.RouteFailover.TargetType != "instance" {
-		return fmt.Errorf("unsupported ha.route_failover.target_type %q", cfg.HA.RouteFailover.TargetType)
-	}
-	if cfg.HA.RouteFailover.DestinationCIDR == "" {
-		return fmt.Errorf("ha.route_failover.destination_cidr is required")
-	}
-	if len(cfg.HA.RouteFailover.RouteTableIDs) == 0 {
-		return fmt.Errorf("ha.route_failover.route_table_ids is required")
-	}
-	if cfg.HA.PublicIdentity.Mode == "shared_eip" && cfg.HA.PublicIdentity.AllocationID == "" {
-		return fmt.Errorf("ha.public_identity.allocation_id is required for shared_eip")
-	}
-	if cfg.HA.PublicIdentity.Mode != "" && cfg.HA.PublicIdentity.Mode != "shared_eip" {
-		return fmt.Errorf("unsupported ha.public_identity.mode %q", cfg.HA.PublicIdentity.Mode)
-	}
-	return nil
-}
-
-func leaseKey(cfg config.Config) string {
-	if cfg.HA.Lease.Key != "" {
-		return cfg.HA.Lease.Key
-	}
-	return cfg.HAGroupID
-}
-
-func leaseTTL(cfg config.Config) time.Duration {
-	if cfg.HA.Lease.TTLSeconds > 0 {
-		return time.Duration(cfg.HA.Lease.TTLSeconds) * time.Second
-	}
-	return 15 * time.Second
 }
 
 func renderPrometheusResult(w io.Writer, cfg config.Config, result RunResult, haStatus ha.StatusSnapshot) error {
@@ -608,192 +474,6 @@ func haStatusStaleAfter(cfg config.Config) time.Duration {
 		return 15 * time.Second
 	}
 	return threshold
-}
-
-func coordinationTable(cfg config.Config) string {
-	return cfg.Coordination.Table
-}
-
-func registryRefreshInterval(cfg config.Config) time.Duration {
-	if cfg.Coordination.RegistryRefreshIntervalSeconds > 0 {
-		return time.Duration(cfg.Coordination.RegistryRefreshIntervalSeconds) * time.Second
-	}
-	return 5 * time.Second
-}
-
-func registryTTL(cfg config.Config) time.Duration {
-	if cfg.Coordination.RegistryTTLSeconds > 0 {
-		return time.Duration(cfg.Coordination.RegistryTTLSeconds) * time.Second
-	}
-	return 20 * time.Second
-}
-
-func handoverTTL(cfg config.Config) time.Duration {
-	if cfg.Coordination.HandoverTTLSeconds > 0 {
-		return time.Duration(cfg.Coordination.HandoverTTLSeconds) * time.Second
-	}
-	return time.Hour
-}
-
-const (
-	registryStatusTimeout = 2 * time.Second
-	registryPutTimeout    = 2 * time.Second
-)
-
-func runAgentRegistry(ctx context.Context, registry *dynamodbcoord.Backend, cfg config.Config, engine datapath.Engine, haStatus interface{ Snapshot() ha.StatusSnapshot }, metricsAddress string) {
-	interval := registryRefreshInterval(cfg)
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	for {
-		if err := publishAgentRecord(ctx, registry, cfg, engine, haStatus, metricsAddress); err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "betternat-agent: publish registry record: %v\n", err)
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
-	}
-}
-
-func publishAgentRecord(ctx context.Context, registry *dynamodbcoord.Backend, cfg config.Config, engine datapath.Engine, haStatus interface{ Snapshot() ha.StatusSnapshot }, metricsAddress string) error {
-	status := datapathStatusForRegistry(ctx, engine, registryStatusTimeout)
-	snapshot := haStatus.Snapshot()
-	build := buildinfo.Current("betternat-agent")
-	now := time.Now()
-	putCtx, cancel := context.WithTimeout(ctx, registryPutTimeout)
-	defer cancel()
-	return registry.PutAgent(putCtx, dynamodbcoord.AgentRecord{
-		GatewayID:           cfg.GatewayID,
-		HAGroupID:           cfg.HAGroupID,
-		NodeID:              cfg.Local.NodeID,
-		Cloud:               cfg.Cloud,
-		Region:              cfg.Region,
-		AvailabilityZone:    cfg.Local.AvailabilityZone,
-		PrivateIP:           localInterfaceIP(cfg.Local.PrimaryInterface),
-		PublicIP:            publicIPForRegistry(cfg, snapshot),
-		MetricsURL:          registryMetricsURL(metricsAddress),
-		ControlURL:          peerControlURL(cfg),
-		Version:             build.Version,
-		Commit:              build.Commit,
-		DatapathEngine:      status.Engine,
-		DatapathReady:       status.Ready,
-		HAState:             string(snapshot.State),
-		LeaseGeneration:     snapshot.Lease.Generation,
-		RouteTargetMatch:    snapshot.RouteTargetMatches,
-		PublicIdentityMatch: snapshot.PublicIdentityMatches,
-		UpdatedAt:           now,
-		ExpiresAt:           now.Add(registryTTL(cfg)),
-	}, registryTTL(cfg))
-}
-
-func peerControlURL(cfg config.Config) string {
-	if !cfg.Control.PeerAPI.Enabled || cfg.Control.PeerAPI.AuthToken == "" {
-		return ""
-	}
-	host := cfg.Control.PeerAPI.ListenAddress
-	if host == "" || host == "0.0.0.0" || host == "::" {
-		host = localInterfaceIP(cfg.Local.PrimaryInterface)
-	}
-	if host == "" {
-		return ""
-	}
-	port := cfg.Control.PeerAPI.ListenPort
-	if port <= 0 {
-		port = 9109
-	}
-	return "http://" + net.JoinHostPort(host, strconv.Itoa(port))
-}
-
-func publicIPForRegistry(cfg config.Config, snapshot ha.StatusSnapshot) string {
-	if cfg.HA.PublicIdentity.Mode != "shared_eip" {
-		return ""
-	}
-	if snapshot.PublicIdentity.InstanceID != "" && snapshot.PublicIdentity.InstanceID != cfg.Local.NodeID {
-		return ""
-	}
-	return snapshot.PublicIdentity.PublicIP
-}
-
-func datapathStatusForRegistry(ctx context.Context, engine datapath.Engine, timeout time.Duration) datapath.Status {
-	if timeout <= 0 {
-		timeout = registryStatusTimeout
-	}
-	statusCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	type result struct {
-		status datapath.Status
-		err    error
-	}
-	results := make(chan result, 1)
-	go func() {
-		status, err := engine.Status(statusCtx)
-		results <- result{status: status, err: err}
-	}()
-	select {
-	case <-statusCtx.Done():
-		return datapath.Status{Engine: engine.Name(), Ready: false, Message: statusCtx.Err().Error()}
-	case result := <-results:
-		if result.err != nil {
-			return datapath.Status{Engine: engine.Name(), Ready: false, Message: result.err.Error()}
-		}
-		if result.status.Engine == "" {
-			result.status.Engine = engine.Name()
-		}
-		return result.status
-	}
-}
-
-func registryMetricsURL(address string) string {
-	host, port, err := net.SplitHostPort(address)
-	if err != nil {
-		return ""
-	}
-	if host == "" || host == "0.0.0.0" || host == "::" {
-		host = localInterfaceIP("")
-	}
-	if host == "" {
-		return ""
-	}
-	return "http://" + net.JoinHostPort(host, port) + "/metrics"
-}
-
-func localInterfaceIP(name string) string {
-	if name != "" {
-		if iface, err := net.InterfaceByName(name); err == nil {
-			if ip := firstInterfaceIPv4(iface); ip != "" {
-				return ip
-			}
-		}
-	}
-	interfaces, err := net.Interfaces()
-	if err != nil {
-		return ""
-	}
-	for i := range interfaces {
-		if ip := firstInterfaceIPv4(&interfaces[i]); ip != "" {
-			return ip
-		}
-	}
-	return ""
-}
-
-func firstInterfaceIPv4(iface *net.Interface) string {
-	if iface == nil || iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
-		return ""
-	}
-	addrs, err := iface.Addrs()
-	if err != nil {
-		return ""
-	}
-	for _, addr := range addrs {
-		prefix, err := netip.ParsePrefix(addr.String())
-		if err != nil || !prefix.Addr().Is4() || prefix.Addr().IsLoopback() {
-			continue
-		}
-		return prefix.Addr().String()
-	}
-	return ""
 }
 
 func leaseRenewInterval(cfg config.Config) time.Duration {

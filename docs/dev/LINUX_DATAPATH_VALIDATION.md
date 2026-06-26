@@ -6,6 +6,11 @@ Last updated: 2026-06-20
 
 BetterNAT can run most unit tests and static CLI smoke checks on macOS, but real datapath behavior requires Linux.
 
+Current product rule: LoxiLB is the supported datapath and BetterNAT has no
+product fallback datapath. The nftables/nf_conntrack layer below is retained
+only to keep legacy diagnostics and parsers healthy while the code is phased
+out; it is not a release acceptance path for AWS, GCP, or future clouds.
+
 This document defines the portable Linux validation target. It should work on any suitable Linux host:
 
 - a local VM such as OrbStack, Lima, Multipass, UTM, or VMware,
@@ -37,14 +42,19 @@ Equivalent convenience command:
 ./manage verify
 ```
 
-### L1: nftables/nf_conntrack Integration
+### L1: Legacy nftables/nf_conntrack Integration
 
 Purpose:
 
-- validate the fallback datapath against real Linux nftables,
+- validate legacy nftables diagnostics against real Linux nftables while the
+  code remains,
 - verify conntrack parsing against real conntrack output,
 - verify counters and cleanup behavior,
 - exercise a local network namespace topology without cloud dependencies.
+
+This layer exists only to avoid blind spots while legacy code is still present.
+It must not be added to a release checklist as a fallback gate, and it must not
+be used to pass a deployment where LoxiLB is missing, unsupported, or unhealthy.
 
 Minimum tools:
 

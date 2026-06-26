@@ -30,7 +30,7 @@ Included:
 
 - AMI-based BetterNAT gateway appliance.
 - `betternat-agent`.
-- LoxiLB-first datapath with nftables fallback.
+- LoxiLB datapath with no product fallback datapath.
 - ASG-based self-healing gateway pool.
 - DynamoDB lease/fencing.
 - AWS route replacement.
@@ -117,7 +117,8 @@ Primary states:
 - Degraded: active works but standby missing or stale.
 - Split-brain risk: lease, route, or EIP disagree.
 - No stable egress: shared EIP absent or not attached to active.
-- Datapath degraded: LoxiLB/nftables readiness failed.
+- Datapath degraded: LoxiLB readiness failed. nftables/nf_conntrack checks are
+  legacy diagnostics only while retained, not a product fallback state.
 - Cloud drift: Terraform state or AWS resources no longer match desired shape.
 
 ### 3. Failover History

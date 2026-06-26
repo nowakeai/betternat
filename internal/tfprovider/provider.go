@@ -76,11 +76,18 @@ func (p *Provider) Configure(ctx context.Context, req provider.ConfigureRequest,
 func (p *Provider) Resources(context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		func() resource.Resource {
-			return NewGatewayResourceWithFactories(p.installerFactory, p.rollbackerFactory, p.cleanerFactory, p.readerFactory)
+			return NewAWSGatewayResourceWithFactories(p.installerFactory, p.rollbackerFactory, p.cleanerFactory, p.readerFactory)
 		},
+		NewGCPGatewayResource,
 	}
 }
 
 func (p *Provider) DataSources(context.Context) []func() datasource.DataSource {
-	return nil
+	return []func() datasource.DataSource{
+		NewRuntimeArtifactsDataSource,
+		func() datasource.DataSource {
+			return NewAWSGatewayStatusDataSourceWithReader(p.readerFactory)
+		},
+		NewGCPGatewayStatusDataSource,
+	}
 }
