@@ -2,7 +2,9 @@ package ha
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -11,6 +13,8 @@ import (
 	"github.com/nowakeai/betternat/internal/datapath"
 	"github.com/nowakeai/betternat/internal/lease"
 	"github.com/nowakeai/betternat/internal/probe"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type Controller struct {
@@ -49,6 +53,25 @@ var handoverRouteReplaceBackoffs = []time.Duration{
 }
 
 var handoverRouteReplaceAttemptTimeout = 8 * time.Second
+
+var handoverPublicIdentityBackoffs = []time.Duration{
+	0,
+	500 * time.Millisecond,
+	1500 * time.Millisecond,
+	3 * time.Second,
+}
+
+var handoverPublicIdentityAttemptTimeout = 30 * time.Second
+
+var leaseFenceReadBackoffs = []time.Duration{
+	0,
+	150 * time.Millisecond,
+	500 * time.Millisecond,
+	1 * time.Second,
+}
+
+var leaseFenceMinRenewDelay = 1 * time.Second
+var leaseFenceMaxRenewDelay = 5 * time.Second
 
 // Activate claims ownership and points the cloud control plane at this appliance.
 func (c Controller) Activate(ctx context.Context, cfg config.Config, localInstanceID string) (ActivationResult, error) {
@@ -173,7 +196,7 @@ func (c Controller) VerifyLease(ctx context.Context, record lease.Record, localI
 	if c.Lease == nil {
 		return fmt.Errorf("lease manager is required")
 	}
-	current, err := c.Lease.Current(ctx)
+	current, err := c.currentLeaseWithRetry(ctx)
 	if err != nil {
 		return fmt.Errorf("read HA lease: %w", err)
 	}
@@ -335,16 +358,19 @@ func (c Controller) Handover(ctx context.Context, cfg config.Config, localInstan
 		if cfg.HA.PublicIdentity.AllocationID == "" {
 			return HandoverResult{}, fmt.Errorf("ha.public_identity.allocation_id is required for shared_eip")
 		}
-		record, err = c.renewLeaseFence(ctx, record, localInstanceID, "before handover public identity mutation")
+		var identity cloud.PublicIdentity
+		record, identity, err = c.associatePublicIdentityForHandover(ctx, cfg, targetInstanceID, localInstanceID, record)
 		if err != nil {
-			return HandoverResult{}, err
-		}
-		identity, err := c.Cloud.AssociateEIP(ctx, cfg.HA.PublicIdentity.AllocationID, targetInstanceID)
-		if err != nil {
-			return HandoverResult{}, fmt.Errorf("associate EIP %q to handover target %q: %w", cfg.HA.PublicIdentity.AllocationID, targetInstanceID, err)
-		}
-		if err := c.verifyLeaseFence(ctx, record, localInstanceID, "after handover public identity mutation"); err != nil {
-			return HandoverResult{}, err
+			associateErr := fmt.Errorf("associate EIP %q to handover target %q: %w", cfg.HA.PublicIdentity.AllocationID, targetInstanceID, err)
+			if fenceErr := c.verifyLeaseFence(ctx, record, localInstanceID, "before failed public identity handover revert"); fenceErr != nil {
+				return result, associateErr
+			}
+			revertErr := c.revertHandover(ctx, cfg, localInstanceID)
+			result.Reverted = revertErr == nil
+			if revertErr != nil {
+				return result, fmt.Errorf("%w; revert handover ownership to %q: %v", associateErr, localInstanceID, revertErr)
+			}
+			return result, associateErr
 		}
 		result.PublicIdentity = identity
 	} else if cfg.HA.PublicIdentity.Mode != "" {
@@ -398,11 +424,128 @@ func (c Controller) Handover(ctx context.Context, cfg config.Config, localInstan
 	return result, nil
 }
 
+func (c Controller) associatePublicIdentityForHandover(ctx context.Context, cfg config.Config, targetInstanceID string, localInstanceID string, record lease.Record) (lease.Record, cloud.PublicIdentity, error) {
+	var lastErr error
+	allocationID := cfg.HA.PublicIdentity.AllocationID
+	for attempt, backoff := range handoverPublicIdentityBackoffs {
+		if backoff > 0 {
+			if err := sleepContext(ctx, backoff); err != nil {
+				if lastErr != nil {
+					return record, cloud.PublicIdentity{}, lastErr
+				}
+				return record, cloud.PublicIdentity{}, err
+			}
+		}
+		renewed, err := c.renewLeaseFence(ctx, record, localInstanceID, "before handover public identity mutation")
+		if err != nil {
+			return record, cloud.PublicIdentity{}, err
+		}
+		record = renewed
+		attemptCtx, cancel := context.WithTimeout(ctx, handoverPublicIdentityAttemptTimeout)
+		var identity cloud.PublicIdentity
+		record, err = c.maintainLeaseDuring(attemptCtx, record, "handover public identity mutation", func(runCtx context.Context) error {
+			var associateErr error
+			identity, associateErr = c.Cloud.AssociateEIP(runCtx, allocationID, targetInstanceID)
+			return associateErr
+		})
+		cancel()
+		if err != nil {
+			lastErr = err
+			actual, verifyErr := c.Cloud.DescribePublicIdentity(ctx, allocationID)
+			if verifyErr == nil && actual.InstanceID == targetInstanceID {
+				return record, actual, nil
+			}
+			if verifyErr != nil {
+				lastErr = fmt.Errorf("associate public identity attempt %d: %w; verify public identity: %v", attempt+1, err, verifyErr)
+			}
+			continue
+		}
+		if fenceErr := c.verifyLeaseFence(ctx, record, localInstanceID, "after handover public identity mutation"); fenceErr != nil {
+			return record, cloud.PublicIdentity{}, fenceErr
+		}
+		return record, identity, nil
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("public identity did not converge to %q", targetInstanceID)
+	}
+	return record, cloud.PublicIdentity{}, lastErr
+}
+
+type leaseRenewalResult struct {
+	record lease.Record
+	err    error
+}
+
+func (c Controller) maintainLeaseDuring(ctx context.Context, record lease.Record, phase string, run func(context.Context) error) (lease.Record, error) {
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	done := make(chan struct{})
+	renewals := make(chan leaseRenewalResult, 64)
+	go c.renewLeaseUntilDone(ctx, record, phase, done, renewals, cancel)
+	err := run(runCtx)
+	close(done)
+	latest := record
+	var renewErr error
+	for {
+		select {
+		case result := <-renewals:
+			if result.err != nil {
+				renewErr = result.err
+				continue
+			}
+			latest = result.record
+		default:
+			if renewErr != nil {
+				return latest, renewErr
+			}
+			return latest, err
+		}
+	}
+}
+
+func (c Controller) renewLeaseUntilDone(ctx context.Context, record lease.Record, phase string, done <-chan struct{}, results chan<- leaseRenewalResult, cancelRun context.CancelFunc) {
+	current := record
+	timer := time.NewTimer(nextLeaseRenewDelay(current, c.now()))
+	defer timer.Stop()
+	for {
+		select {
+		case <-done:
+			return
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+			renewed, err := c.renewLeaseWithRetry(ctx, current)
+			if err != nil {
+				results <- leaseRenewalResult{err: fmt.Errorf("renew HA lease during %s: %w", phase, err)}
+				cancelRun()
+				return
+			}
+			current = renewed
+			results <- leaseRenewalResult{record: renewed}
+			timer.Reset(nextLeaseRenewDelay(current, c.now()))
+		}
+	}
+}
+
+func nextLeaseRenewDelay(record lease.Record, now time.Time) time.Duration {
+	delay := time.Until(record.ExpiresAt) / 3
+	if !now.IsZero() {
+		delay = record.ExpiresAt.Sub(now) / 3
+	}
+	if delay < leaseFenceMinRenewDelay {
+		return leaseFenceMinRenewDelay
+	}
+	if delay > leaseFenceMaxRenewDelay {
+		return leaseFenceMaxRenewDelay
+	}
+	return delay
+}
+
 func (c Controller) renewLeaseFence(ctx context.Context, record lease.Record, localInstanceID string, phase string) (lease.Record, error) {
 	if err := c.VerifyLease(ctx, record, localInstanceID); err != nil {
 		return lease.Record{}, fmt.Errorf("verify HA lease %s: %w", phase, err)
 	}
-	renewed, err := c.Lease.Renew(ctx, record)
+	renewed, err := c.renewLeaseWithRetry(ctx, record)
 	if err != nil {
 		return lease.Record{}, fmt.Errorf("renew HA lease %s: %w", phase, err)
 	}
@@ -410,6 +553,81 @@ func (c Controller) renewLeaseFence(ctx context.Context, record lease.Record, lo
 		return lease.Record{}, fmt.Errorf("verify renewed HA lease %s: %w", phase, err)
 	}
 	return renewed, nil
+}
+
+func (c Controller) currentLeaseWithRetry(ctx context.Context) (lease.Record, error) {
+	var lastErr error
+	for attempt, backoff := range leaseFenceReadBackoffs {
+		if backoff > 0 {
+			if err := sleepContext(ctx, backoff); err != nil {
+				if lastErr != nil {
+					return lease.Record{}, lastErr
+				}
+				return lease.Record{}, err
+			}
+		}
+		current, err := c.Lease.Current(ctx)
+		if err == nil {
+			return current, nil
+		}
+		lastErr = err
+		if attempt == len(leaseFenceReadBackoffs)-1 || !retryableLeaseControlError(ctx, err) {
+			return lease.Record{}, err
+		}
+	}
+	return lease.Record{}, lastErr
+}
+
+func (c Controller) renewLeaseWithRetry(ctx context.Context, record lease.Record) (lease.Record, error) {
+	var lastErr error
+	for attempt, backoff := range leaseFenceReadBackoffs {
+		if backoff > 0 {
+			if err := sleepContext(ctx, backoff); err != nil {
+				if lastErr != nil {
+					return lease.Record{}, lastErr
+				}
+				return lease.Record{}, err
+			}
+		}
+		renewed, err := c.Lease.Renew(ctx, record)
+		if err == nil {
+			return renewed, nil
+		}
+		lastErr = err
+		if attempt == len(leaseFenceReadBackoffs)-1 || !retryableLeaseControlError(ctx, err) {
+			return lease.Record{}, err
+		}
+	}
+	return lease.Record{}, lastErr
+}
+
+func retryableLeaseControlError(ctx context.Context, err error) bool {
+	if err == nil || ctx.Err() != nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	switch status.Code(err) {
+	case codes.Unavailable, codes.ResourceExhausted:
+		return true
+	}
+	text := strings.ToLower(err.Error())
+	for _, token := range []string{
+		"connection reset",
+		"connection refused",
+		"connection closed",
+		"eof",
+		"server closed",
+		"temporary",
+		"timeout awaiting response headers",
+		"http2: client connection lost",
+	} {
+		if strings.Contains(text, token) {
+			return true
+		}
+	}
+	return false
 }
 
 func (c Controller) replaceRouteForHandover(ctx context.Context, target cloud.RouteTarget, targetInstanceID string, localInstanceID string, record lease.Record) (lease.Record, error) {

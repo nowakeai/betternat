@@ -8,10 +8,11 @@ Disposable GCP validation in `smooth-calling-490406-d9` proved that the
 experimental GCP stable public identity path can preserve the observed public
 source IP for a truly private client during passive active-gateway loss.
 
-The same run also found that proactive handover with stable public identity is
-not GA-ready yet. The command rejected safely after a transient Compute API
-operation polling reset during static address detach, and final route/static-IP
-ownership stayed on the old active gateway.
+The same run also found the first proactive-handover blocker: a transient
+Compute API operation polling reset during static address detach caused a safe
+rejection. Follow-up hardening and passing proactive-handover evidence are
+tracked in
+[`065-gcp-stable-ip-handover-hardening-plan.md`](065-gcp-stable-ip-handover-hardening-plan.md).
 
 ## Environment
 
@@ -93,9 +94,12 @@ unique_success_ips=34.94.153.80
 first_fail_to_recovery_seconds=7.580
 ```
 
-This is a good safety result but not a passing proactive-handover result. GCP
-stable-IP proactive handover needs retry/operation-recovery hardening around
-Compute API detach/attach operation polling before GA.
+This was a good safety result but not a passing proactive-handover result. The
+follow-up hardening added Compute operation-poll retry, describe-based
+convergence handling, Firestore lease-control retry, and a lease heartbeat
+during long static-address mutation. The subsequent hard3 run completed both
+forward and reverse proactive handovers with stable-IP continuity; see the
+follow-up document for details.
 
 ## Negative Control
 
@@ -165,8 +169,6 @@ Closed for GCP GA readiness:
 
 Still open:
 
-- proactive stable-IP handover success path,
-- retry/recovery after partial static address detach/attach failures,
 - automated repeatable private-client stable-IP smoke,
 - failover-duration optimization,
 - multi-zone/regional capacity behavior if kept in GA scope.

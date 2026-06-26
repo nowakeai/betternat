@@ -2,11 +2,14 @@ package gcpcloud
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
 	compute "google.golang.org/api/compute/v1"
+	"google.golang.org/api/googleapi"
 
 	"github.com/nowakeai/betternat/internal/cloud"
 )
@@ -290,6 +293,12 @@ func (p *Provider) waitGlobalOperation(ctx context.Context, name string) error {
 	for {
 		op, err := p.globalOperations.Get(ctx, p.cfg.ProjectID, name)
 		if err != nil {
+			if retryableOperationPollError(err) {
+				if sleepErr := sleepContext(ctx, poll); sleepErr != nil {
+					return sleepErr
+				}
+				continue
+			}
 			return err
 		}
 		if op.Status == "DONE" {
@@ -312,6 +321,12 @@ func (p *Provider) waitZoneOperation(ctx context.Context, zone string, name stri
 	for {
 		op, err := p.zoneOperations.Get(ctx, p.cfg.ProjectID, zone, name)
 		if err != nil {
+			if retryableOperationPollError(err) {
+				if sleepErr := sleepContext(ctx, poll); sleepErr != nil {
+					return sleepErr
+				}
+				continue
+			}
 			return err
 		}
 		if op.Status == "DONE" {
@@ -374,6 +389,40 @@ func operationError(op *compute.Operation) error {
 		parts = append(parts, item.Message)
 	}
 	return fmt.Errorf("gcp operation %s failed: %s", op.Name, strings.Join(parts, "; "))
+}
+
+func retryableOperationPollError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && (netErr.Timeout() || netErr.Temporary()) {
+		return true
+	}
+	var apiErr *googleapi.Error
+	if errors.As(err, &apiErr) {
+		return apiErr.Code == 408 || apiErr.Code == 409 || apiErr.Code == 429 || apiErr.Code >= 500
+	}
+	text := strings.ToLower(err.Error())
+	for _, token := range []string{
+		"connection reset",
+		"connection refused",
+		"connection closed",
+		"eof",
+		"server closed",
+		"tls handshake timeout",
+		"temporary",
+		"timeout awaiting response headers",
+		"http2: client connection lost",
+	} {
+		if strings.Contains(text, token) {
+			return true
+		}
+	}
+	return false
 }
 
 func operationName(op *compute.Operation) string {

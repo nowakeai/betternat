@@ -217,6 +217,31 @@ func TestAssociateEIPMovesStaticAddressAccessConfig(t *testing.T) {
 	}
 }
 
+func TestAssociateEIPRetriesTransientZoneOperationPollError(t *testing.T) {
+	instances := &fakeInstances{instances: map[string]*compute.Instance{
+		"prod-gw-a": instanceWithAccessConfig("prod-gw-a", "203.0.113.9"),
+		"prod-gw-b": instanceWithAccessConfig("prod-gw-b", "198.51.100.20"),
+	}}
+	addresses := &fakeAddresses{address: &compute.Address{
+		Name:    "bnat-static-egress",
+		Address: "203.0.113.10",
+		Users:   []string{"https://www.googleapis.com/compute/v1/projects/test-project/zones/us-west2-a/instances/prod-gw-a"},
+	}}
+	zoneOps := &fakeZoneOperations{
+		errs: []error{
+			errors.New("Get zone operation: read tcp 10.100.0.8:60212->142.251.41.10:443: read: connection reset by peer"),
+		},
+	}
+	provider := NewFromAPIs(testConfig(), &fakeRoutes{}, &fakeOperations{}, zoneOps, instances, addresses)
+
+	if _, err := provider.AssociateEIP(context.Background(), "bnat-static-egress", "prod-gw-b"); err != nil {
+		t.Fatalf("associate eip: %v", err)
+	}
+	if got := strings.Join(zoneOps.waited, ","); got != "us-west2-a/delete-access-config-op,us-west2-a/delete-access-config-op,us-west2-a/delete-access-config-op,us-west2-a/add-access-config-op" {
+		t.Fatalf("unexpected zone operation waits: %s", got)
+	}
+}
+
 func TestAssociateEIPNoopsWhenAddressAlreadyOnTarget(t *testing.T) {
 	instances := &fakeInstances{instances: map[string]*compute.Instance{
 		"prod-gw-b": instanceWithAccessConfig("prod-gw-b", "203.0.113.10"),
@@ -320,10 +345,18 @@ func (f *fakeOperations) Get(_ context.Context, _ string, name string) (*compute
 
 type fakeZoneOperations struct {
 	waited []string
+	errs   []error
 }
 
 func (f *fakeZoneOperations) Get(_ context.Context, _ string, zone string, name string) (*compute.Operation, error) {
 	f.waited = append(f.waited, zone+"/"+name)
+	if len(f.errs) > 0 {
+		err := f.errs[0]
+		f.errs = f.errs[1:]
+		if err != nil {
+			return nil, err
+		}
+	}
 	return &compute.Operation{Name: name, Status: "DONE"}, nil
 }
 
