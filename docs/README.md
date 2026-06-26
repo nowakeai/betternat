@@ -73,6 +73,7 @@ These are maintainer-facing release documents.
 - [release/CLOUDFORMATION_DELIVERY_DECISION.md](release/CLOUDFORMATION_DELIVERY_DECISION.md) — Decision to defer CloudFormation while Terraform remains the supported install path.
 - [release/TERRAFORM_PROVIDER_DISTRIBUTION_PLAN.md](release/TERRAFORM_PROVIDER_DISTRIBUTION_PLAN.md) — Split-repo provider publishing plan, Registry release model, versioning, and OpenTofu compatibility.
 - [release/TERRAFORM_SURFACE_RESET_IMPLEMENTATION_PLAN.md](release/TERRAFORM_SURFACE_RESET_IMPLEMENTATION_PLAN.md) — Implementation tracker for the provider/module split, Terraform surface reset, and GCP alpha path.
+- [release/GCP_GA_USER_DOCS_CHECKLIST.md](release/GCP_GA_USER_DOCS_CHECKLIST.md) — User-facing documentation checklist for GCP GA and Terraform Registry readiness.
 
 ## Testing
 
