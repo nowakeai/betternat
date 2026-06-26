@@ -1,6 +1,6 @@
 # BetterNAT Rollback Guide
 
-Date: 2026-06-22
+Date: 2026-06-26
 
 This guide explains how to safely remove or roll back a BetterNAT deployment.
 
@@ -102,7 +102,7 @@ If the previous target is missing or unknown, BetterNAT will not silently destro
 
 ## Terraform Defaults
 
-The relevant resource fields are:
+The relevant module/provider fields are:
 
 ```hcl
 resource "betternat_aws_gateway" "egress" {
@@ -231,7 +231,8 @@ Do not immediately set `allow_destroy_without_rollback = true`.
 First inspect the route tables:
 
 ```sh
-terraform -chdir=<your-config-dir> state show betternat_aws_gateway.egress
+terraform -chdir=<your-config-dir> state list | grep betternat
+terraform -chdir=<your-config-dir> state show <betternat-resource-address>
 
 aws ec2 describe-route-tables \
   --profile "$AWS_PROFILE" \
