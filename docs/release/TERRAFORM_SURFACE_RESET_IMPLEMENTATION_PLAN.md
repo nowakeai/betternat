@@ -380,7 +380,7 @@ Done when:
 
 ## Phase 6: GCP Module Repository
 
-Status: `pending`
+Status: `local module implementation complete; publish and registry smoke pending`
 
 Repository:
 
@@ -396,16 +396,16 @@ nowakeai/betternat/google
 
 Tasks:
 
-- [ ] Create module repository.
-- [ ] Wrap `betternat_gcp_gateway`.
-- [ ] Add GKE/VPC-friendly inputs.
-- [ ] Add examples:
-  - [ ] `examples/minimal-existing-vpc`
-  - [ ] `examples/gke-private-nodes`
-  - [ ] `examples/non-stable-egress-ip`
-  - [ ] `examples/stable-egress-ip` only if validated.
-- [ ] Add README, input docs, output docs.
-- [ ] Add CI validation.
+- [x] Create local module repository.
+- [x] Wrap `betternat_gcp_gateway`.
+- [x] Add GKE/VPC-friendly inputs.
+- [x] Add examples:
+  - [x] `examples/minimal-existing-vpc`
+  - [x] `examples/gke-private-nodes`
+  - [x] `examples/non-stable-egress-ip`
+  - [x] `examples/stable-egress-ip`
+- [x] Add README, input docs, output docs.
+- [x] Add CI validation.
 - [ ] Publish alpha module.
 
 Done when:
