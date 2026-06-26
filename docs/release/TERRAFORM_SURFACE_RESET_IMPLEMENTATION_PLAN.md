@@ -283,8 +283,8 @@ Tasks:
 - [x] Validate that a standby cannot mutate routes while another unexpired
   Firestore lease owner exists.
 - [x] Do not run a raw LoxiLB-on-GCE HA baseline for GA.
-- [ ] Validate GCP split-brain failure injections: stale lease generation,
-  delayed route operation, restarted old active, and stale standby registry.
+- [ ] Validate remaining GCP split-brain failure injections: restarted old
+  active, stale standby registry, and live clock-skew edges.
 - [x] Validate TCP, UDP, DNS, and long-download behavior across route-only
   failover; do not rely only on short HTTP source-IP probes.
 - [x] Validate destroy/rollback after an agent-owned route movement.
@@ -367,8 +367,8 @@ GCP validation:
 - [x] Proactive handover.
 - [x] LoxiLB-on-GCE datapath counters and restart reconciliation.
 - [x] Raw LoxiLB HA baseline comparison explicitly de-scoped from GA readiness.
-- [ ] GCP failure injection for route delete/insert, Compute operation polling,
-  stale lease generation, stale registry, restarted old active, and clock skew.
+- [ ] GCP failure injection remains open for stale registry, restarted old
+  active, and live clock skew; route/operation/stale-generation coverage exists.
 - [x] Cleanup.
 
 Done when:

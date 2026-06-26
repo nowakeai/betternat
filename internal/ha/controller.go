@@ -285,6 +285,9 @@ func (c Controller) ensureOwnership(ctx context.Context, cfg config.Config, loca
 	}
 	for _, target := range routes {
 		actual, err := c.Cloud.DescribeRoute(ctx, target.RouteTableID, target.DestinationCIDR)
+		if err != nil && !routeNotFound(err) {
+			return ActivationResult{}, fmt.Errorf("describe route %s %s: %w", target.RouteTableID, target.DestinationCIDR, err)
+		}
 		if err != nil || actual.Target != target.Target {
 			if err := c.verifyLeaseFence(ctx, record, localInstanceID, "before route repair"); err != nil {
 				return ActivationResult{}, err
@@ -306,6 +309,14 @@ func (c Controller) ensureOwnership(ctx context.Context, cfg config.Config, loca
 		result.Routes = append(result.Routes, actual)
 	}
 	return result, nil
+}
+
+func routeNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	text := strings.ToLower(err.Error())
+	return strings.Contains(text, "not found") || strings.Contains(text, "notfound")
 }
 
 func (c Controller) Handover(ctx context.Context, cfg config.Config, localInstanceID string, targetInstanceID string, record lease.Record) (HandoverResult, error) {

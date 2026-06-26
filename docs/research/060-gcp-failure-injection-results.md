@@ -112,5 +112,30 @@ GCP residual scan passed
 This closes the live-evidence portion of the P0 gate that requires the GCP
 agent to degrade instead of reporting active when Firestore or route ownership
 verification cannot be completed. It does not close the broader remaining GCP
-GA items for stable public identity, multi-zone behavior, GKE/private-node
-topologies, raw LoxiLB HA comparison, and production Cloud NAT migration.
+GA items for multi-zone behavior, GKE/private-node topologies, and production
+Cloud NAT migration.
+
+## Local Control-Plane Fault Injection
+
+Date: 2026-06-26
+
+Additional local fault-injection coverage was added for active GCP route
+ownership repair. The important behavior is that a transient `DescribeRoute`
+failure must degrade the active supervisor and must not trigger blind route
+mutation. A missing route is still repaired because that is a concrete drift
+condition.
+
+Covered cases:
+
+- `EnsureOwnershipFenced` returns a route describe error without calling
+  `ReplaceRoute` when route describe fails with a transient Compute/API error.
+- `EnsureOwnershipFenced` still repairs an explicitly missing route.
+- `Supervisor.Step` moves an active gateway to `DEGRADED` when route describe
+  fails after lease renewal, without mutating the route.
+
+Validation:
+
+```sh
+GOCACHE=$PWD/tmp/go-build go test ./internal/ha
+GOCACHE=$PWD/tmp/go-build go test ./internal/cloud/gcp
+```
