@@ -191,3 +191,20 @@ current documentation pass:
   and GCS artifact resources. The only residuals were three run-scoped
   Firestore handover history records, which were deleted before the final
   residual scan passed.
+
+## AWS Module Smoke Evidence
+
+- [x] 2026-06-26 disposable AWS module smoke in account `601427795217`,
+  region `us-west-2`, covered module apply, two-gateway ASG bootstrap,
+  private-client egress, stable EIP, proactive handover, destroy, artifact
+  bucket deletion, and residual scan.
+- [x] Private-client egress returned stable EIP `54.71.83.128` for 10
+  consecutive pre-handover samples; HTTPS, DNS, and 1 MiB download checks
+  succeeded.
+- [x] Proactive handover moved active ownership from
+  `i-0f685166cc3926f60` to `i-07418f61b47294563`; observed probe result was
+  120/120 successful samples with a longest failure window of 0 samples at
+  0.5 seconds, and all samples retained `54.71.83.128`.
+- [x] Cleanup destroyed 16 Terraform resources, deleted the temporary S3
+  artifact bucket, and found no live run-scoped EC2, VPC, subnet, route table,
+  security group, EIP, launch template, ASG, DynamoDB, IAM, or S3 residuals.
