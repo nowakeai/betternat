@@ -84,9 +84,10 @@ For this hardening step, a live GCP run passes if:
 
 - proactive handover completes or an ambiguous operation error is accepted only
   after describe-based convergence to the target;
-- route target and static address user both match the target before lease
-  transfer;
-- successful private-client probe samples only show the stable public IP;
+- route target moves to the target before lease transfer, so new outbound flows
+  recover even if static-address convergence is still pending;
+- successful private-client probe samples may briefly show the target gateway's
+  ephemeral public IP, but the failed-sample window should shrink materially;
 - no run-scoped Compute, Firestore, service-account, or artifact-bucket
   resources remain after cleanup.
 
@@ -161,5 +162,8 @@ GCP residual scan passed
 - Keep failover-duration optimization open. Proactive GCP handover is now
   successful, but the observed client-visible outage is still about `22s`, much
   slower than the latest AWS ASG lifecycle evidence.
+- Connectivity-first GCP handover now has priority over strict source-IP
+  continuity during the transition. The route should move first; stable public
+  identity can converge through follow-up ownership repair.
 - Keep multi-zone/regional capacity validation separate from this single-zone
   MIG hardening result.

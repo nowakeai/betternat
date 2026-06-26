@@ -20,6 +20,11 @@ ordinary management public IP.
 Do not promise AWS-like "gateway public IP plus separate stable egress public
 IP" semantics for GCP single-NIC gateways.
 
+For GCP handover, preserving private-workload internet connectivity has higher
+priority than preserving a perfectly stable egress source IP during the control
+plane transition. A short non-stable source-IP window is acceptable when it
+keeps new outbound flows working sooner.
+
 The supported design choices are:
 
 - Route-only GCP mode: each gateway keeps its own ephemeral public IP, and
@@ -40,8 +45,10 @@ bootstrap, artifact download, and disposable diagnostics.
 When `stable_public_identity_address_name` is enabled, the GCP runtime must
 treat the configured static address as the egress identity and must not assume
 that a second persistent management public IP can remain on the same gateway
-NIC. Test harnesses that need SSH to standby gateways must use one of these
-paths:
+NIC. Proactive GCP handover should move the route and transfer ownership before
+waiting on static-address convergence; the new active owner can repair the
+stable public identity after connectivity is restored. Test harnesses that need
+SSH to standby gateways must use one of these paths:
 
 - IAP, when the operator account has permission.
 - A temporary external access config during testing, removed immediately after

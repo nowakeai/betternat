@@ -354,6 +354,9 @@ func (c Controller) Handover(ctx context.Context, cfg config.Config, localInstan
 	}
 
 	result := HandoverResult{PreviousLease: record}
+	if connectivityFirstHandover(cfg) {
+		return c.handoverConnectivityFirst(ctx, cfg, localInstanceID, targetInstanceID, record, transferer, result)
+	}
 	if cfg.HA.PublicIdentity.Mode == "shared_eip" {
 		if cfg.HA.PublicIdentity.AllocationID == "" {
 			return HandoverResult{}, fmt.Errorf("ha.public_identity.allocation_id is required for shared_eip")
