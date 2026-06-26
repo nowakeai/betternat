@@ -380,7 +380,7 @@ Done when:
 
 ## Phase 6: GCP Module Repository
 
-Status: `local module implementation complete; publish and registry smoke pending`
+Status: `module PR opened; publish and registry smoke pending`
 
 Repository:
 
