@@ -555,35 +555,35 @@ func TestDeriveGatewayStateBetterNATVersionDerivesGAArtifacts(t *testing.T) {
 			name:         "arm64",
 			instanceType: "t4g.small",
 			arch:         "arm64",
-			agentSHA:     "68ef98b9b55fb7e1eb6874331c91d5755e77d5a27ad8a6af6c0eb742bc0c0305",
-			cliSHA:       "e2608e894adf30097c49ba14e0babf8a365491d5f56f3c6ea1b82b857b39ce1d",
+			agentSHA:     "504e42b39d262ef6b0518a7b62628ddaabcd97ff457f7d9bf477cd9f72035d86",
+			cliSHA:       "e5f07e12dcf31dfba3073d51b942debf2334f5493eb456617a3e0c8e6eda3cf8",
 		},
 		{
 			name:         "amd64",
 			instanceType: "t3.small",
 			arch:         "amd64",
-			agentSHA:     "1443bb7c069d5674238d95ebae6656e0931df296d2067f38caa2b6fbca8970c5",
-			cliSHA:       "9118b3e620a5eed0cb5e551faf5293e2b6ad2f9856cdf9d834bcdb675b959946",
+			agentSHA:     "df3207e43eacdf949bab1eda0ec73a1f0f8bea703190c0bc3c852da472020f79",
+			cliSHA:       "70903f738a19fc77045d29a67dde7f595069c02523ff9f6979b44156cb586535",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			plan := validGatewayPlan()
-			plan.BetterNATVersion = types.StringValue("v0.1.0")
+			plan.BetterNATVersion = types.StringValue("v0.2.0")
 			plan.InstanceType = types.StringValue(tt.instanceType)
 			derived, err := DeriveGatewayState(context.Background(), &plan)
 			if err != nil {
 				t.Fatalf("derive gateway state: %v", err)
 			}
-			wantAgentURL := "https://github.com/nowakeai/betternat/releases/download/v0.1.0/betternat-agent_v0.1.0_linux_" + tt.arch
+			wantAgentURL := "https://github.com/nowakeai/betternat/releases/download/v0.2.0/betternat-agent_v0.2.0_linux_" + tt.arch
 			if got := derived.AgentBinaryURL.ValueString(); got != wantAgentURL {
 				t.Fatalf("unexpected agent url: %s", got)
 			}
 			if got := derived.AgentBinarySHA256.ValueString(); got != tt.agentSHA {
 				t.Fatalf("unexpected agent checksum: %s", got)
 			}
-			wantCLIURL := "https://github.com/nowakeai/betternat/releases/download/v0.1.0/betternat_v0.1.0_linux_" + tt.arch
+			wantCLIURL := "https://github.com/nowakeai/betternat/releases/download/v0.2.0/betternat_v0.2.0_linux_" + tt.arch
 			if got := derived.CLIBinaryURL.ValueString(); got != wantCLIURL {
 				t.Fatalf("unexpected cli url: %s", got)
 			}
