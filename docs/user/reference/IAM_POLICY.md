@@ -142,11 +142,11 @@ If a required permission is denied:
 Use [Security Hardening](SECURITY_HARDENING.md) for broader security posture,
 network exposure, artifact integrity, and production hardening checklist.
 
-## GCP Alpha Runtime Service Account
+## GCP Runtime Service Account
 
-`betternat_gcp_gateway` is still an experimental alpha resource. The default
-forwarding path does not require a dedicated runtime service account, but the
-experimental `enable_agent_ha = true` path does.
+`betternat_gcp_gateway` uses a runtime service account when
+`enable_agent_ha = true`. The GCP module enables Firestore-backed agent HA by
+default, so normal GCP module installs need a runtime service account.
 
 When `enable_agent_ha = true`, set:
 
@@ -241,14 +241,13 @@ owned by another Terraform stack or infra-admin workflow.
 When `capacity_repair_mode = "mig"`, the Terraform execution identity also
 needs Compute Engine permissions to create, read, and delete the provider-owned
 instance template and zonal managed instance group, and to list managed
-instances while selecting the initial route target. Keep this mode limited to
-disposable GCP GA-readiness validation until live replacement evidence is
-recorded.
+instances while selecting the initial route target. This is the expected GCP
+capacity repair mode for user-facing installs. `unmanaged` remains an escape
+hatch for narrow validation and debugging.
 
-Current GCP limitation: stable public egress IP handover has an implementation
-slice for existing regional static external IPv4 addresses, but live GCE
-handover validation and provider-owned static-address lifecycle management are
-still GA gates. The gateway subnet also needs Private Google Access or an
-equivalent private path to Google APIs; otherwise a gateway can lose API access
-after deleting its temporary external access config and before attaching the
-shared static address.
+Stable public egress IP handover uses an existing regional static external IPv4
+address. BetterNAT does not create or delete that address yet; manage it in the
+calling Terraform stack or an infra-admin stack. The gateway subnet also needs
+Private Google Access or an equivalent private path to Google APIs; otherwise a
+gateway can lose API access after deleting its temporary external access config
+and before attaching the shared static address.

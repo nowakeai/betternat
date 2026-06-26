@@ -18,8 +18,11 @@ BetterNAT is designed to answer these questions:
 - Which node is active for an HA group?
 - Is the HA status fresh?
 - Does the DynamoDB lease match the local owner view?
+- Does the Firestore lease match the local owner view on GCP?
 - Do private route tables point to the expected active target?
 - In stable egress IP mode, is the EIP associated with the expected owner?
+- On GCP stable public identity, does the regional address point to the
+  expected active gateway?
 - Is the LoxiLB datapath ready?
 - Are SNAT rule counters increasing?
 - Are failover attempts and durations being recorded?
@@ -29,7 +32,8 @@ BetterNAT is designed to answer these questions:
 
 ### Terraform State And Outputs
 
-The `betternat_aws_gateway` resource records deployment state that is useful for runbooks and dashboards:
+The `betternat_aws_gateway` and `betternat_gcp_gateway` resources record
+deployment state that is useful for runbooks and dashboards:
 
 - `status`
 - `control_plane_status_json`
@@ -39,7 +43,8 @@ The `betternat_aws_gateway` resource records deployment state that is useful for
 - `standby_instance_ids`
 - `rollback_route_targets_json`
 
-Use these outputs to locate the ASG, route tables, active nodes, and expected public egress identity.
+Use these outputs to locate the ASG or MIG, route tables or tagged route,
+active nodes, and expected public egress identity.
 
 Example:
 
@@ -130,11 +135,14 @@ Treat both files as starting points. Tune alert durations, severity labels,
 dashboard variables, and routing labels to match your monitoring stack and
 incident policy.
 
-### AWS Control Plane
+### Cloud Control Plane
 
-Use AWS APIs to cross-check what the agent reports: ASG membership, route table
-targets, EIP association, and DynamoDB lease state. The exact AWS CLI commands
-live in the [Operations Guide](OPERATIONS_GUIDE.md#aws-checks).
+Use cloud APIs to cross-check what the agent reports. On AWS, inspect ASG
+membership, route table targets, EIP association, and DynamoDB lease state. On
+GCP, inspect MIG membership, tagged route target, regional address user, and
+Firestore-backed lease/handover state through gateway-local CLI. Exact commands
+live in the [Operations Guide](OPERATIONS_GUIDE.md#aws-checks) and
+[GCP Checks](OPERATIONS_GUIDE.md#gcp-checks).
 
 ### Gateway Logs And Datapath State
 
@@ -217,7 +225,7 @@ Route does not match the expected active owner:
 betternat_route_target_match == 0
 ```
 
-Stable EIP does not match the expected active owner:
+Stable public identity does not match the expected active owner:
 
 ```promql
 betternat_public_identity_match == 0

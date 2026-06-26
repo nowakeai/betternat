@@ -1,13 +1,13 @@
 # BetterNAT
 
-Self-owned, observable, highly available egress for high-volume AWS private subnet workloads.
+Self-owned, observable, highly available egress for high-volume private subnet
+workloads.
 
-If you are evaluating BetterNAT as a NAT Gateway replacement, start with the
-Terraform shape below, then read the [Cost Model](docs/user/reference/COST_MODEL.md),
-check [Limitations](docs/user/reference/LIMITATIONS.md), run the
-[Quick Start](docs/user/getting-started/QUICK_START.md) in a disposable VPC, and
-use the [Operations Guide](docs/user/operations/OPERATIONS_GUIDE.md) for day-2
-checks.
+If you are evaluating BetterNAT, start with the Terraform module for your cloud,
+then read the [Cost Model](docs/user/reference/COST_MODEL.md), check
+[Limitations](docs/user/reference/LIMITATIONS.md), run a disposable-environment
+quick start, and use the [Operations Guide](docs/user/operations/OPERATIONS_GUIDE.md)
+for day-2 checks.
 
 BetterNAT targets the NAT Gateway bill line that hurts at scale: per-GB data processing. It is built for crawler fleets, blockchain/RPC nodes syncing from public peers, Kubernetes nodes pulling large public images, and other private workloads that download tens of TB per month from the public internet.
 
@@ -37,12 +37,13 @@ Assumptions: `$0.045/GB` NAT Gateway processing, `$0.045/hour` for one NAT Gatew
 ## What You Get
 
 - Lower NAT Gateway processing cost for suitable high-volume workloads.
-- Stable egress IP failover mode with a shared EIP.
-- ASG-backed node pool with active/standby ownership.
+- Stable egress IP failover mode on AWS with a shared EIP.
+- ASG-backed node pool on AWS and MIG-backed node pool on GCP.
 - LoxiLB/eBPF datapath for node-local SNAT.
-- DynamoDB lease/fencing for route and EIP ownership.
+- DynamoDB lease/fencing on AWS and Firestore lease/fencing on GCP.
 - Prometheus metrics for HA, datapath, traffic counters, and failover state.
 - AWS Terraform module install UX through `nowakeai/betternat/aws`.
+- GCP Terraform module install UX through `nowakeai/betternat/google`.
 - Advanced provider resource surface through `nowakeai/betternat`.
 - Rollback-oriented route ownership model for existing VPC adoption.
 
@@ -51,7 +52,16 @@ not have a product nftables fallback on AWS, GCP, or future clouds. Legacy
 nftables/nf_conntrack code may remain in the repository while it is phased out,
 but it is not an operator recovery path or release acceptance substitute.
 
+## Cloud Support
+
+| Cloud | Install surface | HA backend | Capacity repair | Public identity | Main limit |
+| --- | --- | --- | --- | --- | --- |
+| AWS | `nowakeai/betternat/aws` | DynamoDB lease/fencing | Auto Scaling Group | shared EIP when `stable_egress_ip=true` | one AZ per HA group |
+| GCP | `nowakeai/betternat/google` | Firestore lease/fencing | zonal Managed Instance Group | optional existing regional static external IPv4; connectivity-first handover may temporarily use the target gateway public IP | single-zone gateway group |
+
 ## Quick Start
+
+### AWS
 
 Use the BetterNAT AWS Terraform module:
 
@@ -165,6 +175,39 @@ Then follow:
 - [Existing VPC Install](docs/user/getting-started/EXISTING_VPC_INSTALL.md) only after the disposable run, when you are ready to test against real route tables.
 - [Configuration](docs/user/getting-started/CONFIGURATION.md) for all `betternat_aws_gateway` fields.
 
+### GCP
+
+Use the BetterNAT GCP Terraform module:
+
+```hcl
+module "betternat" {
+  source  = "nowakeai/betternat/google"
+  version = "~> 0.2"
+
+  name       = "prod-egress"
+  project_id = var.project_id
+  region     = "us-west2"
+  zone       = "us-west2-a"
+
+  network    = google_compute_network.main.name
+  subnetwork = google_compute_subnetwork.private.name
+  client_tag = "private-egress-client"
+
+  private_cidrs = ["10.10.0.0/16"]
+
+  betternat_version = "v0.2.0"
+
+  manage_runtime_service_account = true
+  manage_runtime_iam             = true
+}
+```
+
+Run the [GCP Quick Start](docs/user/getting-started/GCP_QUICK_START.md) in a
+disposable VPC before replacing a real egress path. GCP uses a tagged static
+route, Firestore coordination, and zonal MIG capacity repair. When stable public
+identity is enabled, BetterNAT preserves outbound connectivity first and then
+converges the static public IP.
+
 BetterNAT uses LoxiLB as the local datapath inside each node; see the [LoxiLB overview](https://github.com/loxilb-io/loxilb/assets/75648333/87da0183-1a65-493f-b6fe-5bc738ba5468) and [standalone mode docs](https://github.com/loxilb-io/loxilbdocs/blob/main/docs/standalone.md).
 
 ## Verify
@@ -256,8 +299,8 @@ Architecture docs:
 
 Current scope:
 
-- AWS only.
 - One AZ per HA group. Multi-AZ gateway groups are planned for a later release.
+- GCP gateway groups are single-zone today.
 - Terraform provider first.
 - No public BetterNAT AMI yet.
 - Default install path is Terraform plus cloud-init bootstrap on an explicit

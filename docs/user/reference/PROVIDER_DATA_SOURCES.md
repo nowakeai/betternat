@@ -114,9 +114,10 @@ Outputs:
 | Name | Description |
 | --- | --- |
 | `gateway_statuses` | GCE instance status by provider-owned gateway instance name. |
-| `egress_public_ips` | Per-gateway public IPv4 addresses. Stable public identity is not supported in this alpha. |
+| `egress_public_ips` | Per-gateway public IPv4 addresses. Stable public identity, when configured, is checked through gateway-local status and GCP address ownership. |
 | `route_target` | Current route next-hop instance base name. |
 | `status` | Best-effort summary: `active` when gateway instances and route target are present, otherwise `missing`. |
 
-This is an alpha validation surface. It does not report BetterNAT agent lease
-state, LoxiLB counters, or stable public IP ownership on GCP.
+This data source reports GCP Compute state only. It does not replace
+gateway-local `betternat status`, `doctor --live`, Prometheus metrics, or
+Firestore handover history for runtime HA checks.

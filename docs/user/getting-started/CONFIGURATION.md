@@ -92,9 +92,10 @@ Capacity-only updates are intended to be in-place. Other topology or bootstrap c
 | Name | Default | Description |
 | --- | --- | --- |
 | `datapath_engine` | `loxilb` | BetterNAT node datapath. |
-| `fallback_datapath_engine` | `nftables` | Legacy debug value retained for compatibility while nftables code remains. It is not a supported product fallback and must not be used to pass a deployment where LoxiLB is not ready. |
 
-LoxiLB has its own eBPF conntrack state. Linux `nf_conntrack_max` is not the primary LoxiLB capacity knob.
+LoxiLB is the supported BetterNAT datapath. BetterNAT does not expose nftables
+fallback behavior as a product path. LoxiLB has its own eBPF conntrack state;
+Linux `nf_conntrack_max` is not the primary LoxiLB capacity knob.
 
 ### Egress Identity
 
@@ -207,31 +208,25 @@ data "betternat_gcp_gateway_status" "egress" {
 }
 ```
 
-## GCP Alpha Resource
+## GCP Resource
 
-`betternat_gcp_gateway` is an alpha resource for disposable GCP validation.
-It manages provider-owned GCE gateway VMs with `canIpForward=true`, LoxiLB
-agent HA bootstrap when enabled, and one tagged default route to the active
-gateway.
-It is not yet a GCP product-parity HA release. BetterNAT's HA value over a raw
-LoxiLB appliance requires live agent-owned lease fencing, route mutation,
-passive failover, proactive handover, observability, and rollback evidence.
+Prefer the `nowakeai/betternat/google` module for GCP installs. The
+`betternat_gcp_gateway` resource is the lower-level provider primitive for
+module authors and advanced validation workflows.
 
-The runtime now has live evidence for Firestore-backed lease coordination,
-GCP tagged-route mutation, passive failover, proactive handover, LoxiLB-on-GCE
-restart replay, support bundles, and provider-owned lifecycle cleanup. Treat
-the resource as alpha until raw LoxiLB comparison, failure injection,
-protocol-level failover coverage, GKE migration safety, stable public identity,
-capacity repair, packaging, and release-contract gates are complete.
+It manages provider-owned GCE forwarding gateways or a zonal MIG, LoxiLB
+bootstrap, Firestore-backed agent HA when enabled, one tagged default route to
+the active gateway, and optional stable public identity through an existing
+regional static external IPv4 address.
 
 Minimal shape:
 
 ```hcl
 resource "betternat_gcp_gateway" "egress" {
   name       = "lab-egress"
-  project_id = "shared-resources-alt"
-  region     = "us-west1"
-  zone       = "us-west1-a"
+  project_id = var.project_id
+  region     = "us-west2"
+  zone       = "us-west2-a"
 
   network    = google_compute_network.lab.name
   subnetwork = google_compute_subnetwork.lab.name
@@ -244,8 +239,8 @@ resource "betternat_gcp_gateway" "egress" {
 Private client VMs must have the configured `client_tag` and no broader route
 with a higher priority that bypasses the BetterNAT route.
 
-Experimental provider-rendered GCP agent HA bootstrap is available behind an
-explicit switch:
+Provider-rendered GCP agent HA bootstrap is available behind an explicit
+switch:
 
 ```hcl
 resource "betternat_gcp_gateway" "egress" {
@@ -266,7 +261,7 @@ resource "betternat_gcp_gateway" "egress" {
   firestore_location_id          = "us-west2"
   manage_runtime_service_account = true
   manage_runtime_iam             = true
-  betternat_version              = "v0.1.0"
+  betternat_version              = "v0.2.0"
 }
 ```
 

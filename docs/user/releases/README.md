@@ -23,6 +23,7 @@ Rules:
 
 Current releases:
 
+- [v0.2.0](v0.2/v0.2.0.md)
 - [v0.1.0](v0.1/v0.1.0.md)
 - [v0.1.0-alpha.8](v0.1/v0.1.0-alpha.8.md)
 - [v0.1.0-alpha.7](v0.1/v0.1.0-alpha.7.md)

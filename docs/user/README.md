@@ -1,9 +1,9 @@
 # BetterNAT User Documentation
 
-This directory is organized by user task. Start with the evaluation path, then
-use installation, operations, and reference docs as needed.
+This directory is organized by user task. Start with the evaluation path for
+your cloud, then use installation, operations, and reference docs as needed.
 
-## Evaluation Path
+## AWS Evaluation Path
 
 If you are a DevOps engineer evaluating BetterNAT because NAT Gateway is getting
 expensive, use this order:
@@ -20,10 +20,27 @@ expensive, use this order:
 6. [Existing VPC Install](getting-started/EXISTING_VPC_INSTALL.md) — use only
    after the disposable run and rollback path are understood.
 
+## GCP Evaluation Path
+
+If you are evaluating BetterNAT for private GCP workloads, use this order:
+
+1. [Limitations](reference/LIMITATIONS.md) — check the GCP HA, single-zone,
+   public identity, and connection-recovery tradeoffs.
+2. [GCP Quick Start](getting-started/GCP_QUICK_START.md) — run a disposable
+   VPC test using the GCP module.
+3. [IAM Policy](reference/IAM_POLICY.md) — review Terraform execution and
+   runtime service account permissions.
+4. [Operations Guide](operations/OPERATIONS_GUIDE.md) — inspect status,
+   Firestore lease state, route target, metrics, and cleanup expectations.
+5. [Rollback Guide](operations/ROLLBACK_GUIDE.md) — review route, static
+   address, Firestore, and IAM cleanup before touching a real egress path.
+
 ## Getting Started
 
 - [Quick Start](getting-started/QUICK_START.md) — Disposable-VPC install,
-  verification, destroy, and cleanup guide.
+  verification, destroy, and cleanup guide for AWS.
+- [GCP Quick Start](getting-started/GCP_QUICK_START.md) — Disposable-VPC
+  install, verification, destroy, and cleanup guide for GCP.
 - [Existing VPC Install](getting-started/EXISTING_VPC_INSTALL.md) — Existing
   VPC install and route ownership warnings.
 - [EKS Terraform Module Integration](getting-started/EKS_TERRAFORM_MODULE_INTEGRATION.md) —

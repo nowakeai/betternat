@@ -24,26 +24,23 @@ user docs should explain decisions, workflows, limits, and recovery steps.
 - Do not document nftables fallback as a product path. LoxiLB is the supported
   datapath across clouds.
 
-## Current First-Pass Findings
+## Initial First-Pass Findings Addressed
 
-- Root `README.md` is still AWS-oriented and does not yet give GCP users a
-  clear entry point.
-- `docs/user/` has a strong AWS evaluation and operations path, but no GCP
-  install path with prerequisites, route ownership, Firestore, IAM, validation,
-  destroy, and rollback.
-- `docs/user/reference/LIMITATIONS.md` still says current platform scope is
-  AWS only.
-- `docs/user/operations/OPERATIONS_GUIDE.md` mentions GCP live doctor/status,
-  but the operational checks are still mostly AWS-shaped.
-- The GCP module README is a useful Registry seed, but it needs more user
-  context before publication: when to use stable public identity, Private
-  Google Access requirements, cleanup expectations, and alpha/GA language.
-- The provider schema includes GCP resource descriptions, but the main repo
-  should have Registry-style provider docs for `betternat_gcp_gateway` and
-  `betternat_gcp_gateway_status` before users see the release.
-- Research docs contain the best GCP evidence, especially MIG capacity repair,
-  stable public identity, and connectivity-first handover, but that evidence is
-  not yet distilled into user docs.
+This checklist was created from these first-pass gaps, all addressed by the
+current documentation pass:
+
+- root `README.md` needed a GCP entry point and cloud-support table,
+- `docs/user/` needed a GCP install path with prerequisites, route ownership,
+  Firestore, IAM, validation, destroy, and rollback,
+- `docs/user/reference/LIMITATIONS.md` needed to stop presenting current scope
+  as AWS-only,
+- `docs/user/operations/OPERATIONS_GUIDE.md` needed GCP-specific operational
+  checks rather than AWS-shaped checks only,
+- the GCP module README needed Registry-friendly user context before
+  publication,
+- the provider needed Registry-style docs for `betternat_gcp_gateway` and
+  `betternat_gcp_gateway_status`,
+- GCP research evidence needed to be distilled into user-facing docs.
 
 ## Source Of Truth Map
 
@@ -61,111 +58,111 @@ user docs should explain decisions, workflows, limits, and recovery steps.
 
 ### Main User Entry Points
 
-- [ ] Update root `README.md` to present BetterNAT as module-first:
+- [x] Update root `README.md` to present BetterNAT as module-first:
   `nowakeai/betternat/aws` for AWS and `nowakeai/betternat/google` for GCP
   when GCP is published.
-- [ ] Add a short cloud-support table to root `README.md` with support level,
+- [x] Add a short cloud-support table to root `README.md` with support level,
   HA backend, capacity repair model, stable public identity behavior, and main
   limitation per cloud.
-- [ ] Update `docs/user/README.md` so AWS and GCP users can follow separate
+- [x] Update `docs/user/README.md` so AWS and GCP users can follow separate
   evaluation paths without reading research docs.
-- [ ] Keep the top-level value proposition concise: cost, observability, HA,
+- [x] Keep the top-level value proposition concise: cost, observability, HA,
   and self-managed ownership. Move cloud-specific implementation detail to the
   getting-started and reference pages.
 
 ### GCP Getting Started
 
-- [ ] Add `docs/user/getting-started/GCP_QUICK_START.md`.
-- [ ] Cover prerequisites: Terraform, Google provider auth, enabled APIs,
+- [x] Add `docs/user/getting-started/GCP_QUICK_START.md`.
+- [x] Cover prerequisites: Terraform, Google provider auth, enabled APIs,
   existing VPC/subnetwork, private-client network tag, Firestore Native
   database, Compute Engine, IAM, and Private Google Access when stable public
   identity is enabled.
-- [ ] Use the GCP module as the default install surface:
+- [x] Use the GCP module as the default install surface:
   `source = "nowakeai/betternat/google"`.
-- [ ] Explain route ownership: BetterNAT owns the tagged private default route
+- [x] Explain route ownership: BetterNAT owns the tagged private default route
   named by `route_name`; users must not manage another route with that name.
-- [ ] Explain `betternat_version`: it must point to a GCP-capable runtime
+- [x] Explain `betternat_version`: it must point to a GCP-capable runtime
   release unless explicit artifact URLs and checksums are supplied in a
   maintainer-only validation run.
-- [ ] Include verification commands for private-client egress, route target,
+- [x] Include verification commands for private-client egress, route target,
   `betternat status`, `betternat doctor --live`, Prometheus metrics, and
   handover history.
-- [ ] Include destroy and residual checks for GCE instances, routes, firewall
+- [x] Include destroy and residual checks for GCE instances, routes, firewall
   rules, addresses, service accounts, and Firestore handover records.
 
 ### GCP User Reference
 
-- [ ] Add or extend a GCP IAM reference with Terraform execution permissions,
+- [x] Add or extend a GCP IAM reference with Terraform execution permissions,
   runtime service account permissions, Firestore permissions, route mutation,
   MIG repair, and stable public identity permissions.
-- [ ] Update `docs/user/reference/LIMITATIONS.md` so platform scope no longer
+- [x] Update `docs/user/reference/LIMITATIONS.md` so platform scope no longer
   says AWS-only once GCP is included.
-- [ ] In limitations, clearly distinguish GCP route-only/non-stable behavior
+- [x] In limitations, clearly distinguish GCP route-only/non-stable behavior
   from stable public identity behavior.
-- [ ] Document the GCP connectivity-first handover contract: preserve outbound
+- [x] Document the GCP connectivity-first handover contract: preserve outbound
   connectivity first; the stable public IP may converge afterward.
-- [ ] Document that active flows may reset and observed recovery timings are
+- [x] Document that active flows may reset and observed recovery timings are
   validation evidence, not an SLA.
-- [ ] Update `docs/user/reference/PROVIDER_DATA_SOURCES.md` for
+- [x] Update `docs/user/reference/PROVIDER_DATA_SOURCES.md` for
   `betternat_gcp_gateway_status`.
 
 ### Operations And Recovery
 
-- [ ] Add GCP-specific operational checks to `docs/user/operations/OPERATIONS_GUIDE.md`:
+- [x] Add GCP-specific operational checks to `docs/user/operations/OPERATIONS_GUIDE.md`:
   Firestore lease owner, registry freshness, GCP route target, MIG capacity,
   stable address user, and gateway datapath readiness.
-- [ ] Update `docs/user/operations/FAILURE_MODES.md` with GCP passive failover,
+- [x] Update `docs/user/operations/FAILURE_MODES.md` with GCP passive failover,
   proactive handover, Compute/Firestore API errors, MIG repair, and stable
   public identity convergence.
-- [ ] Update `docs/user/operations/ROLLBACK_GUIDE.md` with GCP route restore,
+- [x] Update `docs/user/operations/ROLLBACK_GUIDE.md` with GCP route restore,
   static address cleanup, Firestore record cleanup, and managed IAM cleanup.
-- [ ] Update `docs/user/operations/OBSERVABILITY_GUIDE.md` with GCP status and
+- [x] Update `docs/user/operations/OBSERVABILITY_GUIDE.md` with GCP status and
   doctor behavior, metric interpretation, and support-bundle expectations.
-- [ ] Keep SSH as a testing/access option only where explicitly enabled. Do not
+- [x] Keep SSH as a testing/access option only where explicitly enabled. Do not
   imply production GCP deployments require SSH.
 
 ### Terraform Provider Registry Docs
 
-- [ ] Ensure provider docs include a concise overview that says modules are the
+- [x] Ensure provider docs include a concise overview that says modules are the
   recommended user surface and provider resources are advanced primitives.
-- [ ] Add Registry-style docs for `betternat_aws_gateway`.
-- [ ] Add Registry-style docs for `betternat_gcp_gateway`.
-- [ ] Add Registry-style docs for `betternat_runtime_artifacts`.
-- [ ] Add Registry-style docs for `betternat_aws_gateway_status`.
-- [ ] Add Registry-style docs for `betternat_gcp_gateway_status`.
-- [ ] Make GCP resource docs clear about replacement semantics: updates are
+- [x] Add Registry-style docs for `betternat_aws_gateway`.
+- [x] Add Registry-style docs for `betternat_gcp_gateway`.
+- [x] Add Registry-style docs for `betternat_runtime_artifacts`.
+- [x] Add Registry-style docs for `betternat_aws_gateway_status`.
+- [x] Add Registry-style docs for `betternat_gcp_gateway_status`.
+- [x] Make GCP resource docs clear about replacement semantics: updates are
   not in-place for the alpha resource.
-- [ ] Avoid exposing maintainer-only artifact override paths as normal user
+- [x] Avoid exposing maintainer-only artifact override paths as normal user
   examples.
 
 ### Terraform Module Registry Docs
 
-- [ ] AWS module README: confirm the first screen is still the recommended AWS
+- [x] AWS module README: confirm the first screen is still the recommended AWS
   path and does not over-explain provider internals.
-- [ ] AWS module README: add a short link path to Quick Start, limitations,
+- [x] AWS module README: add a short link path to Quick Start, limitations,
   operations, and rollback docs.
-- [ ] GCP module README: add a "When to use this module" section for private
+- [x] GCP module README: add a "When to use this module" section for private
   workloads using tagged routes in an existing VPC.
-- [ ] GCP module README: add a "Before you apply" checklist for APIs,
+- [x] GCP module README: add a "Before you apply" checklist for APIs,
   Firestore, runtime IAM, VPC tag, Private Google Access, and cleanup scope.
-- [ ] GCP module README: explain default `capacity_repair_mode = "mig"` and
+- [x] GCP module README: explain default `capacity_repair_mode = "mig"` and
   why `unmanaged` is an escape hatch rather than the GA path.
-- [ ] GCP module README: explain stable public identity in user terms,
+- [x] GCP module README: explain stable public identity in user terms,
   including the connectivity-first transition behavior.
-- [ ] GCP module examples: keep examples minimal, but ensure each example has
+- [x] GCP module examples: keep examples minimal, but ensure each example has
   enough variables and comments to be runnable after release.
-- [ ] GCP module release notes: remove "do not publish" language before the
+- [x] GCP module release notes: remove "do not publish" language before the
   actual release, and include validation evidence and known limits.
 
 ### Release Notes And Cross-Linking
 
-- [ ] Add runtime release notes for the GCP-capable BetterNAT release.
-- [ ] Add provider release notes that call out the Terraform surface reset and
+- [x] Add runtime release notes for the GCP-capable BetterNAT release.
+- [x] Add provider release notes that call out the Terraform surface reset and
   GCP support level.
-- [ ] Add AWS module release notes.
-- [ ] Add GCP module release notes.
-- [ ] Cross-link release notes to the exact quick start and limitations pages.
-- [ ] Verify all user-facing links from root README, docs index, AWS module
+- [x] Add AWS module release notes.
+- [x] Add GCP module release notes.
+- [x] Cross-link release notes to the exact quick start and limitations pages.
+- [x] Verify all user-facing links from root README, docs index, AWS module
   README, GCP module README, and provider docs.
 
 ## Suggested Review Order

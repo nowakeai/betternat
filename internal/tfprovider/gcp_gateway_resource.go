@@ -82,7 +82,7 @@ func (r *GCPGatewayResource) Metadata(_ context.Context, req resource.MetadataRe
 
 func (r *GCPGatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "BetterNAT GCP alpha gateway resource. By default this manages GCE forwarding gateway VMs and a tagged default route for substrate validation. The experimental enable_agent_ha path renders BetterNAT agent bootstrap for Firestore-backed HA with optional stable public identity. GCP remains alpha until raw LoxiLB comparison, packaging, and release-contract gates are complete.",
+		MarkdownDescription: "BetterNAT GCP gateway resource. Prefer the `nowakeai/betternat/google` module for normal installs. This lower-level resource manages GCE forwarding gateway VMs or a zonal MIG, a tagged default route, Firestore-backed HA when enabled, LoxiLB bootstrap, and optional stable public identity through an existing regional static external IPv4 address.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{Computed: true},
 			"name": schema.StringAttribute{
@@ -142,7 +142,7 @@ func (r *GCPGatewayResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional:            true,
 				Computed:            true,
 				Default:             stringdefault.StaticString("unmanaged"),
-				MarkdownDescription: "Experimental GCP capacity repair mode. `unmanaged` preserves the current provider-owned VM behavior. `mig` creates a zonal Managed Instance Group from an instance template so failed gateway capacity can be replaced by GCE.",
+				MarkdownDescription: "GCP capacity repair mode. `unmanaged` preserves direct provider-owned VM behavior. `mig` creates a zonal Managed Instance Group from an instance template so failed gateway capacity can be replaced by GCE. The GCP module defaults to `mig`.",
 			},
 			"private_cidrs": schema.ListAttribute{
 				ElementType:         types.StringType,
@@ -163,18 +163,18 @@ func (r *GCPGatewayResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional:            true,
 				Computed:            true,
 				Default:             booldefault.StaticBool(false),
-				MarkdownDescription: "Experimental. When true with enable_agent_ha, the provider creates and deletes the runtime service account used by gateway VMs. Leave false when an infra-admin stack owns the service account.",
+				MarkdownDescription: "When true with enable_agent_ha, the provider creates and deletes the runtime service account used by gateway VMs. Leave false when an infra-admin stack owns the service account.",
 			},
 			"runtime_iam_permissions": schema.ListAttribute{
 				ElementType:         types.StringType,
 				Computed:            true,
-				MarkdownDescription: "Permissions required by the experimental GCP agent HA runtime service account.",
+				MarkdownDescription: "Permissions required by the GCP agent HA runtime service account.",
 			},
 			"manage_runtime_iam": schema.BoolAttribute{
 				Optional:            true,
 				Computed:            true,
 				Default:             booldefault.StaticBool(false),
-				MarkdownDescription: "Experimental. When true with enable_agent_ha, the provider creates or updates a project-level BetterNAT runtime custom role and binds service_account_email to it. The default role ID is derived from the gateway name. Leave false when IAM is managed outside this resource.",
+				MarkdownDescription: "When true with enable_agent_ha, the provider creates or updates a project-level BetterNAT runtime custom role and binds service_account_email to it. The default role ID is derived from the gateway name. Leave false when IAM is managed outside this resource.",
 			},
 			"runtime_iam_role_id": schema.StringAttribute{
 				Optional:            true,
@@ -185,7 +185,7 @@ func (r *GCPGatewayResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional:            true,
 				Computed:            true,
 				Default:             booldefault.StaticBool(false),
-				MarkdownDescription: "Experimental. When true, renders BetterNAT agent config and cloud-init user data for GCP HA using Firestore coordination and optional stable public identity. This remains an alpha validation path until the remaining GCP release gates are complete.",
+				MarkdownDescription: "When true, renders BetterNAT agent config and cloud-init user data for GCP HA using Firestore coordination and optional stable public identity.",
 			},
 			"betternat_version": schema.StringAttribute{
 				Optional:            true,
@@ -225,7 +225,7 @@ func (r *GCPGatewayResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional:            true,
 				Computed:            true,
 				Default:             stringdefault.StaticString("(default)"),
-				MarkdownDescription: "Firestore Native database ID used by the experimental GCP agent HA path.",
+				MarkdownDescription: "Firestore Native database ID used by the GCP agent HA path.",
 			},
 			"firestore_location_id": schema.StringAttribute{
 				Optional:            true,
@@ -236,11 +236,11 @@ func (r *GCPGatewayResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional:            true,
 				Computed:            true,
 				Default:             booldefault.StaticBool(false),
-				MarkdownDescription: "Experimental. When true with enable_agent_ha, the provider creates and deletes the Firestore Native database used for GCP HA coordination. Leave false when the database is owned outside this resource.",
+				MarkdownDescription: "When true with enable_agent_ha, the provider creates and deletes the Firestore Native database used for GCP HA coordination. Leave false when the database is owned outside this resource.",
 			},
 			"stable_public_identity_address_name": schema.StringAttribute{
 				Optional:            true,
-				MarkdownDescription: "Experimental. Existing regional static external IPv4 address name used for GCP shared public identity handover when enable_agent_ha is true. The provider does not create or delete this address yet.",
+				MarkdownDescription: "Existing regional static external IPv4 address name used for GCP shared public identity handover when enable_agent_ha is true. The provider does not create or delete this address.",
 			},
 			"peer_api_auth_token": schema.StringAttribute{
 				Computed:            true,

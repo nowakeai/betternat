@@ -28,6 +28,7 @@ supported fallback path.
 - [spec-v0.md](spec-v0.md) — v0 product and implementation spec.
 - [user/README.md](user/README.md) — User documentation index by task.
 - [user/getting-started/QUICK_START.md](user/getting-started/QUICK_START.md) — Disposable-VPC install, verification, destroy, and cleanup guide.
+- [user/getting-started/GCP_QUICK_START.md](user/getting-started/GCP_QUICK_START.md) — Disposable GCP install, verification, destroy, and cleanup guide.
 - [release/RELEASE_CHECKLIST.md](release/RELEASE_CHECKLIST.md) — Release gates.
 
 ## User Docs
@@ -39,6 +40,7 @@ Read them in this order for the first full pass:
 - [user/reference/COST_MODEL.md](user/reference/COST_MODEL.md) — NAT Gateway processing-fee model, BetterNAT cost formula, example savings, endpoint guidance, and CLI estimate usage.
 - [user/reference/LIMITATIONS.md](user/reference/LIMITATIONS.md) — SLA, failover, cost, performance, bootstrap, and tuning limitations.
 - [user/getting-started/QUICK_START.md](user/getting-started/QUICK_START.md) — Quick start for a disposable AWS VPC.
+- [user/getting-started/GCP_QUICK_START.md](user/getting-started/GCP_QUICK_START.md) — Quick start for a disposable GCP VPC.
 - [user/operations/OPERATIONS_GUIDE.md](user/operations/OPERATIONS_GUIDE.md) — Day-2 operations: CLI, metrics, alerts, AWS checks, SSM access, troubleshooting, and cleanup.
 - [user/getting-started/EKS_TERRAFORM_MODULE_INTEGRATION.md](user/getting-started/EKS_TERRAFORM_MODULE_INTEGRATION.md) — Module-level `nat_backend` switch for existing EKS/networking Terraform repos.
 - [user/getting-started/EXISTING_VPC_INSTALL.md](user/getting-started/EXISTING_VPC_INSTALL.md) — Existing-VPC install and route ownership warnings.
@@ -51,6 +53,7 @@ Read them in this order for the first full pass:
 - [user/operations/UPGRADE_REPLACEMENT_GUIDE.md](user/operations/UPGRADE_REPLACEMENT_GUIDE.md) — In-place capacity updates, explicit replacement, blue/green upgrade workflow, and rolling-upgrade limits.
 - [user/operations/FAILURE_MODES.md](user/operations/FAILURE_MODES.md) — Failure-mode behavior and recovery signals.
 - [user/releases/README.md](user/releases/README.md) — Release notes index and release-note rules.
+- [user/releases/v0.2/v0.2.0.md](user/releases/v0.2/v0.2.0.md) — Draft 0.2.0 release notes for Terraform surface reset and GCP support.
 - [user/releases/v0.1/v0.1.0.md](user/releases/v0.1/v0.1.0.md) — 0.1.0 GA release notes.
 - [user/releases/v0.1/v0.1.0-alpha.8.md](user/releases/v0.1/v0.1.0-alpha.8.md) — Runtime alpha release notes and validation caveats.
 - [user/releases/v0.1/v0.1.0-alpha.7.md](user/releases/v0.1/v0.1.0-alpha.7.md) — Provider-module support release notes for split provider alpha8.
@@ -61,6 +64,13 @@ Read them in this order for the first full pass:
 ## Release And Packaging
 
 These are maintainer-facing release documents.
+
+- [index.md](index.md) — Terraform Registry provider overview.
+- [resources/aws_gateway.md](resources/aws_gateway.md) — Terraform Registry docs for `betternat_aws_gateway`.
+- [resources/gcp_gateway.md](resources/gcp_gateway.md) — Terraform Registry docs for `betternat_gcp_gateway`.
+- [data-sources/runtime_artifacts.md](data-sources/runtime_artifacts.md) — Terraform Registry docs for `betternat_runtime_artifacts`.
+- [data-sources/aws_gateway_status.md](data-sources/aws_gateway_status.md) — Terraform Registry docs for `betternat_aws_gateway_status`.
+- [data-sources/gcp_gateway_status.md](data-sources/gcp_gateway_status.md) — Terraform Registry docs for `betternat_gcp_gateway_status`.
 
 - [release/RELEASE_CHECKLIST.md](release/RELEASE_CHECKLIST.md) — Release gates, evidence requirements, validation commands, and decision template.
 - [release/ALPHA_RELEASE_DECISION_2026-06-24.md](release/ALPHA_RELEASE_DECISION_2026-06-24.md) — Current alpha ship decision, evidence, limitations, and deferred work.

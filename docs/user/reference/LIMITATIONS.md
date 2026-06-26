@@ -4,7 +4,8 @@ Date: 2026-06-21
 
 ## Release Quality
 
-BetterNAT is a self-managed AWS egress gateway deployment.
+BetterNAT is a self-managed egress gateway deployment for private subnet
+workloads.
 
 It is not a drop-in AWS NAT Gateway SLA replacement.
 
@@ -17,21 +18,22 @@ environments, not service-level commitments.
 Continue to a disposable VPC test when all of these are acceptable:
 
 ```text
-AWS-only, one AZ per HA group
-self-managed EC2 gateway nodes
+AWS or GCP module-first Terraform install
+one AWS AZ or one GCP zone per HA group
+self-managed gateway nodes
 new-flow recovery after failover
 possible active-flow resets during failover
 cloud-init bootstrap on a user-selected Linux AMI
-no AWS NAT Gateway equivalent SLA
+no managed NAT Gateway or Cloud NAT equivalent SLA
 ```
 
 Stop or keep AWS NAT Gateway when any of these are hard requirements:
 
 ```text
-AWS-managed service semantics and SLA
+AWS NAT Gateway or Google Cloud NAT managed service semantics and SLA
 active connection preservation
 active-active NAT
-multi-AZ BetterNAT gateway groups are required immediately
+multi-AZ or multi-zone BetterNAT gateway groups are required immediately
 Marketplace or CloudFormation delivery
 strict stable-EIP semantics for every successful packet during transition
 ```
@@ -40,19 +42,18 @@ strict stable-EIP semantics for every successful packet during transition
 
 Current scope:
 
-- AWS only,
-- one AZ per HA group,
+- AWS and GCP,
+- one AWS AZ or one GCP zone per HA group,
 - Terraform provider first,
 - cloud-init bootstrap instead of a public BetterNAT AMI,
 - LoxiLB/eBPF datapath.
 
 Not included:
 
-- multi-cloud runtime,
 - CloudFormation delivery,
 - AWS Marketplace delivery,
 - active-active NAT,
-- multi-AZ BetterNAT gateway groups, planned for a later release,
+- multi-AZ or multi-zone BetterNAT gateway groups, planned for a later release,
 - active connection migration,
 - published BetterNAT AMIs.
 
@@ -67,6 +68,12 @@ During failover:
 - new-flow recovery depends on HA profile, AWS API timing, and standby readiness,
 - stable EIP mode converges back to the shared EIP for new flows,
 - non-stable mode changes public source IP after failover.
+
+On GCP, stable public identity uses an existing regional static external IPv4
+address. GCP handover is connectivity-first: BetterNAT moves private workload
+routes first, then converges the static public identity. During that transition,
+successful new-flow samples may temporarily use the target gateway's ordinary
+public IP before the static IP returns.
 
 Use [Failure Modes](../operations/FAILURE_MODES.md) for behavior by failure
 type and retained validation evidence.
@@ -101,10 +108,10 @@ cloud-init execution.
 
 Boot-to-ready timing is not representative of a future prebuilt AMI.
 
-The default `cloud_init` path uses ordinary auto-assigned public IPv4 addresses
-for bootstrap and management/control-plane egress. In stable EIP mode, the
-shared EIP remains the intended private-workload egress identity; the per-node
-public IPv4 addresses are operational reachability, not fixed allowlist
+The AWS default `cloud_init` path uses ordinary auto-assigned public IPv4
+addresses for bootstrap and management/control-plane egress. In stable EIP
+mode, the shared EIP remains the intended private-workload egress identity; the
+per-node public IPv4 addresses are operational reachability, not fixed allowlist
 addresses.
 
 Stable mode converges back to the shared EIP, but during a transition a
@@ -115,6 +122,30 @@ likely require secondary private IP or ENI based egress identity.
 
 Private prebaked AMIs can opt into `bootstrap_mode="prebaked_ami"`; stable EIP
 deployments in that mode disable per-node auto-assigned public IPv4.
+
+On GCP, gateway nodes use ordinary external access configs unless stable public
+identity is configured. Stable public identity requires an existing regional
+static external IPv4 address and Private Google Access or an equivalent private
+path to Google APIs from the gateway subnet.
+
+## GCP-Specific Semantics
+
+GCP support uses:
+
+- a tagged static route for private-client egress,
+- Firestore Native for lease, registry, and handover records,
+- zonal Managed Instance Group capacity repair by default,
+- LoxiLB on each gateway node,
+- optional existing regional static external IPv4 address handover.
+
+Current GCP limits:
+
+- gateway groups are single-zone,
+- provider resource updates are replacement-oriented,
+- the module does not create or delete the stable public identity address,
+- Private Google Access is required for stable public identity reliability,
+- source-IP continuity during GCP stable identity transition is best effort;
+  connectivity is prioritized over strict per-sample source-IP stability.
 
 Use [Security Hardening](SECURITY_HARDENING.md) for bootstrap and supply-chain
 risk details.

@@ -42,7 +42,7 @@ func (d *GCPGatewayStatusDataSource) Metadata(_ context.Context, req datasource.
 
 func (d *GCPGatewayStatusDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Read-only status for a BetterNAT GCP alpha gateway.",
+		MarkdownDescription: "Read-only GCP Compute status for a BetterNAT GCP gateway.",
 		Attributes: map[string]schema.Attribute{
 			"name": schema.StringAttribute{
 				Required: true,
