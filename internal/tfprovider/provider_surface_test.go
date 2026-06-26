@@ -50,14 +50,14 @@ func TestProviderExposesCloudSpecificSurface(t *testing.T) {
 }
 
 func TestRuntimeArtifacts(t *testing.T) {
-	artifacts, err := runtimeArtifacts("v0.1.0", "linux", "arm64")
+	artifacts, err := runtimeArtifacts("v0.2.0", "linux", "arm64")
 	if err != nil {
 		t.Fatalf("runtime artifacts: %v", err)
 	}
-	if !strings.Contains(artifacts.AgentBinaryURL, "betternat-agent_v0.1.0_linux_arm64") {
+	if !strings.Contains(artifacts.AgentBinaryURL, "betternat-agent_v0.2.0_linux_arm64") {
 		t.Fatalf("unexpected agent artifact URL: %s", artifacts.AgentBinaryURL)
 	}
-	if artifacts.AgentBinarySHA256 != "68ef98b9b55fb7e1eb6874331c91d5755e77d5a27ad8a6af6c0eb742bc0c0305" {
+	if artifacts.AgentBinarySHA256 != "504e42b39d262ef6b0518a7b62628ddaabcd97ff457f7d9bf477cd9f72035d86" {
 		t.Fatalf("unexpected agent checksum: %s", artifacts.AgentBinarySHA256)
 	}
 }
