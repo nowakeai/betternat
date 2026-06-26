@@ -197,6 +197,75 @@ Deleted both Firestore records.
 GCP residual scan passed.
 ```
 
+### Repeatable Smoke Harness Validation
+
+Run: `bnat-gcp-cf2-20260626085310`
+
+The repeat run used the same connectivity-first behavior through the disposable
+Terraform fixture and the protocol failover smoke script.
+
+Artifact hashes:
+
+- `betternat-agent`: `27b2b41b3537b5482a3ae0a0283ab3e253732d56d31f8da6175b731ed80b4f61`
+- `betternat`: `e4176acd18e19e8ba41fcf125851599fe8dfc2cb3855d7afa2a2bdb4fbbd2e74`
+
+The first scripted attempt exposed a harness race rather than a datapath
+failure. During baseline, normal ownership convergence moved the route, lease,
+and static IP from the initially selected gateway to the other gateway. The
+script then tried to start proactive handover from the stale active gateway and
+the agent correctly rejected the target as not visible from that old owner's
+fresh registry view.
+
+The smoke script now refreshes the route owner immediately before triggering
+proactive handover and recomputes the standby target from the current gateway
+instances.
+
+Rerun result:
+
+| Metric | Value |
+| --- | ---: |
+| Samples | `220` |
+| OK | `214` |
+| Failed | `6` |
+| Longest consecutive failures | `6` |
+| First IP | `34.94.161.106` |
+| Middle IP | `34.20.217.40` |
+| Last IP | `34.94.161.106` |
+| IP switches | `2` |
+
+Probe timeline:
+
+```text
+index 0   2026-06-26T09:02:38.602Z ok   34.94.161.106
+index 28  2026-06-26T09:02:58.490Z ok   34.20.217.40
+index 93  2026-06-26T09:03:44.645Z fail curl timeout
+index 98  2026-06-26T09:03:52.213Z fail curl timeout
+index 99  2026-06-26T09:03:53.727Z ok   34.94.161.106
+```
+
+Interpretation:
+
+- Connectivity-first handover again preserved a useful temporary egress path
+  through the target gateway's ephemeral public IP before stable public identity
+  returned.
+- The stable-IP repair window still caused a short outage: `6` failed samples,
+  with about `9.1s` wall-clock from first failed sample to next successful
+  sample because failed curl calls waited for their timeout.
+- `doctor --live` still reported `public_identity` as critical in this run
+  because the live artifact did not pass `region` into the GCP cloud provider
+  factory. The branch fix is to pass the runtime region into the live provider;
+  a later live artifact should no longer report this false diagnostic.
+
+Cleanup:
+
+```text
+Destroyed Terraform resources.
+Deleted the handover-created dynamic route that still referenced the VPC.
+Deleted the artifact bucket.
+Deleted 4 run-scoped Firestore records.
+GCP residual scan passed.
+```
+
 ## Decision
 
 For GCP GA, keep the default design focused on connectivity-first handover over

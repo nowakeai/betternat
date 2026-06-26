@@ -367,6 +367,30 @@ env_probe="BETTERNAT_PROBE_SAMPLES=$samples BETTERNAT_PROBE_INTERVAL=$interval"
 run_client_ssh "nohup env $env_probe bash -lc $(printf '%q' "$remote_background_probe") >/tmp/betternat-gcp-failover-probe.log 2>&1 & echo \$!" >"$output_dir/client-probe-pid.txt"
 sleep 3
 
+current_active="$(route_target)"
+if [[ -z "$current_active" ]]; then
+  echo "route $route_name has no nextHopInstance before trigger" >&2
+  exit 1
+fi
+if [[ "$current_active" != "$active" ]]; then
+  echo "active_before_trigger=$current_active" | tee "$output_dir/active-before-trigger.txt"
+  active="$current_active"
+  standby=""
+  while IFS= read -r candidate; do
+    if [[ "$candidate" != "$active" ]]; then
+      standby="$candidate"
+      break
+    fi
+  done < <("${gcloud_base[@]}" compute instances list --filter "name~${name}-gw" --format='value(name)' | sort)
+  if [[ -z "$client_proxy_gateway" ]]; then
+    client_proxy_gateway="$active"
+  fi
+fi
+if [[ -z "$standby" && "$mode" == "proactive" ]]; then
+  echo "could not find standby gateway for proactive handover before trigger" >&2
+  exit 1
+fi
+
 if [[ "$mode" == "proactive" ]]; then
   echo "trigger=proactive_handover" | tee "$output_dir/failover-trigger.txt"
   run_ssh "$active" "sudo betternat handover start --to '$standby' --host unix:///run/betternat/agent.sock" \

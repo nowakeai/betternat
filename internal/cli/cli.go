@@ -441,6 +441,7 @@ var (
 	newLiveGCPCloudProvider = func(ctx context.Context, cfg config.Config) (cloud.Provider, error) {
 		return gcpcloud.New(ctx, gcpcloud.Config{
 			ProjectID:     cfg.GCP.ProjectID,
+			Region:        cfg.Region,
 			Zone:          doctorGCPZone(cfg),
 			Network:       cfg.GCP.Network,
 			ClientTag:     cfg.GCP.ClientTag,

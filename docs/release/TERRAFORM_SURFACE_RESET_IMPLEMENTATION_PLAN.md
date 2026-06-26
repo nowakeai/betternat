@@ -774,6 +774,15 @@ Append dated notes here during implementation.
   than moving it on `nic0`, so multi-NIC is deferred as a management-plane
   isolation design rather than the current latency solution. Evidence is in
   `docs/research/067-gcp-connectivity-first-and-multinic-results.md`.
+- Re-ran the GCP connectivity-first protocol smoke in
+  `smooth-calling-490406-d9` with run ID `bnat-gcp-cf2-20260626085310`. The
+  first attempt exposed a smoke-harness race where normal ownership convergence
+  changed the active gateway before the trigger; the script now refreshes route
+  owner and standby immediately before proactive handover. The rerun passed
+  with `220` samples, `214` successful, `6` failed, stable IP -> target
+  ephemeral IP -> stable IP behavior, and a final zero-residual GCP scan. The
+  run also exposed and fixed a CLI live-doctor bug where the GCP cloud provider
+  factory did not pass `region` for public-identity diagnostics.
 - Re-locked the global no-nftables-fallback decision across architecture,
   development, testing, and historical research docs. This is a BetterNAT-wide
   product rule, not a GCP exception: LoxiLB is the supported datapath, existing
