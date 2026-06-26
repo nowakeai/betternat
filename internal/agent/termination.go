@@ -54,7 +54,7 @@ func watchGracefulStop(ctx context.Context, cancel context.CancelFunc, handover 
 	go func() {
 		<-ctx.Done()
 		if handover != nil {
-			handoverCtx, handoverCancel := context.WithTimeout(context.Background(), handoverTimeout+5*time.Second)
+			handoverCtx, handoverCancel := detachedHandoverContext()
 			defer handoverCancel()
 			resp := handover(handoverCtx, agentapi.HandoverRequest{
 				RequestID:    fmt.Sprintf("systemd-stop-%d", time.Now().UnixNano()),

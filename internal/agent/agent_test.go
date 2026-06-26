@@ -428,6 +428,41 @@ func TestStandbyHandoverForwardsToActivePeer(t *testing.T) {
 	}
 }
 
+func TestControlHandoverUsesDetachedContext(t *testing.T) {
+	cfg, err := config.Load(strings.NewReader(validHAConfigJSON()))
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	cache := newControlStatusCache(cfg)
+	requestCtx, cancelRequest := context.WithCancel(context.Background())
+	cancelRequest()
+	called := false
+	handler := controlHandler(cache, func(ctx context.Context, req agentapi.HandoverRequest) agentapi.HandoverResponse {
+		called = true
+		if req.RequestID != "req-detached" {
+			t.Fatalf("unexpected request: %#v", req)
+		}
+		if err := ctx.Err(); err != nil {
+			t.Fatalf("handover context should not inherit client cancellation: %v", err)
+		}
+		if _, ok := ctx.Deadline(); !ok {
+			t.Fatal("handover context should have a bounded deadline")
+		}
+		return agentapi.HandoverResponse{SchemaVersion: "v1", RequestID: req.RequestID, Status: "completed"}
+	}, nil)
+	body := strings.NewReader(`{"request_id":"req-detached","target_node_id":"auto"}`)
+	req := httptest.NewRequest(http.MethodPost, agentapi.HandoverPath, body).WithContext(requestCtx)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+	if !called {
+		t.Fatal("handover handler was not called")
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected response status: %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestActiveHandoverUsesFreshLeaseOverStaleStatusCache(t *testing.T) {
 	forwarded := false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

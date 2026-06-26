@@ -69,6 +69,7 @@ Implemented but not live-validated:
 Not yet validated or still incomplete:
 
 - GCP public identity handover,
+- GCP management public IP separation from stable egress public identity,
 - raw LoxiLB HA baseline comparison,
 - split-brain, stale-generation, and route-operation failure injection,
 - multi-zone and GKE/private-node topologies,

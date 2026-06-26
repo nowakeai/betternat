@@ -28,7 +28,8 @@ const (
 	controlRefreshInterval = 2 * time.Second
 	controlFreshFor        = 10 * time.Second
 	controlHTTPTimeout     = 1500 * time.Millisecond
-	handoverTimeout        = 45 * time.Second
+	handoverTimeout        = 90 * time.Second
+	handoverRecordTimeout  = 10 * time.Second
 )
 
 type handoverStore interface {
@@ -289,7 +290,9 @@ func controlHandler(cache *controlStatusCache, handover func(context.Context, ag
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			resp := handover(r.Context(), req)
+			handoverCtx, cancel := detachedHandoverContext()
+			defer cancel()
+			resp := handover(handoverCtx, req)
 			if resp.Error != "" {
 				w.WriteHeader(http.StatusConflict)
 			}
@@ -320,6 +323,10 @@ func controlHandler(cache *controlStatusCache, handover func(context.Context, ag
 		_ = json.NewEncoder(w).Encode(resp)
 	})
 	return mux
+}
+
+func detachedHandoverContext() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), handoverTimeout+handoverRecordTimeout)
 }
 
 func newHandoverHandler(cfg config.Config, cache *controlStatusCache, haStatus interface{ Snapshot() ha.StatusSnapshot }, store handoverStore) func(context.Context, agentapi.HandoverRequest) agentapi.HandoverResponse {

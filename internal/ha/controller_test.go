@@ -431,6 +431,9 @@ func TestHandoverRetriesRouteReplaceUntilRouteConverges(t *testing.T) {
 	if result.NewLease.OwnerInstanceID != "i-standby" {
 		t.Fatalf("unexpected new lease: %#v", result.NewLease)
 	}
+	if len(cloudProvider.replaceFast) != 2 || !cloudProvider.replaceFast[0] || !cloudProvider.replaceFast[1] {
+		t.Fatalf("handover route replacement should request fast path: %#v", cloudProvider.replaceFast)
+	}
 	wantCalls := []string{
 		"associate:eipalloc-123:i-standby",
 		"replace:rtb-a:0.0.0.0/0:i-standby",

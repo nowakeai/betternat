@@ -56,7 +56,7 @@ var newHandoverStoreReader = func(ctx context.Context, cfg config.Config) (coord
 }
 
 func newHandoverCommand(ctx context.Context, out io.Writer) *cobra.Command {
-	opts := handoverOptions{host: defaultAgentHost(), configPath: defaultConfigPath, output: outputTable, timeout: 30 * time.Second, target: "auto", limit: 20}
+	opts := handoverOptions{host: defaultAgentHost(), configPath: defaultConfigPath, output: outputTable, timeout: 90 * time.Second, target: "auto", limit: 20}
 	cmd := &cobra.Command{
 		Use:   "handover",
 		Short: "Inspect or start proactive active handover",

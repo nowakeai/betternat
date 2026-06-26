@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"net"
 	"strings"
 	"time"
@@ -96,6 +97,16 @@ func (p *Provider) ReplaceRoute(ctx context.Context, target cloud.RouteTarget) e
 	if err != nil {
 		previous = nil
 	}
+	if routeTargetsInstance(previous, target.Target) {
+		return nil
+	}
+	if cloud.FastRouteReplacementRequested(ctx) && canUseShadowRoute(previous) {
+		return p.replaceRouteWithShadow(ctx, target, previous)
+	}
+	return p.replaceRouteByDeleteInsert(ctx, target, previous)
+}
+
+func (p *Provider) replaceRouteByDeleteInsert(ctx context.Context, target cloud.RouteTarget, previous *compute.Route) error {
 	deleteOp, err := p.routes.Delete(ctx, p.cfg.ProjectID, target.RouteTableID)
 	if err != nil && !isNotFound(err) {
 		return fmt.Errorf("gcp compute delete route %q: %w", target.RouteTableID, err)
@@ -121,6 +132,94 @@ func (p *Provider) ReplaceRoute(ctx context.Context, target cloud.RouteTarget) e
 		return p.restorePreviousRoute(ctx, target.RouteTableID, previous, fmt.Errorf("wait for gcp route %q insert: %w", target.RouteTableID, err))
 	}
 	return nil
+}
+
+func (p *Provider) replaceRouteWithShadow(ctx context.Context, target cloud.RouteTarget, previous *compute.Route) error {
+	shadowName := shadowRouteName(target.RouteTableID, target.Target)
+	if err := p.deleteRouteIfExists(ctx, shadowName); err != nil {
+		return fmt.Errorf("cleanup stale gcp shadow route %q: %w", shadowName, err)
+	}
+	shadow := routeForTarget(target, p.cfg)
+	shadow.Name = shadowName
+	shadow.Description = shadowRouteDescription(target.RouteTableID)
+	shadow.Priority = previous.Priority - 1
+	shadow.Network = previous.Network
+	shadow.Tags = append([]string(nil), previous.Tags...)
+
+	insertShadowOp, err := p.routes.Insert(ctx, p.cfg.ProjectID, shadow)
+	if err != nil {
+		return fmt.Errorf("gcp compute insert shadow route %q: %w", shadowName, err)
+	}
+	if err := p.waitGlobalOperation(ctx, operationName(insertShadowOp)); err != nil {
+		return fmt.Errorf("wait for gcp shadow route %q insert: %w", shadowName, err)
+	}
+
+	deleteOp, err := p.routes.Delete(ctx, p.cfg.ProjectID, target.RouteTableID)
+	if err != nil && !isNotFound(err) {
+		_ = p.deleteRouteIfExists(ctx, shadowName)
+		return fmt.Errorf("gcp compute delete canonical route %q after shadow insert: %w", target.RouteTableID, err)
+	}
+	if err == nil {
+		if err := p.waitGlobalOperation(ctx, operationName(deleteOp)); err != nil {
+			return p.restorePreviousAfterShadow(ctx, target.RouteTableID, shadowName, previous, fmt.Errorf("wait for gcp canonical route %q delete after shadow insert: %w", target.RouteTableID, err))
+		}
+	}
+
+	canonical := routeForTarget(target, p.cfg)
+	canonical.Priority = previous.Priority
+	canonical.Network = previous.Network
+	canonical.Tags = append([]string(nil), previous.Tags...)
+	insertCanonicalOp, err := p.routes.Insert(ctx, p.cfg.ProjectID, canonical)
+	if err != nil {
+		return p.restorePreviousAfterShadow(ctx, target.RouteTableID, shadowName, previous, fmt.Errorf("gcp compute insert canonical route %q: %w", target.RouteTableID, err))
+	}
+	if err := p.waitGlobalOperation(ctx, operationName(insertCanonicalOp)); err != nil {
+		return p.restorePreviousAfterShadow(ctx, target.RouteTableID, shadowName, previous, fmt.Errorf("wait for gcp canonical route %q insert: %w", target.RouteTableID, err))
+	}
+	if err := p.deleteRouteIfExists(ctx, shadowName); err != nil {
+		return fmt.Errorf("canonical gcp route %q points at %q, but cleanup shadow route %q failed: %w", target.RouteTableID, target.Target, shadowName, err)
+	}
+	return nil
+}
+
+func (p *Provider) restorePreviousAfterShadow(ctx context.Context, routeName string, shadowName string, previous *compute.Route, cause error) error {
+	if previous == nil || ctx.Err() != nil {
+		return cause
+	}
+	insertOp, err := p.routes.Insert(ctx, p.cfg.ProjectID, restorableRoute(previous))
+	if err != nil {
+		return fmt.Errorf("%w; failed to restore previous gcp route %q: %v", cause, routeName, err)
+	}
+	if err := p.waitGlobalOperation(ctx, operationName(insertOp)); err != nil {
+		return fmt.Errorf("%w; failed to wait for previous gcp route %q restore: %v", cause, routeName, err)
+	}
+	if err := p.deleteRouteIfExists(ctx, shadowName); err != nil {
+		return fmt.Errorf("%w; previous gcp route %q restored but shadow route cleanup failed: %v", cause, routeName, err)
+	}
+	return fmt.Errorf("%w; previous gcp route %q restored", cause, routeName)
+}
+
+func (p *Provider) deleteRouteIfExists(ctx context.Context, routeName string) error {
+	poll := p.cfg.OperationPollTime
+	if poll <= 0 {
+		poll = 2 * time.Second
+	}
+	for {
+		op, err := p.routes.Delete(ctx, p.cfg.ProjectID, routeName)
+		if isNotFound(err) {
+			return nil
+		}
+		if isResourceNotReady(err) {
+			if sleepErr := sleepContext(ctx, poll); sleepErr != nil {
+				return sleepErr
+			}
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		return p.waitGlobalOperation(ctx, operationName(op))
+	}
 }
 
 func (p *Provider) restorePreviousRoute(ctx context.Context, routeName string, previous *compute.Route, cause error) error {
@@ -436,11 +535,55 @@ func isNotFound(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "googleapi: Error 404")
 }
 
+func isResourceNotReady(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "resourceNotReady")
+}
+
 func routePriority(value int64) int64 {
 	if value == 0 {
 		return 800
 	}
 	return value
+}
+
+func routeForTarget(target cloud.RouteTarget, cfg Config) *compute.Route {
+	return &compute.Route{
+		Name:            target.RouteTableID,
+		Network:         globalLink(cfg.ProjectID, "networks", cfg.Network),
+		DestRange:       target.DestinationCIDR,
+		Priority:        routePriority(cfg.RoutePriority),
+		Tags:            []string{cfg.ClientTag},
+		NextHopInstance: zoneLink(cfg.ProjectID, cfg.Zone, "instances", target.Target),
+	}
+}
+
+func canUseShadowRoute(route *compute.Route) bool {
+	return route != nil && route.Priority > 0 && route.DestRange != "" && route.Network != "" && len(route.Tags) > 0
+}
+
+func routeTargetsInstance(route *compute.Route, instanceID string) bool {
+	return route != nil && baseName(route.NextHopInstance) == instanceID
+}
+
+func shadowRouteDescription(routeName string) string {
+	return fmt.Sprintf("Temporary BetterNAT handover shadow for %s", routeName)
+}
+
+func shadowRouteName(routeName string, target string) string {
+	hash := fnv.New32a()
+	_, _ = hash.Write([]byte(routeName))
+	_, _ = hash.Write([]byte{0})
+	_, _ = hash.Write([]byte(target))
+	suffix := fmt.Sprintf("-bnat-ho-%08x", hash.Sum32())
+	maxPrefix := 63 - len(suffix)
+	prefix := strings.Trim(routeName, "-")
+	if len(prefix) > maxPrefix {
+		prefix = strings.TrimRight(prefix[:maxPrefix], "-")
+	}
+	if prefix == "" {
+		prefix = "route"
+	}
+	return prefix + suffix
 }
 
 func restorableRoute(route *compute.Route) *compute.Route {

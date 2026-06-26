@@ -52,7 +52,7 @@ var handoverRouteReplaceBackoffs = []time.Duration{
 	1500 * time.Millisecond,
 }
 
-var handoverRouteReplaceAttemptTimeout = 8 * time.Second
+var handoverRouteReplaceAttemptTimeout = 45 * time.Second
 
 var handoverPublicIdentityBackoffs = []time.Duration{
 	0,
@@ -648,7 +648,9 @@ func (c Controller) replaceRouteForHandover(ctx context.Context, target cloud.Ro
 			return lease.Record{}, err
 		}
 		record = renewed
-		err = c.Cloud.ReplaceRoute(attemptCtx, target)
+		record, err = c.maintainLeaseDuring(attemptCtx, record, "handover route mutation", func(runCtx context.Context) error {
+			return c.Cloud.ReplaceRoute(cloud.WithFastRouteReplacement(runCtx), target)
+		})
 		cancel()
 		if fenceErr := c.verifyLeaseFence(ctx, record, localInstanceID, "after handover route mutation"); fenceErr != nil {
 			return lease.Record{}, fenceErr

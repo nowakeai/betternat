@@ -20,6 +20,7 @@ type fakeCloud struct {
 	associateDelay          time.Duration
 	replaceErr              error
 	replaceErrs             []error
+	replaceFast             []bool
 	replaceMutatesOnError   bool
 	describeRouteResults    []cloud.RouteTarget
 	describeRouteErrs       []error
@@ -27,11 +28,12 @@ type fakeCloud struct {
 	onReplace               func()
 }
 
-func (f *fakeCloud) ReplaceRoute(_ context.Context, target cloud.RouteTarget) error {
+func (f *fakeCloud) ReplaceRoute(ctx context.Context, target cloud.RouteTarget) error {
 	if f.routes == nil {
 		f.routes = map[string]cloud.RouteTarget{}
 	}
 	f.calls = append(f.calls, "replace:"+target.RouteTableID+":"+target.DestinationCIDR+":"+target.Target)
+	f.replaceFast = append(f.replaceFast, cloud.FastRouteReplacementRequested(ctx))
 	err := f.replaceErr
 	if len(f.replaceErrs) > 0 {
 		err = f.replaceErrs[0]

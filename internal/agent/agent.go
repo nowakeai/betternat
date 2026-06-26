@@ -345,7 +345,7 @@ func runContinuous(ctx context.Context, cfg config.Config, engine datapath.Engin
 				}
 				lifecycleActions = watchTermination(runCtx, terminationWatcher, func(action cloud.LifecycleAction) {
 					if handoverHandler != nil {
-						handoverCtx, handoverCancel := context.WithTimeout(context.Background(), handoverTimeout+5*time.Second)
+						handoverCtx, handoverCancel := detachedHandoverContext()
 						req := agentapi.HandoverRequest{
 							RequestID:    terminationHandoverRequestID(action),
 							TargetNodeID: "auto",

@@ -12,12 +12,20 @@ import (
 	"github.com/nowakeai/betternat/internal/cloud"
 )
 
-func TestReplaceRouteDeletesAndRecreatesTaggedNextHopInstanceRoute(t *testing.T) {
-	routes := &fakeRoutes{}
+func TestReplaceRouteUsesShadowRouteBeforeRecreatingCanonicalRoute(t *testing.T) {
+	previous := &compute.Route{
+		Name:            "prod-default-via-gw",
+		Network:         "projects/test-project/global/networks/test-vpc",
+		DestRange:       "0.0.0.0/0",
+		Priority:        900,
+		Tags:            []string{"private-client"},
+		NextHopInstance: "projects/test-project/zones/us-west2-a/instances/prod-gw-a",
+	}
+	routes := &fakeRoutes{routes: map[string]*compute.Route{"prod-default-via-gw": previous}}
 	ops := &fakeOperations{}
 	provider := NewFromAPI(testConfig(), routes, ops)
 
-	err := provider.ReplaceRoute(context.Background(), cloud.RouteTarget{
+	err := provider.ReplaceRoute(cloud.WithFastRouteReplacement(context.Background()), cloud.RouteTarget{
 		RouteTableID:    "prod-default-via-gw",
 		DestinationCIDR: "0.0.0.0/0",
 		Target:          "prod-gw-b",
@@ -25,13 +33,19 @@ func TestReplaceRouteDeletesAndRecreatesTaggedNextHopInstanceRoute(t *testing.T)
 	if err != nil {
 		t.Fatalf("replace route: %v", err)
 	}
-	if routes.deleted != "prod-default-via-gw" {
-		t.Fatalf("route was not deleted first: %#v", routes)
+	shadowName := shadowRouteName("prod-default-via-gw", "prod-gw-b")
+	wantDeletes := []string{shadowName, "prod-default-via-gw", shadowName}
+	if strings.Join(routes.deletes, ",") != strings.Join(wantDeletes, ",") {
+		t.Fatalf("unexpected route deletes: %#v", routes.deletes)
 	}
-	insert := routes.inserted
-	if insert == nil {
-		t.Fatal("route was not inserted")
+	if len(routes.inserts) != 2 {
+		t.Fatalf("expected shadow and canonical inserts, got %#v", routes.inserts)
 	}
+	shadow := routes.inserts[0]
+	if shadow.Name != shadowName || shadow.Priority != 899 || shadow.NextHopInstance != "projects/test-project/zones/us-west2-a/instances/prod-gw-b" {
+		t.Fatalf("unexpected shadow route: %#v", shadow)
+	}
+	insert := routes.inserts[1]
 	if insert.Name != "prod-default-via-gw" || insert.DestRange != "0.0.0.0/0" || insert.Priority != 900 {
 		t.Fatalf("unexpected route insert: %#v", insert)
 	}
@@ -44,8 +58,36 @@ func TestReplaceRouteDeletesAndRecreatesTaggedNextHopInstanceRoute(t *testing.T)
 	if len(insert.Tags) != 1 || insert.Tags[0] != "private-client" {
 		t.Fatalf("unexpected tags: %#v", insert.Tags)
 	}
-	if got := strings.Join(ops.waited, ","); got != "delete-op,insert-op" {
-		t.Fatalf("unexpected operation waits: %s", got)
+	if got := len(ops.waited); got != 4 {
+		t.Fatalf("unexpected operation wait count: %d (%#v)", got, ops.waited)
+	}
+}
+
+func TestReplaceRouteUsesDeleteInsertByDefault(t *testing.T) {
+	previous := &compute.Route{
+		Name:            "prod-default-via-gw",
+		Network:         "projects/test-project/global/networks/test-vpc",
+		DestRange:       "0.0.0.0/0",
+		Priority:        900,
+		Tags:            []string{"private-client"},
+		NextHopInstance: "projects/test-project/zones/us-west2-a/instances/prod-gw-a",
+	}
+	routes := &fakeRoutes{routes: map[string]*compute.Route{"prod-default-via-gw": previous}}
+	provider := NewFromAPI(testConfig(), routes, &fakeOperations{})
+
+	err := provider.ReplaceRoute(context.Background(), cloud.RouteTarget{
+		RouteTableID:    "prod-default-via-gw",
+		DestinationCIDR: "0.0.0.0/0",
+		Target:          "prod-gw-b",
+	})
+	if err != nil {
+		t.Fatalf("replace route: %v", err)
+	}
+	if len(routes.inserts) != 1 || routes.inserts[0].Name != "prod-default-via-gw" {
+		t.Fatalf("expected only canonical insert, got %#v", routes.inserts)
+	}
+	if strings.Contains(strings.Join(routes.deletes, ","), "bnat-ho") {
+		t.Fatalf("default route replacement should not create shadow route: %#v", routes.deletes)
 	}
 }
 
@@ -65,7 +107,7 @@ func TestReplaceRouteIgnoresMissingExistingRoute(t *testing.T) {
 	}
 }
 
-func TestReplaceRouteRestoresPreviousRouteWhenInsertFails(t *testing.T) {
+func TestReplaceRouteRestoresPreviousRouteWhenCanonicalInsertFails(t *testing.T) {
 	previous := &compute.Route{
 		Name:            "prod-default-via-gw",
 		Network:         "projects/test-project/global/networks/test-vpc",
@@ -74,11 +116,11 @@ func TestReplaceRouteRestoresPreviousRouteWhenInsertFails(t *testing.T) {
 		Tags:            []string{"private-client"},
 		NextHopInstance: "projects/test-project/zones/us-west2-a/instances/prod-gw-a",
 	}
-	routes := &fakeRoutes{route: previous, insertErrs: []error{errors.New("insert failed"), nil}}
+	routes := &fakeRoutes{routes: map[string]*compute.Route{"prod-default-via-gw": previous}, insertErrs: []error{nil, errors.New("insert failed"), nil}}
 	ops := &fakeOperations{}
 	provider := NewFromAPI(testConfig(), routes, ops)
 
-	err := provider.ReplaceRoute(context.Background(), cloud.RouteTarget{
+	err := provider.ReplaceRoute(cloud.WithFastRouteReplacement(context.Background()), cloud.RouteTarget{
 		RouteTableID:    "prod-default-via-gw",
 		DestinationCIDR: "0.0.0.0/0",
 		Target:          "prod-gw-b",
@@ -86,15 +128,15 @@ func TestReplaceRouteRestoresPreviousRouteWhenInsertFails(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "previous gcp route") || !strings.Contains(err.Error(), "restored") {
 		t.Fatalf("expected restored previous route error, got %v", err)
 	}
-	if len(routes.inserts) != 2 {
-		t.Fatalf("expected replacement and restore inserts, got %d", len(routes.inserts))
+	if len(routes.inserts) != 3 {
+		t.Fatalf("expected shadow, replacement, and restore inserts, got %d", len(routes.inserts))
 	}
-	restored := routes.inserts[1]
+	restored := routes.inserts[2]
 	if restored.NextHopInstance != previous.NextHopInstance || restored.DestRange != previous.DestRange {
 		t.Fatalf("previous route was not restored: %#v", restored)
 	}
-	if got := strings.Join(ops.waited, ","); got != "delete-op,insert-op" {
-		t.Fatalf("unexpected operation waits: %s", got)
+	if got := len(ops.waited); got != 4 {
+		t.Fatalf("unexpected operation wait count: %d (%#v)", got, ops.waited)
 	}
 }
 
@@ -104,13 +146,14 @@ func TestReplaceRouteRestoresPreviousRouteWhenInsertOperationFails(t *testing.T)
 		Network:         "projects/test-project/global/networks/test-vpc",
 		DestRange:       "0.0.0.0/0",
 		Priority:        900,
+		Tags:            []string{"private-client"},
 		NextHopInstance: "projects/test-project/zones/us-west2-a/instances/prod-gw-a",
 	}
-	routes := &fakeRoutes{route: previous}
-	ops := &fakeOperations{operationErrors: map[string]error{"insert-op": errors.New("operation failed")}}
+	routes := &fakeRoutes{routes: map[string]*compute.Route{"prod-default-via-gw": previous}}
+	ops := &fakeOperations{operationErrors: map[string]error{"insert-prod-default-via-gw": errors.New("operation failed")}}
 	provider := NewFromAPI(testConfig(), routes, ops)
 
-	err := provider.ReplaceRoute(context.Background(), cloud.RouteTarget{
+	err := provider.ReplaceRoute(cloud.WithFastRouteReplacement(context.Background()), cloud.RouteTarget{
 		RouteTableID:    "prod-default-via-gw",
 		DestinationCIDR: "0.0.0.0/0",
 		Target:          "prod-gw-b",
@@ -118,8 +161,8 @@ func TestReplaceRouteRestoresPreviousRouteWhenInsertOperationFails(t *testing.T)
 	if err == nil || !strings.Contains(err.Error(), "previous gcp route") || !strings.Contains(err.Error(), "restored") {
 		t.Fatalf("expected restored previous route error, got %v", err)
 	}
-	if len(routes.inserts) != 2 {
-		t.Fatalf("expected replacement and restore inserts, got %d", len(routes.inserts))
+	if len(routes.inserts) != 3 {
+		t.Fatalf("expected shadow, replacement, and restore inserts, got %d", len(routes.inserts))
 	}
 }
 
@@ -129,13 +172,14 @@ func TestReplaceRouteRestoresPreviousRouteWhenDeleteOperationFails(t *testing.T)
 		Network:         "projects/test-project/global/networks/test-vpc",
 		DestRange:       "0.0.0.0/0",
 		Priority:        900,
+		Tags:            []string{"private-client"},
 		NextHopInstance: "projects/test-project/zones/us-west2-a/instances/prod-gw-a",
 	}
-	routes := &fakeRoutes{route: previous}
-	ops := &fakeOperations{operationErrors: map[string]error{"delete-op": errors.New("delete operation failed")}}
+	routes := &fakeRoutes{routes: map[string]*compute.Route{"prod-default-via-gw": previous}}
+	ops := &fakeOperations{operationErrors: map[string]error{"delete-prod-default-via-gw": errors.New("delete operation failed")}}
 	provider := NewFromAPI(testConfig(), routes, ops)
 
-	err := provider.ReplaceRoute(context.Background(), cloud.RouteTarget{
+	err := provider.ReplaceRoute(cloud.WithFastRouteReplacement(context.Background()), cloud.RouteTarget{
 		RouteTableID:    "prod-default-via-gw",
 		DestinationCIDR: "0.0.0.0/0",
 		Target:          "prod-gw-b",
@@ -143,15 +187,11 @@ func TestReplaceRouteRestoresPreviousRouteWhenDeleteOperationFails(t *testing.T)
 	if err == nil || !strings.Contains(err.Error(), "previous gcp route") || !strings.Contains(err.Error(), "restored") {
 		t.Fatalf("expected restored previous route error, got %v", err)
 	}
-	if len(routes.inserts) != 1 {
-		t.Fatalf("expected restore insert after failed delete operation, got %d", len(routes.inserts))
+	if len(routes.deletes) < 3 || routes.deletes[len(routes.deletes)-1] != shadowRouteName("prod-default-via-gw", "prod-gw-b") {
+		t.Fatalf("expected shadow route cleanup after failed delete operation, got %#v", routes.deletes)
 	}
-	restored := routes.inserts[0]
-	if restored.NextHopInstance != previous.NextHopInstance || restored.DestRange != previous.DestRange {
-		t.Fatalf("previous route was not restored: %#v", restored)
-	}
-	if got := strings.Join(ops.waited, ","); got != "delete-op,insert-op" {
-		t.Fatalf("unexpected operation waits: %s", got)
+	if got := len(ops.waited); got != 4 {
+		t.Fatalf("unexpected operation wait count: %d (%#v)", got, ops.waited)
 	}
 }
 
@@ -292,15 +332,24 @@ func testConfig() Config {
 
 type fakeRoutes struct {
 	route      *compute.Route
+	routes     map[string]*compute.Route
 	inserted   *compute.Route
 	inserts    []*compute.Route
 	insertErrs []error
 	deleted    string
+	deletes    []string
 	deleteErr  error
 }
 
-func (f *fakeRoutes) Get(context.Context, string, string) (*compute.Route, error) {
-	if f.route == nil {
+func (f *fakeRoutes) Get(_ context.Context, _ string, routeName string) (*compute.Route, error) {
+	if f.routes != nil {
+		route := f.routes[routeName]
+		if route == nil {
+			return nil, errors.New("googleapi: Error 404: not found")
+		}
+		return route, nil
+	}
+	if f.route == nil || (f.route.Name != "" && f.route.Name != routeName) {
 		return nil, errors.New("googleapi: Error 404: not found")
 	}
 	return f.route, nil
@@ -316,15 +365,31 @@ func (f *fakeRoutes) Insert(_ context.Context, _ string, route *compute.Route) (
 			return nil, err
 		}
 	}
-	return &compute.Operation{Name: "insert-op", Status: "PENDING"}, nil
+	if f.routes != nil {
+		f.routes[route.Name] = route
+	} else {
+		f.route = route
+	}
+	return &compute.Operation{Name: "insert-" + route.Name, Status: "PENDING"}, nil
 }
 
 func (f *fakeRoutes) Delete(_ context.Context, _ string, routeName string) (*compute.Operation, error) {
 	f.deleted = routeName
+	f.deletes = append(f.deletes, routeName)
 	if f.deleteErr != nil {
 		return nil, f.deleteErr
 	}
-	return &compute.Operation{Name: "delete-op", Status: "PENDING"}, nil
+	if f.routes != nil {
+		if f.routes[routeName] == nil {
+			return nil, errors.New("googleapi: Error 404: not found")
+		}
+		delete(f.routes, routeName)
+	} else if f.route == nil || (f.route.Name != "" && f.route.Name != routeName) {
+		return nil, errors.New("googleapi: Error 404: not found")
+	} else {
+		f.route = nil
+	}
+	return &compute.Operation{Name: "delete-" + routeName, Status: "PENDING"}, nil
 }
 
 type fakeOperations struct {
