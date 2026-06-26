@@ -615,6 +615,27 @@ func TestDeriveGatewayStateBetterNATVersionAllowsExplicitArtifactOverrides(t *te
 	}
 }
 
+func TestDeriveGatewayStateAllowsCompleteArtifactOverridesForUnreleasedVersion(t *testing.T) {
+	plan := validGatewayPlan()
+	plan.BetterNATVersion = types.StringValue("v9.9.9-test")
+	plan.InstanceType = types.StringValue("t4g.small")
+	plan.AgentBinaryURL = types.StringValue("https://example.invalid/custom-agent")
+	plan.AgentBinarySHA256 = types.StringValue("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	plan.CLIBinaryURL = types.StringValue("https://example.invalid/custom-cli")
+	plan.CLIBinarySHA256 = types.StringValue("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+
+	derived, err := DeriveGatewayState(context.Background(), &plan)
+	if err != nil {
+		t.Fatalf("derive gateway state: %v", err)
+	}
+	if got := derived.AgentBinaryURL.ValueString(); got != "https://example.invalid/custom-agent" {
+		t.Fatalf("unexpected agent url: %s", got)
+	}
+	if got := derived.CLIBinaryURL.ValueString(); got != "https://example.invalid/custom-cli" {
+		t.Fatalf("unexpected cli url: %s", got)
+	}
+}
+
 func TestDeriveGatewayStateRejectsUnsupportedBetterNATVersion(t *testing.T) {
 	plan := validGatewayPlan()
 	plan.BetterNATVersion = types.StringValue("v9.9.9")

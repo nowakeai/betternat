@@ -598,6 +598,9 @@ func resolveGCPBootstrapArtifacts(model *GCPGatewayResourceModel) (bootstrapArti
 	if version == "" {
 		return result, nil
 	}
+	if hasCompleteBootstrapArtifacts(result) {
+		return result, nil
+	}
 	artifactSet, err := runtimeArtifacts(version, "linux", "amd64")
 	if err != nil {
 		return bootstrapArtifacts{}, err
