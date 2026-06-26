@@ -101,7 +101,7 @@ resource "betternat_aws_gateway" "egress" {
   desired_capacity = 2
   max_size         = 3
 
-  betternat_version = "v0.1.0"
+  betternat_version = "v0.2.0"
 
   public_subnet_ids = {
     "us-west-2a" = var.public_subnet_id

@@ -13,7 +13,7 @@ terraform {
   required_providers {
     betternat = {
       source  = "nowakeai/betternat"
-      version = "= 0.1.0"
+      version = "= 0.2.0"
     }
   }
 }
@@ -176,7 +176,7 @@ artifact manifest:
 
 ```hcl
 data "betternat_runtime_artifacts" "current" {
-  version = "v0.1.0"
+  version = "v0.2.0"
   os      = "linux"
   arch    = "arm64"
 }

@@ -15,7 +15,7 @@ Returns provider-supported BetterNAT runtime artifact URLs and SHA256 checksums.
 
 ```hcl
 data "betternat_runtime_artifacts" "current" {
-  version = "v0.1.0"
+  version = "v0.2.0"
   os      = "linux"
   arch    = "arm64"
 }
@@ -25,7 +25,7 @@ Inputs:
 
 | Name | Description |
 | --- | --- |
-| `version` | BetterNAT runtime release tag, for example `v0.1.0`. |
+| `version` | BetterNAT runtime release tag, for example `v0.2.0`. |
 | `os` | Runtime operating system. Current supported value: `linux`. |
 | `arch` | Runtime architecture. Current supported values: `amd64` and `arm64`. |
 

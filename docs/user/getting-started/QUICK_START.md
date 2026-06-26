@@ -59,7 +59,7 @@ Choose:
 export AWS_PROFILE="<your-profile>"
 export AWS_REGION="us-west-2"
 export BETTERNAT_AZ="us-west-2a"
-export BETTERNAT_VERSION="v0.1.0"
+export BETTERNAT_VERSION="v0.2.0"
 export BETTERNAT_RUN_ID="betternat-test-$(date -u +%Y%m%d%H%M%S)"
 ```
 
@@ -90,7 +90,7 @@ The public Quick Start pins the current provider version:
 
 ```hcl
 source  = "nowakeai/betternat"
-version = "= 0.1.0"
+version = "= 0.2.0"
 ```
 
 Terraform Registry install is the default path:

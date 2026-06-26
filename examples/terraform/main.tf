@@ -2,7 +2,7 @@ terraform {
   required_providers {
     betternat = {
       source  = "nowakeai/betternat"
-      version = "= 0.1.0"
+      version = "= 0.2.0"
     }
   }
 }
@@ -40,7 +40,7 @@ resource "betternat_aws_gateway" "egress" {
   private_cidrs = ["10.0.0.0/8"]
 
   datapath_engine     = "loxilb"
-  betternat_version   = "v0.1.0"
+  betternat_version   = "v0.2.0"
   stable_egress_ip    = true
   ha_profile          = "default"
   prometheus_enabled  = true

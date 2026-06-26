@@ -39,7 +39,7 @@ terraform {
   required_providers {
     betternat = {
       source  = "nowakeai/betternat"
-      version = "= 0.1.0"
+      version = "= 0.2.0"
     }
   }
 }
@@ -51,7 +51,7 @@ the provider is registered in the OpenTofu Registry.
 The gateway runtime version is controlled separately:
 
 ```hcl
-betternat_version = "v0.1.0"
+betternat_version = "v0.2.0"
 ```
 
 The provider derives the agent and CLI release artifact URLs and SHA256
@@ -101,6 +101,7 @@ Use the matching provider/runtime pair shown in the release notes:
 
 | Provider version | Supported `betternat_version` values | Notes |
 | --- | --- | --- |
+| `0.2.0` | `v0.2.0` | Terraform surface reset provider/runtime pair. |
 | `0.1.0` | `v0.1.0` | First GA provider/runtime pair. |
 
 Do not assume every runtime tag is immediately available through

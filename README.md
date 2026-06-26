@@ -70,7 +70,7 @@ terraform {
   required_providers {
     betternat = {
       source  = "nowakeai/betternat"
-      version = "= 0.1.0"
+      version = "= 0.2.0"
     }
   }
 }
@@ -143,7 +143,7 @@ resource "betternat_aws_gateway" "egress" {
   instance_type       = "t4g.small"
   desired_capacity    = 2
   max_size            = 3
-  betternat_version   = "v0.1.0"
+  betternat_version   = "v0.2.0"
   stable_egress_ip    = true
   prometheus_enabled  = true
   rollback_on_destroy = true
@@ -166,7 +166,7 @@ For a disposable VPC run:
 export AWS_PROFILE="<your-profile>"
 export AWS_REGION="us-west-2"
 export BETTERNAT_AZ="us-west-2a"
-export BETTERNAT_VERSION="v0.1.0"
+export BETTERNAT_VERSION="v0.2.0"
 ```
 
 Then follow:
@@ -324,7 +324,7 @@ Read before using real route tables:
 - [Operations Guide](docs/user/operations/OPERATIONS_GUIDE.md)
 - [Observability Guide](docs/user/operations/OBSERVABILITY_GUIDE.md)
 - [IAM Policy](docs/user/reference/IAM_POLICY.md)
-- [Release Notes](docs/user/releases/v0.1/v0.1.0.md)
+- [Release Notes](docs/user/releases/v0.2/v0.2.0.md)
 
 ## Development
 
