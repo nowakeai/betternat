@@ -70,17 +70,16 @@ Not yet validated or still incomplete:
 
 - GCP public identity handover,
 - GCP management public IP separation from stable egress public identity,
-- raw LoxiLB HA baseline comparison,
 - split-brain, stale-generation, and route-operation failure injection,
 - multi-zone and GKE/private-node topologies,
 - production migration from Cloud NAT.
 
 ## Raw LoxiLB Comparison
 
-The GCP decision must compare against two different baselines:
-
-1. Raw LoxiLB as a datapath or Kubernetes service load balancer.
-2. BetterNAT as a private-subnet egress replacement for managed cloud NAT.
+Raw LoxiLB-on-GCE HA comparison is not a GCP GA gate. BetterNAT's release
+contract is the owned HA product layer around LoxiLB: lease-fenced cloud route
+and public-identity ownership, operator-visible status, rollback, Terraform
+cleanup, and documented install UX.
 
 Raw LoxiLB can already provide important HA primitives, especially in
 Kubernetes or BGP-friendly environments. The missing BetterNAT work is the
@@ -779,22 +778,17 @@ Do not treat GCP as product-parity BetterNAT until all P0 gates pass.
 
 ## Immediate Recommendation
 
-Reframe the current `betternat_gcp_gateway` as a forwarding substrate plus
-experimental HA bootstrap path, not the GCP product alpha. BetterNAT's GCP bar
-is agent-owned HA around the datapath, not raw packet forwarding or manually
-driven route replacement.
+The next implementation step after the live HA, datapath, stable-public-identity,
+capacity-repair, and connectivity-first smoke is deeper failure-injection
+validation plus packaging:
 
-The next implementation step after the live HA and datapath smoke is raw
-baseline and failure-injection validation:
+1. Validate deeper split-brain and route-operation failure injections: stale
+   lease generation, delayed or failed Compute operations, restarted old active,
+   stale standby registry, and clock-skew edges.
+2. Package the GCP install path into module/docs/examples that a user can run
+   without relying on scratch fixtures.
+3. Validate GKE/private-node and existing-VPC examples, then document migration
+   boundaries from Cloud NAT.
 
-1. Run raw LoxiLB-on-GCE HA baseline comparison and split-brain/failure
-   injection before promoting the GCP provider resource beyond route-only alpha.
-2. Implement and validate MIG-backed capacity repair before GA, unless a later
-   ADR replaces `docs/research/062-gcp-capacity-repair-decision.md`.
-3. Decide whether GCP GA will implement access-config based stable public
-   identity or explicitly remain route-only/non-stable.
-4. Run raw LoxiLB-on-GCE protocol behavior comparisons where they materially
-   differ from BetterNAT-owned route-only failover.
-
-Until then, GCP should remain explicitly marked as route-only alpha work, not a
+Until then, GCP should remain explicitly marked as alpha/beta work, not a
 complete GCP production contract.

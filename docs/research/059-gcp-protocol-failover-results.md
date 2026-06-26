@@ -149,6 +149,9 @@ alpha. It does not close the remaining GCP GA gaps:
 - stable shared public identity,
 - multi-zone behavior,
 - GKE/private-node topology,
-- raw LoxiLB HA baseline comparison,
 - explicit split-brain and route-operation failure injection,
 - production migration from Cloud NAT.
+
+Raw LoxiLB-on-GCE HA baseline comparison is explicitly not a GCP GA gate. The
+release bar is direct validation of BetterNAT-owned HA behavior: lease-fenced
+route and public-identity ownership, rollback, status, cleanup, and install UX.

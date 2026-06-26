@@ -233,7 +233,7 @@ Done when:
 
 ## Phase 4: GCP Spike
 
-Status: `route-only live HA, protocol, failure-injection, and LoxiLB datapath proof complete; raw baseline and deeper split-brain injection pending`
+Status: `route-only live HA, protocol, failure-injection, and LoxiLB datapath proof complete; deeper split-brain injection pending`
 
 Goal: validate whether GCP can support the BetterNAT product model before
 committing to a production resource.
@@ -273,7 +273,8 @@ Tasks:
 - [x] Run live Firestore contention spike.
 - [x] Render experimental GCP agent HA config and checksum-verified bootstrap
   user data from the provider.
-- [ ] Compare raw LoxiLB GCP HA behavior against BetterNAT-owned route fencing.
+- [x] De-scope raw LoxiLB GCP HA baseline comparison from the GCP GA gate:
+  BetterNAT ships an owned HA contract, not unmanaged upstream comparison.
 - [x] Run two-agent GCE HA smoke where route mutation is lease-fenced.
 - [x] Validate passive failover after active crash.
 - [x] Validate proactive handover during graceful shutdown or upgrade.
@@ -281,8 +282,7 @@ Tasks:
   route target, and local datapath readiness all match.
 - [x] Validate that a standby cannot mutate routes while another unexpired
   Firestore lease owner exists.
-- [ ] Run raw LoxiLB-on-GCE HA baseline for the same private-egress topology and
-  record which upstream primitives BetterNAT should reuse versus wrap.
+- [x] Do not run a raw LoxiLB-on-GCE HA baseline for GA.
 - [ ] Validate GCP split-brain failure injections: stale lease generation,
   delayed route operation, restarted old active, and stale standby registry.
 - [x] Validate TCP, UDP, DNS, and long-download behavior across route-only
@@ -315,7 +315,7 @@ Done when:
 
 ## Phase 5: GCP Provider Alpha
 
-Status: `live GCP HA, stable public identity, capacity repair, LoxiLB restart, failure injection, and connectivity-first handover proof passed; raw LoxiLB baseline, packaging, and release-contract validation pending`
+Status: `live GCP HA, stable public identity, capacity repair, LoxiLB restart, failure injection, and connectivity-first handover proof passed; packaging, deeper failure injection, and release-contract validation pending`
 
 Goal: expose a GCP alpha resource only after the spike proves the minimum
 control-plane behavior.
@@ -366,8 +366,7 @@ GCP validation:
 - [x] Passive failover after active crash.
 - [x] Proactive handover.
 - [x] LoxiLB-on-GCE datapath counters and restart reconciliation.
-- [ ] Raw LoxiLB HA baseline compared against BetterNAT-owned route fencing,
-  rollback, IAM, status, and cleanup.
+- [x] Raw LoxiLB HA baseline comparison explicitly de-scoped from GA readiness.
 - [ ] GCP failure injection for route delete/insert, Compute operation polling,
   stale lease generation, stale registry, restarted old active, and clock skew.
 - [x] Cleanup.
