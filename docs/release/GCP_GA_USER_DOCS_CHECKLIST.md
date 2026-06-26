@@ -208,3 +208,17 @@ current documentation pass:
 - [x] Cleanup destroyed 16 Terraform resources, deleted the temporary S3
   artifact bucket, and found no live run-scoped EC2, VPC, subnet, route table,
   security group, EIP, launch template, ASG, DynamoDB, IAM, or S3 residuals.
+
+## Post-Publication Registry Evidence
+
+- [x] BetterNAT runtime `v0.2.0` GitHub Release published and checksum
+  verification passed for downloaded assets.
+- [x] Terraform Registry provider install passed for
+  `nowakeai/betternat = 0.2.0`; `betternat_runtime_artifacts` resolved the
+  published `v0.2.0` agent URL and checksum.
+- [x] Terraform Registry AWS module install and `terraform validate` passed for
+  `nowakeai/betternat/aws = 0.2.0`.
+- [x] Terraform Registry GCP module install and `terraform validate` passed for
+  `nowakeai/betternat/google = 0.2.0`.
+- [ ] OpenTofu Registry install was not rerun in this pass because `tofu` is not
+  installed in the release workstation.

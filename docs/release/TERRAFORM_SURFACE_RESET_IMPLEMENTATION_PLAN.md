@@ -156,7 +156,7 @@ Done when:
 
 ## Phase 3: AWS Module Repository
 
-Status: `local implementation complete; cloud smoke pending before release`
+Status: `released and Registry smoke passed`
 
 Goal: make the AWS module the default user-facing install surface.
 
@@ -179,7 +179,7 @@ Tasks:
 - [x] Wrap `betternat_aws_gateway`.
 - [x] Add AMI lookup for the default non-AMI bootstrap path.
 - [x] Accept common `terraform-aws-modules/vpc/aws` output shapes.
-- [ ] Add examples:
+- [x] Add examples:
   - [x] `examples/minimal-existing-vpc`
   - [x] `examples/eks-vpc-module`
   - [x] `examples/stable-egress-ip`
@@ -218,12 +218,12 @@ terraform validate
 
 AWS validation:
 
-- [ ] Disposable VPC apply.
-- [ ] Private client egress.
-- [ ] `betternat status`.
-- [ ] Manual handover.
-- [ ] Single destroy.
-- [ ] Residual scan.
+- [x] Disposable VPC apply.
+- [x] Private client egress.
+- [x] `betternat status`.
+- [x] Manual handover.
+- [x] Single destroy.
+- [x] Residual scan.
 
 Done when:
 
@@ -380,7 +380,7 @@ Done when:
 
 ## Phase 6: GCP Module Repository
 
-Status: `module PR opened; publish and registry smoke pending`
+Status: `released and Registry smoke passed`
 
 Repository:
 
@@ -406,28 +406,28 @@ Tasks:
   - [x] `examples/stable-egress-ip`
 - [x] Add README, input docs, output docs.
 - [x] Add CI validation.
-- [ ] Publish alpha module.
+- [x] Publish module.
 
 Done when:
 
-- GCP module is the default documented GCP alpha install path.
+- GCP module is the default documented GCP install path.
 
 ## Phase 7: Main Documentation Reset
 
-Status: `pending`
+Status: `complete`
 
 Tasks:
 
-- [ ] Update root `README.md` to point users to the AWS module by default.
-- [ ] Update `docs/user/getting-started/QUICK_START.md`.
-- [ ] Update `docs/user/getting-started/EXISTING_VPC_INSTALL.md`.
-- [ ] Update `docs/user/getting-started/EKS_TERRAFORM_MODULE_INTEGRATION.md`.
-- [ ] Add GCP alpha docs only after GCP spike/provider alpha validates.
-- [ ] Update `docs/user/reference/CONFIGURATION.md` or equivalent provider
+- [x] Update root `README.md` to point users to the AWS module by default.
+- [x] Update `docs/user/getting-started/QUICK_START.md`.
+- [x] Update `docs/user/getting-started/EXISTING_VPC_INSTALL.md`.
+- [x] Update `docs/user/getting-started/EKS_TERRAFORM_MODULE_INTEGRATION.md`.
+- [x] Add GCP docs after GCP spike/provider validates.
+- [x] Update `docs/user/reference/CONFIGURATION.md` or equivalent provider
   reference.
-- [ ] Update `docs/user/reference/IAM_POLICY.md` for AWS provider/module split.
-- [ ] Add GCP IAM docs if GCP alpha ships.
-- [ ] Update release checklist.
+- [x] Update `docs/user/reference/IAM_POLICY.md` for provider/module split.
+- [x] Add GCP IAM docs.
+- [x] Update release checklist.
 
 Done when:
 
@@ -437,21 +437,39 @@ Done when:
 
 ## Phase 8: Release And Registry Validation
 
-Status: `pending`
+Status: `Terraform release and Registry smoke complete; OpenTofu check not run`
 
 Tasks:
 
-- [ ] Release main BetterNAT runtime if runtime changes are included.
-- [ ] Release provider reset version.
-- [ ] Release AWS module.
-- [ ] Release GCP module only if GCP alpha is included.
-- [ ] Verify Terraform Registry provider install.
+- [x] Release main BetterNAT runtime if runtime changes are included.
+- [x] Release provider reset version.
+- [x] Release AWS module.
+- [x] Release GCP module only if GCP alpha is included.
+- [x] Verify Terraform Registry provider install.
 - [ ] Verify OpenTofu Registry provider install.
-- [ ] Verify AWS module Registry page.
-- [ ] Verify GCP module Registry page if published.
-- [ ] Run AWS smoke through module.
-- [ ] Run GCP smoke through module if published.
-- [ ] Record release notes for every released artifact.
+- [x] Verify AWS module Registry install.
+- [x] Verify GCP module Registry install.
+- [x] Run AWS smoke through module.
+- [x] Run GCP smoke through module if published.
+- [x] Record release notes for every released artifact.
+
+Release and Registry validation recorded on 2026-06-26:
+
+- BetterNAT runtime `v0.2.0` GitHub Release published and downloaded asset
+  checksums verified.
+- Split Terraform provider `v0.2.0` GitHub Release published with signed
+  SHA256SUMS and Registry-formatted provider zip assets. Downloaded provider
+  assets passed `sha256sum -c`.
+- Terraform Registry provider install passed for `nowakeai/betternat` `0.2.0`.
+  The smoke read `betternat_runtime_artifacts` for `v0.2.0` linux/amd64 and
+  returned the published agent URL plus checksum
+  `df3207e43eacdf949bab1eda0ec73a1f0f8bea703190c0bc3c852da472020f79`.
+- Terraform Registry module install and `terraform validate` passed for
+  `nowakeai/betternat/aws` `0.2.0`.
+- Terraform Registry module install and `terraform validate` passed for
+  `nowakeai/betternat/google` `0.2.0`.
+- OpenTofu Registry install was not rerun in this pass because `tofu` was not
+  installed on the release workstation.
 
 Done when:
 
