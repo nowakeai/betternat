@@ -5,8 +5,10 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nowakeai/betternat/internal/cloud"
+	"github.com/nowakeai/betternat/internal/lease"
 )
 
 func TestEnsureOwnershipFencedDoesNotMutateRouteWhenDescribeFails(t *testing.T) {
@@ -94,5 +96,57 @@ func TestSupervisorDegradesWithoutRouteMutationWhenActiveDescribeFails(t *testin
 	wantCalls := []string{"describe-route:gcp-route:0.0.0.0/0"}
 	if !equalStrings(cloudProvider.calls, wantCalls) {
 		t.Fatalf("active describe failure must not mutate route: got %#v want %#v", cloudProvider.calls, wantCalls)
+	}
+}
+
+func TestSupervisorRestartedOldActiveStaysStandbyWhenLeaseMoved(t *testing.T) {
+	leaseManager := &fakeLease{}
+	leaseManager.record = lease.Record{
+		HAGroupID:       "prod-egress-a",
+		OwnerInstanceID: "gce-new-active",
+		Generation:      12,
+		ExpiresAt:       time.Now().Add(time.Minute),
+		UpdatedAt:       time.Now(),
+	}
+	cloudProvider := &fakeCloud{
+		routes: map[string]cloud.RouteTarget{
+			"gcp-route:0.0.0.0/0": {RouteTableID: "gcp-route", DestinationCIDR: "0.0.0.0/0", Target: "gce-new-active"},
+		},
+	}
+	reporter := NewMemoryStatus()
+	reporter.Report(StepResult{
+		State: StateActive,
+		Lease: lease.Record{
+			HAGroupID:       "prod-egress-a",
+			OwnerInstanceID: "gce-old-active",
+			Generation:      11,
+			ExpiresAt:       time.Now().Add(time.Minute),
+		},
+	})
+	cfg := validSupervisorConfig()
+	cfg.HA.PublicIdentity.Mode = ""
+	cfg.HA.PublicIdentity.AllocationID = ""
+	cfg.HA.RouteFailover.RouteTableIDs = []string{"gcp-route"}
+	engine := &fakeDatapath{}
+	supervisor := Supervisor{
+		Controller: Controller{Cloud: cloudProvider, Lease: leaseManager, Datapath: engine},
+		Reporter:   reporter,
+	}
+
+	result := supervisor.Step(context.Background(), cfg, "gce-old-active")
+	if result.Err != nil {
+		t.Fatalf("step: %v", result.Err)
+	}
+	if result.State != StateStandby {
+		t.Fatalf("old active should become standby after lease moves, got %#v", result)
+	}
+	if result.Lease.OwnerInstanceID != "gce-new-active" || result.Lease.Generation != 12 {
+		t.Fatalf("expected fresh moved lease, got %#v", result.Lease)
+	}
+	if engine.reconcileCount != 1 {
+		t.Fatalf("standby should only reconcile local datapath, got %d", engine.reconcileCount)
+	}
+	if len(cloudProvider.calls) != 0 {
+		t.Fatalf("restarted old active must not repair cloud ownership: %#v", cloudProvider.calls)
 	}
 }

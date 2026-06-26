@@ -132,10 +132,17 @@ Covered cases:
 - `EnsureOwnershipFenced` still repairs an explicitly missing route.
 - `Supervisor.Step` moves an active gateway to `DEGRADED` when route describe
   fails after lease renewal, without mutating the route.
+- A stale local active handover cache is overridden by the fresh coordination
+  lease; if ownership moved, the old active forwards to the current owner and
+  does not create local handover records.
+- A restarted old active with an active-status snapshot but a fresh lease owned
+  by another node becomes `STANDBY`, only reconciles local datapath, and does
+  not repair route or public identity ownership.
 
 Validation:
 
 ```sh
+GOCACHE=$PWD/tmp/go-build go test ./internal/agent
 GOCACHE=$PWD/tmp/go-build go test ./internal/ha
 GOCACHE=$PWD/tmp/go-build go test ./internal/cloud/gcp
 ```
