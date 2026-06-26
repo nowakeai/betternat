@@ -561,6 +561,9 @@ func resolveBootstrapArtifacts(plan *GatewayResourceModel, version string, insta
 	if version == "" {
 		return result, nil
 	}
+	if hasCompleteBootstrapArtifacts(result) {
+		return result, nil
+	}
 	arch := runtimeArchForInstanceType(instanceType)
 	artifactSet, err := runtimeArtifacts(version, "linux", arch)
 	if err != nil {
@@ -579,6 +582,13 @@ func resolveBootstrapArtifacts(plan *GatewayResourceModel, version string, insta
 		result.CLIBinarySHA256 = artifactSet.CLIBinarySHA256
 	}
 	return result, nil
+}
+
+func hasCompleteBootstrapArtifacts(artifacts bootstrapArtifacts) bool {
+	return artifacts.AgentBinaryURL != "" &&
+		artifacts.AgentBinarySHA256 != "" &&
+		artifacts.CLIBinaryURL != "" &&
+		artifacts.CLIBinarySHA256 != ""
 }
 
 func hasBootstrapArtifactOverride(plan *GatewayResourceModel) bool {

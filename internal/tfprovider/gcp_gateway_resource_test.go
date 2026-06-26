@@ -182,6 +182,32 @@ func TestGCPAgentHABootstrapRequiresArtifacts(t *testing.T) {
 	}
 }
 
+func TestGCPAgentHABootstrapAllowsCompleteArtifactOverridesForUnreleasedVersion(t *testing.T) {
+	model := baseGCPGatewayModel()
+	model.EnableAgentHA = types.BoolValue(true)
+	model.ManageRuntimeServiceAccount = types.BoolValue(true)
+	model.BetterNATVersion = types.StringValue("v9.9.9-test")
+	model.AgentBinaryURL = types.StringValue("https://example.invalid/custom-agent")
+	model.AgentBinarySHA256 = types.StringValue("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	model.CLIBinaryURL = types.StringValue("https://example.invalid/custom-cli")
+	model.CLIBinarySHA256 = types.StringValue("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+	privateCIDRs := []string{"10.91.0.0/24"}
+
+	inputs := gcpInputs(model, privateCIDRs)
+	if err := prepareGCPRuntimeServiceAccountPlan(&model); err != nil {
+		t.Fatalf("prepare runtime service account: %v", err)
+	}
+	if err := enrichGCPAgentBootstrap(&model, &inputs, privateCIDRs); err != nil {
+		t.Fatalf("enrich GCP bootstrap: %v", err)
+	}
+	if got := model.AgentBinaryURL.ValueString(); got != "https://example.invalid/custom-agent" {
+		t.Fatalf("unexpected agent url: %s", got)
+	}
+	if got := model.CLIBinaryURL.ValueString(); got != "https://example.invalid/custom-cli" {
+		t.Fatalf("unexpected cli url: %s", got)
+	}
+}
+
 func TestGCPAgentHABootstrapRequiresServiceAccount(t *testing.T) {
 	model := baseGCPGatewayModel()
 	model.EnableAgentHA = types.BoolValue(true)
