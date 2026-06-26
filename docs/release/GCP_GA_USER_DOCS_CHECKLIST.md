@@ -174,3 +174,20 @@ current documentation pass:
 5. Operations, rollback, observability, and IAM reference.
 6. Provider Registry docs.
 7. Release notes and final link check.
+
+## GCP Smoke Evidence
+
+- [x] 2026-06-26 disposable GCP module smoke in `smooth-calling-490406-d9`
+  covered module apply, Firestore HA, MIG capacity repair, private-client
+  egress, stable public identity, proactive handover, passive-stop failover,
+  destroy, and residual scan.
+- [x] Proactive handover preserved stable egress IP `34.102.98.65`; observed
+  probe result was 95/100 successful samples with a longest failure window of
+  5 samples at 0.5 seconds.
+- [x] Passive-stop failover preserved stable egress IP `34.102.98.65`; observed
+  probe result was 62/100 successful samples with a longest failure window of
+  38 samples at 0.5 seconds.
+- [x] Cleanup removed Compute, IAM, route, firewall, address, service account,
+  and GCS artifact resources. The only residuals were three run-scoped
+  Firestore handover history records, which were deleted before the final
+  residual scan passed.
