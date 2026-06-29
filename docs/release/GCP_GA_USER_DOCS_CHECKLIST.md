@@ -32,14 +32,14 @@ Resolved in the 2026-06-29 local-artifact validation pass:
 
 Remaining release blockers:
 
-- Publishable release artifacts must include the fixed runtime and provider
-  behavior validated in the local-artifact GKE pass.
+- GitHub Release assets for the next GCP-capable runtime must be published and
+  verified with the attached `SHA256SUMS`.
 - Release packaging must include the updated user docs that explain retained
   provider-managed GCP runtime service accounts and manual removal after all
   gateways using the account are destroyed.
-- Final release evidence must rerun the GCP quick start or equivalent
-  disposable install using release-versioned artifacts, not only local artifact
-  overrides.
+- If the Terraform provider built-in runtime artifact manifest will support the
+  new runtime directly, update it with checksums from the uploaded GitHub
+  Release assets and validate the provider path.
 
 ## Documentation Principles
 
@@ -216,6 +216,12 @@ current documentation pass:
   completed without the previous runtime service account IAM failure, Terraform
   plan returned no changes, and a post-readiness private-node Pod probe returned
   `public-ip=34.83.255.93` and `HTTP/2 200`.
+- [x] 2026-06-29 local `v0.2.1` release-candidate artifacts were built and
+  checksum-verified. A minimum GKE replacement validation using those versioned
+  artifacts completed on `e2-small`; startup route/LoxiLB convergence reported
+  as `INIT`, the active gateway reached clean `ACTIVE`, the private-node Pod
+  probe returned `public-ip=34.82.231.40` and `HTTP/2 200`, and a follow-up
+  Terraform plan returned no changes after refresh-only state sync.
 - [x] 2026-06-26 disposable GCP module smoke in `smooth-calling-490406-d9`
   covered module apply, Firestore HA, MIG capacity repair, private-client
   egress, stable public identity, proactive handover, passive-stop failover,
