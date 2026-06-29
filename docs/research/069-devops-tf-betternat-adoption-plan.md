@@ -15,13 +15,38 @@ environment to hand-write `betternat_aws_gateway` or `betternat_gcp_gateway`.
 
 Recommended order:
 
-1. Run a disposable BetterNAT stack outside production routes.
-2. Add a disabled BetterNAT backend selector to `devops-tf`.
-3. Pilot AWS first in one non-production private-subnet environment.
-4. Pilot GCP only for a tagged, narrow private-node workload before replacing
+1. Use released runtime/provider artifacts for all new validation:
+   BetterNAT runtime `v0.2.1` and Terraform provider `0.2.1`.
+2. Run a disposable BetterNAT stack outside production routes.
+3. Add a disabled BetterNAT backend selector to `devops-tf`.
+4. Pilot AWS first in one non-production private-subnet environment.
+5. Pilot GCP only for a tagged, narrow private-node workload before replacing
    cluster-wide Cloud NAT.
-5. Move production default egress only after source-IP allowlists, rollback,
+6. Move production default egress only after source-IP allowlists, rollback,
    and live failover checks are explicit.
+
+## Current Release Status
+
+As of 2026-06-29, the GKE compatibility fixes from this spike are available in
+published artifacts:
+
+- BetterNAT runtime `v0.2.1` is published at
+  <https://github.com/nowakeai/betternat/releases/tag/v0.2.1>.
+- Terraform provider `0.2.1` is published at
+  <https://github.com/nowakeai/terraform-provider-betternat/releases/tag/v0.2.1>
+  and is visible through the Terraform Registry as `nowakeai/betternat`
+  version `0.2.1`.
+- The provider `0.2.1` Registry install path was validated with Terraform
+  `v1.14.7`: `terraform init` installed `nowakeai/betternat v0.2.1` on
+  `linux_amd64`, and a Registry-backed `betternat_runtime_artifacts` plan
+  resolved the `v0.2.1` arm64 agent artifact URL.
+- The provider built-in runtime artifact manifest supports direct
+  `betternat_version = "v0.2.1"` for both `linux/amd64` and `linux/arm64`.
+
+The disposable GKE fixture and temporary public artifact bucket used for this
+validation were destroyed after the release checks. A residual scan found no
+matching GCE instances, static addresses, routes, firewall rules, GKE cluster,
+Cloud Router, service accounts, or GCS bucket.
 
 ## Evidence
 
@@ -137,7 +162,7 @@ module "betternat" {
   private_route_table_ids = [aws_route_table.private[0].id]
   private_cidrs           = [aws_vpc.main.cidr_block]
 
-  betternat_version   = var.betternat_version
+  betternat_version   = "v0.2.1"
   stable_egress_ip    = true
   prometheus_enabled  = true
   rollback_on_destroy = true
@@ -181,7 +206,7 @@ module "betternat" {
 
   private_cidrs = [var.subnet_cidr]
 
-  betternat_version = var.betternat_version
+  betternat_version = "v0.2.1"
 
   manage_runtime_service_account = true
   manage_runtime_iam             = true
@@ -243,7 +268,9 @@ For AWS:
 
 For GCP:
 
-- run the disposable GCP quick start,
+- use Terraform provider `nowakeai/betternat` `>= 0.2.1` and
+  `betternat_version = "v0.2.1"`,
+- run the disposable GCP quick start or an equivalent tagged test path,
 - verify Firestore, route ownership, gateway MIG health, LoxiLB, and private
   client egress,
 - introduce a test-only `client_tag` path while Cloud NAT remains available,
