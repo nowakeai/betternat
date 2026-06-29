@@ -163,7 +163,7 @@ func (r *GCPGatewayResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional:            true,
 				Computed:            true,
 				Default:             booldefault.StaticBool(false),
-				MarkdownDescription: "When true with enable_agent_ha, the provider creates and deletes the runtime service account used by gateway VMs. Leave false when an infra-admin stack owns the service account.",
+				MarkdownDescription: "When true with enable_agent_ha, the provider creates and reuses the runtime service account used by gateway VMs. The account is retained during cleanup to keep replacement reliable; remove it explicitly after all gateways using it are destroyed. Leave false when an infra-admin stack owns the service account.",
 			},
 			"runtime_iam_permissions": schema.ListAttribute{
 				ElementType:         types.StringType,

@@ -5,14 +5,24 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/api/googleapi"
 	gcpiam "google.golang.org/api/iam/v1"
 )
 
 func TestRuntimeServiceAccountApplyCreatesMissingAccount(t *testing.T) {
+	previousDelay := runtimeServiceAccountReadyDelay
+	runtimeServiceAccountReadyDelay = time.Nanosecond
+	defer func() { runtimeServiceAccountReadyDelay = previousDelay }()
+
 	api := &fakeRuntimeServiceAccountAPI{
-		getErr: &googleapi.Error{Code: 404, Message: "not found"},
+		getErrs: []error{
+			&googleapi.Error{Code: 404, Message: "not found before create"},
+			&googleapi.Error{Code: 404, Message: "not visible yet"},
+			nil,
+		},
+		account: &gcpiam.ServiceAccount{Email: "bnat-runtime@shared-resources-alt.iam.gserviceaccount.com"},
 	}
 	manager := RuntimeServiceAccountManager{API: api}
 
@@ -31,6 +41,9 @@ func TestRuntimeServiceAccountApplyCreatesMissingAccount(t *testing.T) {
 	}
 	if api.createRequest.AccountId != "bnat-runtime" {
 		t.Fatalf("unexpected account id: %s", api.createRequest.AccountId)
+	}
+	if api.getCalls != 3 {
+		t.Fatalf("expected visibility polling after create, got %d get calls", api.getCalls)
 	}
 }
 
@@ -55,7 +68,7 @@ func TestRuntimeServiceAccountApplyIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestRuntimeServiceAccountCleanupDeletesAccount(t *testing.T) {
+func TestRuntimeServiceAccountCleanupRetainsAccount(t *testing.T) {
 	api := &fakeRuntimeServiceAccountAPI{}
 	manager := RuntimeServiceAccountManager{API: api}
 
@@ -66,13 +79,12 @@ func TestRuntimeServiceAccountCleanupDeletesAccount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cleanup runtime service account: %v", err)
 	}
-	want := "projects/shared-resources-alt/serviceAccounts/bnat-runtime@shared-resources-alt.iam.gserviceaccount.com"
-	if api.deletedName != want {
-		t.Fatalf("unexpected deleted service account: %s", api.deletedName)
+	if api.deletedName != "" {
+		t.Fatalf("runtime service account should be retained, deleted %s", api.deletedName)
 	}
 }
 
-func TestRuntimeServiceAccountCleanupIgnoresMissingAccount(t *testing.T) {
+func TestRuntimeServiceAccountCleanupDoesNotCallDelete(t *testing.T) {
 	api := &fakeRuntimeServiceAccountAPI{deleteErr: &googleapi.Error{Code: 404, Message: "not found"}}
 	manager := RuntimeServiceAccountManager{API: api}
 
@@ -81,7 +93,10 @@ func TestRuntimeServiceAccountCleanupIgnoresMissingAccount(t *testing.T) {
 		AccountID: "bnat-runtime",
 	})
 	if err != nil {
-		t.Fatalf("cleanup missing runtime service account: %v", err)
+		t.Fatalf("cleanup runtime service account: %v", err)
+	}
+	if api.deletedName != "" {
+		t.Fatalf("runtime service account cleanup should not delete account: %s", api.deletedName)
 	}
 }
 
@@ -101,6 +116,8 @@ func TestRuntimeServiceAccountValidateAccountID(t *testing.T) {
 type fakeRuntimeServiceAccountAPI struct {
 	account       *gcpiam.ServiceAccount
 	getErr        error
+	getErrs       []error
+	getCalls      int
 	createProject string
 	createRequest *gcpiam.CreateServiceAccountRequest
 	deletedName   string
@@ -108,6 +125,14 @@ type fakeRuntimeServiceAccountAPI struct {
 }
 
 func (f *fakeRuntimeServiceAccountAPI) GetServiceAccount(_ context.Context, _ string) (*gcpiam.ServiceAccount, error) {
+	f.getCalls++
+	if len(f.getErrs) > 0 {
+		err := f.getErrs[0]
+		f.getErrs = f.getErrs[1:]
+		if err != nil {
+			return nil, err
+		}
+	}
 	if f.getErr != nil {
 		return nil, f.getErr
 	}

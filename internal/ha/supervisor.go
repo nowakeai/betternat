@@ -25,6 +25,11 @@ type Supervisor struct {
 	Controller Controller
 	Now        lease.Clock
 	Reporter   StatusReporter
+	StartedAt  time.Time
+
+	// StartupGracePeriod reports datapath convergence as INIT during a fresh
+	// agent boot, before the node has ever reached ACTIVE in this process.
+	StartupGracePeriod time.Duration
 }
 
 type StepResult struct {
@@ -132,21 +137,21 @@ func (s Supervisor) step(ctx context.Context, cfg config.Config, localInstanceID
 			return StepResult{State: StateDegraded, Lease: current, Err: fmt.Errorf("renew HA lease: %w", renewErr)}
 		}
 		if reconcileErr := s.reconcileDatapath(ctx, cfg); reconcileErr != nil {
-			return StepResult{State: StateDegraded, Lease: renewed, Err: reconcileErr}
+			return StepResult{State: s.startupConvergenceState(), Lease: renewed, Err: reconcileErr}
 		}
 		controller := s.Controller
 		if controller.Now == nil {
 			controller.Now = s.now
 		}
 		if leaseErr := controller.VerifyLease(ctx, renewed, localInstanceID); leaseErr != nil {
-			return StepResult{State: StateDegraded, Lease: renewed, Err: fmt.Errorf("verify HA lease before ownership repair: %w", leaseErr)}
+			return StepResult{State: s.startupConvergenceState(), Lease: renewed, Err: fmt.Errorf("verify HA lease before ownership repair: %w", leaseErr)}
 		}
 		ownership, ownershipErr := controller.EnsureOwnershipFenced(ctx, cfg, localInstanceID, renewed)
 		if ownershipErr != nil {
-			return StepResult{State: StateDegraded, Lease: renewed, Err: ownershipErr}
+			return StepResult{State: s.startupConvergenceState(), Lease: renewed, Err: ownershipErr}
 		}
 		if leaseErr := controller.VerifyLease(ctx, renewed, localInstanceID); leaseErr != nil {
-			return StepResult{State: StateDegraded, Lease: renewed, Activation: ownership, Err: fmt.Errorf("verify HA lease after ownership repair: %w", leaseErr)}
+			return StepResult{State: s.startupConvergenceState(), Lease: renewed, Activation: ownership, Err: fmt.Errorf("verify HA lease after ownership repair: %w", leaseErr)}
 		}
 		ownership.Lease = renewed
 		return StepResult{State: StateActive, Lease: renewed, Activation: ownership}
@@ -212,6 +217,33 @@ func (s Supervisor) reconcileDatapath(ctx context.Context, cfg config.Config) er
 		return fmt.Errorf("reconcile standby datapath: %w", err)
 	}
 	return nil
+}
+
+func (s Supervisor) startupConvergenceState() State {
+	if s.inStartupGrace() && !s.reportedHealthyActive() {
+		return StateInit
+	}
+	return StateDegraded
+}
+
+func (s Supervisor) inStartupGrace() bool {
+	grace := s.StartupGracePeriod
+	if grace <= 0 {
+		grace = 90 * time.Second
+	}
+	startedAt := s.StartedAt
+	if startedAt.IsZero() {
+		return false
+	}
+	return s.now().Sub(startedAt) < grace
+}
+
+func (s Supervisor) reportedHealthyActive() bool {
+	if s.Reporter == nil {
+		return false
+	}
+	snapshot := s.Reporter.Snapshot()
+	return snapshot.State == StateActive && snapshot.LastError == ""
 }
 
 func errorString(err error) string {

@@ -12,6 +12,35 @@ docs, and Terraform module Registry docs. It intentionally avoids copying
 research evidence into every page. Research docs remain the evidence source;
 user docs should explain decisions, workflows, limits, and recovery steps.
 
+## Current Release Hold
+
+Status: do not publish a new GCP-capable release until the 2026-06-29 GKE
+compatibility fixes are carried through release artifacts, user cleanup
+documentation, and final release evidence.
+
+Resolved in the 2026-06-29 local-artifact validation pass:
+
+- GCP runtime service account lifecycle hardening passed repeated gateway
+  replacement after adding service account visibility polling, IAM propagation
+  retry, and managed runtime service account retention on cleanup.
+- Agent startup readiness now distinguishes normal LoxiLB/route convergence
+  from persistent post-ready datapath degradation by reporting startup
+  convergence as `INIT` until a healthy `ACTIVE` has been observed.
+- The GKE compatibility matrix passed for `e2-small`, `e2-highcpu-2`, and
+  `e2-standard-2` with two replacement trials each, private-node Pod egress,
+  route target verification, and no active-gateway `DEGRADED` windows.
+
+Remaining release blockers:
+
+- Publishable release artifacts must include the fixed runtime and provider
+  behavior validated in the local-artifact GKE pass.
+- Release packaging must include the updated user docs that explain retained
+  provider-managed GCP runtime service accounts and manual removal after all
+  gateways using the account are destroyed.
+- Final release evidence must rerun the GCP quick start or equivalent
+  disposable install using release-versioned artifacts, not only local artifact
+  overrides.
+
 ## Documentation Principles
 
 - Lead with the supported user path: module first, provider resources as
@@ -177,6 +206,16 @@ current documentation pass:
 
 ## GCP Smoke Evidence
 
+- [x] 2026-06-29 disposable GKE compatibility matrix in
+  `smooth-calling-490406-d9`, region `us-west1`, zone `us-west1-a`, passed
+  two replacement trials each for `e2-small`, `e2-highcpu-2`, and
+  `e2-standard-2` using fixed local artifacts. Each trial verified route target
+  ownership and 10/10 private-node Pod egress probes, with no active-gateway
+  `DEGRADED` window.
+- [x] After the matrix, the fixture was restored to `e2-small`; replacement
+  completed without the previous runtime service account IAM failure, Terraform
+  plan returned no changes, and a post-readiness private-node Pod probe returned
+  `public-ip=34.83.255.93` and `HTTP/2 200`.
 - [x] 2026-06-26 disposable GCP module smoke in `smooth-calling-490406-d9`
   covered module apply, Firestore HA, MIG capacity repair, private-client
   egress, stable public identity, proactive handover, passive-stop failover,

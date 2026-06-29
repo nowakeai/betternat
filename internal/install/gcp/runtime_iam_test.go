@@ -150,14 +150,19 @@ func TestRuntimeIAMApplyUndeletesRemovedRole(t *testing.T) {
 
 func TestRuntimeIAMApplyRetriesServiceAccountPropagation(t *testing.T) {
 	previousDelay := runtimeIAMSetPolicyRetryDelay
+	previousAttempts := runtimeIAMSetPolicyAttempts
 	runtimeIAMSetPolicyRetryDelay = time.Nanosecond
-	defer func() { runtimeIAMSetPolicyRetryDelay = previousDelay }()
+	runtimeIAMSetPolicyAttempts = 3
+	defer func() {
+		runtimeIAMSetPolicyRetryDelay = previousDelay
+		runtimeIAMSetPolicyAttempts = previousAttempts
+	}()
 
 	api := &fakeRuntimeIAMAPI{
 		getRoleErr: &googleapi.Error{Code: 404, Message: "not found"},
 		policy:     &cloudresourcemanager.Policy{},
 		setPolicyErrs: []error{
-			&googleapi.Error{Code: 400, Message: "Service account betternat-runtime@example.iam.gserviceaccount.com does not exist."},
+			&googleapi.Error{Code: 400, Message: "Service account betternat-runtime@example.iam.gserviceaccount.com is deleted, disabled, or not found."},
 			nil,
 		},
 	}

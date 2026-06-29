@@ -253,6 +253,126 @@ func TestSupervisorDegradesWhenActiveOwnershipVerificationFails(t *testing.T) {
 	}
 }
 
+func TestSupervisorReportsInitForStartupDatapathConvergence(t *testing.T) {
+	now := time.Unix(100, 0)
+	manager := lease.NewMemoryManager("prod-egress-a", 10*time.Second, func() time.Time { return now })
+	if _, err := manager.Acquire(context.Background(), "i-local"); err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	reporter := NewMemoryStatus()
+	reporter.now = func() time.Time { return now }
+	supervisor := Supervisor{
+		Controller:         Controller{Cloud: &fakeCloud{}, Lease: manager, Datapath: &fakeDatapath{reconcileErr: errors.New("loxilb not ready")}},
+		Now:                func() time.Time { return now },
+		Reporter:           reporter,
+		StartedAt:          time.Unix(90, 0),
+		StartupGracePeriod: time.Minute,
+	}
+
+	result := supervisor.Step(context.Background(), validSupervisorConfig(), "i-local")
+	if result.Err == nil {
+		t.Fatal("expected datapath readiness error")
+	}
+	if result.State != StateInit {
+		t.Fatalf("startup datapath readiness should report init, got %#v", result)
+	}
+}
+
+func TestSupervisorReportsInitForStartupOwnershipConvergence(t *testing.T) {
+	now := time.Unix(100, 0)
+	manager := lease.NewMemoryManager("prod-egress-a", 10*time.Second, func() time.Time { return now })
+	if _, err := manager.Acquire(context.Background(), "i-local"); err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	reporter := NewMemoryStatus()
+	reporter.now = func() time.Time { return now }
+	cfg := validRouteOnlyHAConfig()
+	cloudProvider := &fakeCloud{
+		routes: map[string]cloud.RouteTarget{
+			"rtb-a:0.0.0.0/0": {RouteTableID: "rtb-a", DestinationCIDR: "0.0.0.0/0", Target: "i-other"},
+			"rtb-b:0.0.0.0/0": {RouteTableID: "rtb-b", DestinationCIDR: "0.0.0.0/0", Target: "i-other"},
+		},
+		replaceErr: errors.New("route operation still converging"),
+	}
+	supervisor := Supervisor{
+		Controller:         Controller{Cloud: cloudProvider, Lease: manager, Datapath: &fakeDatapath{}},
+		Now:                func() time.Time { return now },
+		Reporter:           reporter,
+		StartedAt:          time.Unix(90, 0),
+		StartupGracePeriod: time.Minute,
+	}
+
+	result := supervisor.Step(context.Background(), cfg, "i-local")
+	if result.Err == nil {
+		t.Fatal("expected ownership convergence error")
+	}
+	if result.State != StateInit {
+		t.Fatalf("startup ownership convergence should report init, got %#v", result)
+	}
+}
+
+func TestSupervisorDegradesDatapathFailureAfterHealthyActive(t *testing.T) {
+	now := time.Unix(100, 0)
+	manager := lease.NewMemoryManager("prod-egress-a", 10*time.Second, func() time.Time { return now })
+	record, err := manager.Acquire(context.Background(), "i-local")
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	reporter := NewMemoryStatus()
+	reporter.now = func() time.Time { return now }
+	reporter.Report(StepResult{State: StateActive, Lease: record})
+	supervisor := Supervisor{
+		Controller:         Controller{Cloud: &fakeCloud{}, Lease: manager, Datapath: &fakeDatapath{reconcileErr: errors.New("loxilb restarted")}},
+		Now:                func() time.Time { return now },
+		Reporter:           reporter,
+		StartedAt:          time.Unix(90, 0),
+		StartupGracePeriod: time.Minute,
+	}
+
+	result := supervisor.Step(context.Background(), validSupervisorConfig(), "i-local")
+	if result.Err == nil {
+		t.Fatal("expected datapath readiness error")
+	}
+	if result.State != StateDegraded {
+		t.Fatalf("healthy active datapath failure should degrade, got %#v", result)
+	}
+}
+
+func TestSupervisorDegradesOwnershipFailureAfterHealthyActive(t *testing.T) {
+	now := time.Unix(100, 0)
+	manager := lease.NewMemoryManager("prod-egress-a", 10*time.Second, func() time.Time { return now })
+	record, err := manager.Acquire(context.Background(), "i-local")
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	reporter := NewMemoryStatus()
+	reporter.now = func() time.Time { return now }
+	reporter.Report(StepResult{State: StateActive, Lease: record})
+	cfg := validRouteOnlyHAConfig()
+	cloudProvider := &fakeCloud{
+		routes: map[string]cloud.RouteTarget{
+			"rtb-a:0.0.0.0/0": {RouteTableID: "rtb-a", DestinationCIDR: "0.0.0.0/0", Target: "i-other"},
+			"rtb-b:0.0.0.0/0": {RouteTableID: "rtb-b", DestinationCIDR: "0.0.0.0/0", Target: "i-other"},
+		},
+		replaceErr: errors.New("route repair failed"),
+	}
+	supervisor := Supervisor{
+		Controller:         Controller{Cloud: cloudProvider, Lease: manager, Datapath: &fakeDatapath{}},
+		Now:                func() time.Time { return now },
+		Reporter:           reporter,
+		StartedAt:          time.Unix(90, 0),
+		StartupGracePeriod: time.Minute,
+	}
+
+	result := supervisor.Step(context.Background(), cfg, "i-local")
+	if result.Err == nil {
+		t.Fatal("expected ownership repair error")
+	}
+	if result.State != StateDegraded {
+		t.Fatalf("healthy active ownership failure should degrade, got %#v", result)
+	}
+}
+
 func TestSupervisorDoesNotMutateCloudWhenLeaseAcquireFails(t *testing.T) {
 	supervisor := Supervisor{
 		Controller: Controller{Cloud: &fakeCloud{}, Lease: &failingAcquireLease{}},

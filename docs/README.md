@@ -159,6 +159,7 @@ Read these first when revisiting product or architecture direction:
 - [research/066-gcp-management-ip-boundary.md](research/066-gcp-management-ip-boundary.md) — Decision that GCP single-NIC gateways cannot provide AWS-like separate management public IP and movable stable egress IP semantics.
 - [research/067-gcp-connectivity-first-and-multinic-results.md](research/067-gcp-connectivity-first-and-multinic-results.md) — Live GCP control-plane microbenchmarks and connectivity-first handover results showing multi-NIC is not the current latency solution.
 - [research/068-aws-module-smoke-results.md](research/068-aws-module-smoke-results.md) — Disposable AWS module smoke covering private-client egress, stable EIP handover with zero observed failed samples, destroy, and residual scan.
+- [research/069-devops-tf-betternat-adoption-plan.md](research/069-devops-tf-betternat-adoption-plan.md) — Adoption plan for fitting BetterNAT into the AltLayer `devops-tf` AWS and GCP networking modules.
 
 ## Supporting Research
 

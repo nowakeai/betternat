@@ -188,10 +188,13 @@ Expected order:
 
 1. Terraform removes BetterNAT gateway capacity.
 2. The provider removes the tagged route it owns.
-3. The provider removes instance templates, MIGs, service accounts, custom IAM
-   bindings, and Firestore database only when those lifecycles were enabled in
-   the same stack.
-4. Terraform removes surrounding VPC fixture resources if the example created
+3. The provider removes instance templates, MIGs, custom IAM bindings, and
+   Firestore database only when those lifecycles were enabled in the same
+   stack.
+4. Provider-managed GCP runtime service accounts are retained during gateway
+   cleanup for reliable same-name replacement. Remove a retained runtime
+   service account only after all gateways using it are destroyed.
+5. Terraform removes surrounding VPC fixture resources if the example created
    them.
 
 After destroy, verify no run-scoped resources remain:
@@ -202,6 +205,10 @@ gcloud compute routes list --filter="name~<run-id>"
 gcloud compute firewall-rules list --filter="name~<run-id>"
 gcloud iam service-accounts list --filter="email~<run-id>"
 ```
+
+The service-account check may show a retained BetterNAT runtime service account
+when `manage_runtime_service_account = true`. That is expected. Confirm no live
+gateway still uses it before deleting it.
 
 If stable public identity used a regional static external IPv4 address owned by
 the calling stack, confirm whether that address should remain reserved or be

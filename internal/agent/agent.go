@@ -105,7 +105,8 @@ func (DefaultHASupervisorFactory) NewSupervisor(ctx context.Context, cfg config.
 			Datapath:    engine,
 			OwnershipMu: ownershipLock(cfg.HAGroupID),
 		},
-		Reporter: reporter,
+		Reporter:  reporter,
+		StartedAt: time.Now(),
 	}, nil
 }
 

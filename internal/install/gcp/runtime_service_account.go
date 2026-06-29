@@ -4,8 +4,14 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	gcpiam "google.golang.org/api/iam/v1"
+)
+
+var (
+	runtimeServiceAccountReadyAttempts = 12
+	runtimeServiceAccountReadyDelay    = 5 * time.Second
 )
 
 type RuntimeServiceAccountInputs struct {
@@ -57,6 +63,13 @@ func (m RuntimeServiceAccountManager) Apply(ctx context.Context, inputs RuntimeS
 	if err != nil {
 		return nil, fmt.Errorf("create gcp runtime service account %q: %w", inputs.AccountID, err)
 	}
+	ready, err := m.waitUntilReady(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	if ready != nil {
+		return ready, nil
+	}
 	return account, nil
 }
 
@@ -67,10 +80,10 @@ func (m RuntimeServiceAccountManager) Cleanup(ctx context.Context, inputs Runtim
 	if m.API == nil {
 		return fmt.Errorf("gcp runtime service account api is required")
 	}
-	name := runtimeServiceAccountName(inputs.ProjectID, inputs.Email())
-	if err := m.API.DeleteServiceAccount(ctx, name); err != nil && !isGoogleNotFound(err) {
-		return fmt.Errorf("delete gcp runtime service account %q: %w", name, err)
-	}
+	// Keep provider-managed runtime service accounts across gateway replacement.
+	// GCP can reject IAM bindings for a same-email service account recreated
+	// shortly after deletion for several minutes, which makes Terraform
+	// replacement unreliable. IAM bindings are still removed separately.
 	return nil
 }
 
@@ -80,6 +93,31 @@ func (i RuntimeServiceAccountInputs) Email() string {
 
 func (i RuntimeServiceAccountInputs) Validate() error {
 	return i.validate()
+}
+
+func (m RuntimeServiceAccountManager) waitUntilReady(ctx context.Context, name string) (*gcpiam.ServiceAccount, error) {
+	attempts := runtimeServiceAccountReadyAttempts
+	if attempts <= 0 {
+		attempts = 1
+	}
+	var lastErr error
+	for attempt := 0; attempt < attempts; attempt++ {
+		account, err := m.API.GetServiceAccount(ctx, name)
+		if err == nil {
+			return account, nil
+		}
+		lastErr = err
+		if !isGoogleNotFound(err) {
+			return nil, fmt.Errorf("get created gcp runtime service account %q: %w", name, err)
+		}
+		if attempt+1 == attempts {
+			break
+		}
+		if err := sleepContext(ctx, runtimeServiceAccountReadyDelay); err != nil {
+			return nil, err
+		}
+	}
+	return nil, fmt.Errorf("wait for gcp runtime service account %q to become visible: %w", name, lastErr)
 }
 
 func (i RuntimeServiceAccountInputs) validate() error {

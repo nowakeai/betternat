@@ -15,6 +15,7 @@ import (
 const runtimeRoleID = "betterNATRuntime"
 
 var runtimeIAMSetPolicyRetryDelay = 5 * time.Second
+var runtimeIAMSetPolicyAttempts = 60
 
 type RuntimeIAMInputs struct {
 	ProjectID           string
@@ -98,13 +99,17 @@ func (m RuntimeIAMManager) Apply(ctx context.Context, inputs RuntimeIAMInputs) e
 
 func (m RuntimeIAMManager) setPolicyWithRetry(ctx context.Context, projectID string, policy *cloudresourcemanager.Policy) error {
 	var lastErr error
-	for attempt := 0; attempt < 6; attempt++ {
+	attempts := runtimeIAMSetPolicyAttempts
+	if attempts <= 0 {
+		attempts = 1
+	}
+	for attempt := 0; attempt < attempts; attempt++ {
 		if _, err := m.API.SetPolicy(ctx, projectID, policy); err != nil {
 			lastErr = err
 			if !isServiceAccountPropagationError(err) {
 				return err
 			}
-			if attempt == 5 {
+			if attempt+1 == attempts {
 				break
 			}
 			if err := sleepContext(ctx, runtimeIAMSetPolicyRetryDelay); err != nil {
@@ -297,8 +302,11 @@ func isServiceAccountPropagationError(err error) bool {
 	if err == nil {
 		return false
 	}
-	message := err.Error()
-	return strings.Contains(message, "googleapi: Error 400") &&
-		strings.Contains(message, "Service account") &&
-		strings.Contains(message, "does not exist")
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "googleapi: error 400") &&
+		strings.Contains(message, "service account") &&
+		(strings.Contains(message, "does not exist") ||
+			strings.Contains(message, "not found") ||
+			strings.Contains(message, "deleted") ||
+			strings.Contains(message, "disabled"))
 }

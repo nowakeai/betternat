@@ -211,16 +211,24 @@ when a project naming policy requires a different role ID. GCP keeps deleted
 custom roles in a soft-deleted state for a period after destroy; that is normal
 and the provider can recreate or undelete its own role on a later apply.
 
-When `manage_runtime_service_account = true`, the provider also creates and
-deletes the runtime service account. The Terraform execution identity then
-needs:
+When `manage_runtime_service_account = true`, the provider creates and reuses
+the runtime service account. It intentionally retains that service account
+during gateway cleanup so repeated same-name replacement does not hit GCP's
+service-account delete/recreate propagation window. The provider removes
+BetterNAT-managed IAM bindings separately.
+
+The Terraform execution identity then needs:
 
 | Permission | Why |
 | --- | --- |
 | `iam.serviceAccounts.create` | Create the runtime service account. |
-| `iam.serviceAccounts.delete` | Remove the provider-owned runtime service account on destroy. |
 | `iam.serviceAccounts.get` | Check whether the runtime service account already exists. |
 | `iam.serviceAccounts.actAs` | Attach the runtime service account to gateway VMs. |
+
+After all gateways that use a provider-managed runtime service account are
+destroyed, an operator may remove the retained service account manually or from
+an owning IAM stack. Do not delete it while another BetterNAT gateway can still
+attach it or while a same-name replacement may be rerun.
 
 Leave `manage_runtime_service_account = false` when service-account lifecycle is
 owned by another Terraform stack or infra-admin workflow.

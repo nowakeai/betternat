@@ -75,6 +75,9 @@ to change topology, route, capacity, image, bootstrap, or HA settings.
 
 ## Destroy
 
-Terraform destroy removes provider-owned gateway resources. If you use a shared
-Firestore database or a static public address owned by another stack, those
-shared resources remain outside this resource's lifecycle.
+Terraform destroy removes provider-owned gateway resources. Provider-managed
+runtime service accounts are retained during gateway cleanup so same-name
+replacement remains reliable on GCP; remove them only after all gateways using
+the account are destroyed. If you use a shared Firestore database or a static
+public address owned by another stack, those shared resources remain outside
+this resource's lifecycle.
