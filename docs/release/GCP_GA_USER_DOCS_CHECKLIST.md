@@ -14,9 +14,9 @@ user docs should explain decisions, workflows, limits, and recovery steps.
 
 ## Current Release Hold
 
-Status: do not publish a new GCP-capable release until the 2026-06-29 GKE
-compatibility fixes are carried through release artifacts, user cleanup
-documentation, and final release evidence.
+Status: release hold lifted for the v0.2.1 GCP compatibility patch. The
+2026-06-29 GKE compatibility fixes have been carried through release artifacts,
+user cleanup documentation, and final release evidence.
 
 Resolved in the 2026-06-29 local-artifact validation pass:
 
@@ -30,16 +30,16 @@ Resolved in the 2026-06-29 local-artifact validation pass:
   `e2-standard-2` with two replacement trials each, private-node Pod egress,
   route target verification, and no active-gateway `DEGRADED` windows.
 
-Remaining release blockers:
+Resolved release blockers:
 
-- GitHub Release assets for the next GCP-capable runtime must be published and
-  verified with the attached `SHA256SUMS`.
-- Release packaging must include the updated user docs that explain retained
+- GitHub Release assets for `v0.2.1` were published and verified with the
+  attached `SHA256SUMS`.
+- Release packaging includes the updated user docs that explain retained
   provider-managed GCP runtime service accounts and manual removal after all
   gateways using the account are destroyed.
-- If the Terraform provider built-in runtime artifact manifest will support the
-  new runtime directly, update it with checksums from the uploaded GitHub
-  Release assets and validate the provider path.
+- Terraform provider built-in runtime artifact manifest support for `v0.2.1`
+  was prepared from the uploaded GitHub Release checksums and validated by the
+  provider runtime artifact tests.
 
 ## Documentation Principles
 

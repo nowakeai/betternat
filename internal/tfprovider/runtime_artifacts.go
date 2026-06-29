@@ -66,6 +66,16 @@ var supportedRuntimeArtifactChecksums = map[string]map[string]runtimeArtifactChe
 			CLISHA256:   "70903f738a19fc77045d29a67dde7f595069c02523ff9f6979b44156cb586535",
 		},
 	},
+	"v0.2.1": {
+		"arm64": {
+			AgentSHA256: "b46d9c08cfd23023281252bf20c880e4ac07fe7fcb4847cd82a7bd41b05cda7d",
+			CLISHA256:   "9d94a6ad932b0a16c887e1dfa8d55edfa5e9f0ecf4f0e77910804515e2ee413b",
+		},
+		"amd64": {
+			AgentSHA256: "5b8ce53ad44a3a62e572fa5490e94111f9045eb07b3bf369533cd329d72f5c2b",
+			CLISHA256:   "49b697e12148fda419cb1324c3b66be24afd8e18acc638eaec43895e6d6bb699",
+		},
+	},
 }
 
 func runtimeArtifacts(version string, osName string, arch string) (runtimeArtifactSet, error) {
