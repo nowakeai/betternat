@@ -59,6 +59,33 @@ but it is not an operator recovery path or release acceptance substitute.
 | AWS | `nowakeai/betternat/aws` | DynamoDB lease/fencing | Auto Scaling Group | shared EIP when `stable_egress_ip=true` | one AZ per HA group |
 | GCP | `nowakeai/betternat/google` | Firestore lease/fencing | zonal Managed Instance Group | optional existing regional static external IPv4; connectivity-first handover may temporarily use the target gateway public IP | single-zone gateway group |
 
+## How It Compares
+
+BetterNAT, [nat-zero](https://github.com/MachineDotDev/nat-zero), and
+[fck-nat](https://github.com/AndrewGuenther/fck-nat) all reduce or avoid AWS NAT
+Gateway per-GB processing charges by using self-managed NAT instances. They are
+optimized for different operating models:
+
+| Project | Best fit | Cloud scope | Operating model | Observability |
+| --- | --- | --- | --- | --- |
+| BetterNAT | High-volume private workloads where NAT data processing dominates the bill and the operator wants fast HA handover, rollback, and Prometheus-native signals. | AWS and GCP module surfaces. | Warm active/standby gateway group with provider-owned route/public-identity reconciliation, cloud lease/fencing, proactive handover, and node capacity repair. | Prometheus metrics for HA, datapath readiness, traffic counters, route/public identity, and failover state. |
+| [nat-zero](https://github.com/MachineDotDev/nat-zero) | Intermittent AWS environments such as dev, staging, CI, batch, and side projects where idle cost matters most. | AWS. | Terraform module plus EventBridge/Lambda reconciliation that starts NAT when workloads appear and stops it when they disappear. | CloudWatch/Lambda-oriented operational view. |
+| [fck-nat](https://github.com/AndrewGuenther/fck-nat) | Simple always-on AWS NAT instance replacement with published AMIs and a small runtime configuration surface. | AWS. | AMI-first NAT appliance, often deployed through Terraform/CDK, with optional ASG/ENI/EIP features for HA and static addressing. | CloudWatch-agent metric parity with familiar NAT Gateway-style counters. |
+
+Use BetterNAT when the main problem is sustained high-volume egress from private
+workloads and you want explicit control over failover, rollback, and metrics.
+Because BetterNAT keeps a standby gateway warm and coordinates handover through
+the agent, planned/proactive HA switching can be very short under healthy
+control-plane conditions. In the AWS v0.2 disposable module smoke, proactive
+handover had `0` failed client probe samples at `0.5s` sampling; GCP proactive
+handover's longest observed failure window was `5` samples at `0.5s`. These are
+validation results, not a fixed SLA, and passive failure recovery still depends
+on detection, lease, and cloud API timing.
+
+Use nat-zero when environments spend meaningful time idle and startup delay is
+acceptable. Use fck-nat when you want the simplest AWS NAT instance appliance
+shape and do not need BetterNAT's multi-cloud/provider control plane.
+
 ## Quick Start
 
 ### AWS
