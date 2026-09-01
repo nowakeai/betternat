@@ -103,6 +103,8 @@ Use the matching provider/runtime pair shown in the release notes:
 
 | Provider version | Supported `betternat_version` values | Notes |
 | --- | --- | --- |
+| `0.2.2` | `v0.2.0`, `v0.2.1` | AWS replacement-safety provider patch; runtime selection remains independent. |
+| `0.2.1` | `v0.2.0` | GCP replacement-safety provider patch. |
 | `0.2.0` | `v0.2.0` | Terraform surface reset provider/runtime pair. |
 | `0.1.0` | `v0.1.0` | First GA provider/runtime pair. |
 
