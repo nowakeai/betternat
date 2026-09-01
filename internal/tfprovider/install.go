@@ -22,6 +22,7 @@ import (
 type Installer interface {
 	Install(ctx context.Context, plan installplan.Plan, inputs awsinstall.Inputs) (awsinstall.Result, error)
 	UpdateCapacity(ctx context.Context, plan installplan.Plan) error
+	UpdatePools(ctx context.Context, plan installplan.Plan, userData string) error
 	ReconcileInfrastructure(ctx context.Context, plan installplan.Plan) error
 }
 
@@ -59,6 +60,10 @@ func (i awsInstaller) Install(ctx context.Context, plan installplan.Plan, inputs
 
 func (i awsInstaller) UpdateCapacity(ctx context.Context, plan installplan.Plan) error {
 	return i.applier.UpdateCapacity(ctx, plan)
+}
+
+func (i awsInstaller) UpdatePools(ctx context.Context, plan installplan.Plan, userData string) error {
+	return i.applier.UpdatePools(ctx, plan, userData)
 }
 
 func (i awsInstaller) ReconcileInfrastructure(ctx context.Context, plan installplan.Plan) error {
@@ -241,6 +246,21 @@ func updateGatewayCapacity(ctx context.Context, state GatewayResourceModel, fact
 		return err
 	}
 	return installer.UpdateCapacity(ctx, plan)
+}
+
+func updateGatewayPools(ctx context.Context, state GatewayResourceModel, factory InstallerFactory) error {
+	if factory == nil {
+		return fmt.Errorf("installer factory is not configured")
+	}
+	var plan installplan.Plan
+	if err := json.Unmarshal([]byte(state.InstallPlanJSON.ValueString()), &plan); err != nil {
+		return fmt.Errorf("decode install plan: %w", err)
+	}
+	installer, err := factory(ctx, state.Region.ValueString())
+	if err != nil {
+		return err
+	}
+	return installer.UpdatePools(ctx, plan, state.UserData.ValueString())
 }
 
 func launchedInstanceMaps(plan installplan.Plan, launched map[string]string) (map[string]string, map[string]string) {

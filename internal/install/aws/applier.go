@@ -29,6 +29,7 @@ type EC2API interface {
 	AuthorizeSecurityGroupIngress(ctx context.Context, params *ec2.AuthorizeSecurityGroupIngressInput, optFns ...func(*ec2.Options)) (*ec2.AuthorizeSecurityGroupIngressOutput, error)
 	AssociateAddress(ctx context.Context, params *ec2.AssociateAddressInput, optFns ...func(*ec2.Options)) (*ec2.AssociateAddressOutput, error)
 	CreateLaunchTemplate(ctx context.Context, params *ec2.CreateLaunchTemplateInput, optFns ...func(*ec2.Options)) (*ec2.CreateLaunchTemplateOutput, error)
+	CreateLaunchTemplateVersion(ctx context.Context, params *ec2.CreateLaunchTemplateVersionInput, optFns ...func(*ec2.Options)) (*ec2.CreateLaunchTemplateVersionOutput, error)
 	CreateSecurityGroup(ctx context.Context, params *ec2.CreateSecurityGroupInput, optFns ...func(*ec2.Options)) (*ec2.CreateSecurityGroupOutput, error)
 	CreateTags(ctx context.Context, params *ec2.CreateTagsInput, optFns ...func(*ec2.Options)) (*ec2.CreateTagsOutput, error)
 	DeleteLaunchTemplate(ctx context.Context, params *ec2.DeleteLaunchTemplateInput, optFns ...func(*ec2.Options)) (*ec2.DeleteLaunchTemplateOutput, error)
@@ -51,7 +52,9 @@ type AutoScalingAPI interface {
 	DeleteAutoScalingGroup(ctx context.Context, params *autoscaling.DeleteAutoScalingGroupInput, optFns ...func(*autoscaling.Options)) (*autoscaling.DeleteAutoScalingGroupOutput, error)
 	DeleteLifecycleHook(ctx context.Context, params *autoscaling.DeleteLifecycleHookInput, optFns ...func(*autoscaling.Options)) (*autoscaling.DeleteLifecycleHookOutput, error)
 	DescribeAutoScalingGroups(ctx context.Context, params *autoscaling.DescribeAutoScalingGroupsInput, optFns ...func(*autoscaling.Options)) (*autoscaling.DescribeAutoScalingGroupsOutput, error)
+	DescribeInstanceRefreshes(ctx context.Context, params *autoscaling.DescribeInstanceRefreshesInput, optFns ...func(*autoscaling.Options)) (*autoscaling.DescribeInstanceRefreshesOutput, error)
 	PutLifecycleHook(ctx context.Context, params *autoscaling.PutLifecycleHookInput, optFns ...func(*autoscaling.Options)) (*autoscaling.PutLifecycleHookOutput, error)
+	StartInstanceRefresh(ctx context.Context, params *autoscaling.StartInstanceRefreshInput, optFns ...func(*autoscaling.Options)) (*autoscaling.StartInstanceRefreshOutput, error)
 	UpdateAutoScalingGroup(ctx context.Context, params *autoscaling.UpdateAutoScalingGroupInput, optFns ...func(*autoscaling.Options)) (*autoscaling.UpdateAutoScalingGroupOutput, error)
 }
 
@@ -262,6 +265,92 @@ func (a Applier) UpdateCapacity(ctx context.Context, plan installplan.Plan) erro
 		}
 	}
 	return nil
+}
+
+// UpdatePools creates a new launch template version and rolls each ASG to it.
+// Unlike resource replacement, this preserves the gateway-owned EIPs and the
+// rest of the control-plane infrastructure.
+func (a Applier) UpdatePools(ctx context.Context, plan installplan.Plan, userData string) error {
+	if len(plan.Pools) == 0 {
+		return fmt.Errorf("pool update requires ASG pools")
+	}
+	if a.EC2 == nil || a.AutoScaling == nil {
+		return fmt.Errorf("ec2 and autoscaling clients are required")
+	}
+	securityGroupID, err := a.findSecurityGroup(ctx, plan)
+	if err != nil {
+		return err
+	}
+	for _, pool := range plan.Pools {
+		output, err := a.EC2.CreateLaunchTemplateVersion(ctx, &ec2.CreateLaunchTemplateVersionInput{
+			LaunchTemplateName: awssdk.String(pool.LaunchTemplateName),
+			LaunchTemplateData: launchTemplateData(plan, pool, securityGroupID, userData),
+			SourceVersion:      awssdk.String("$Latest"),
+			VersionDescription: awssdk.String("BetterNAT provider in-place rollout"),
+		})
+		if err != nil {
+			return fmt.Errorf("create launch template version %s: %w", pool.LaunchTemplateName, err)
+		}
+		if output.LaunchTemplateVersion == nil || output.LaunchTemplateVersion.VersionNumber == nil {
+			return fmt.Errorf("create launch template version %s returned no version", pool.LaunchTemplateName)
+		}
+		version := fmt.Sprintf("%d", awssdk.ToInt64(output.LaunchTemplateVersion.VersionNumber))
+		refresh, err := a.AutoScaling.StartInstanceRefresh(ctx, &autoscaling.StartInstanceRefreshInput{
+			AutoScalingGroupName: awssdk.String(pool.ASGName),
+			DesiredConfiguration: &astypes.DesiredConfiguration{
+				LaunchTemplate: &astypes.LaunchTemplateSpecification{
+					LaunchTemplateName: awssdk.String(pool.LaunchTemplateName),
+					Version:            awssdk.String(version),
+				},
+			},
+			Preferences: &astypes.RefreshPreferences{
+				AutoRollback:         awssdk.Bool(false),
+				InstanceWarmup:       awssdk.Int32(60),
+				MaxHealthyPercentage: awssdk.Int32(150),
+				MinHealthyPercentage: awssdk.Int32(100),
+				SkipMatching:         awssdk.Bool(true),
+			},
+			Strategy: astypes.RefreshStrategyRolling,
+		})
+		if err != nil {
+			return fmt.Errorf("start instance refresh %s: %w", pool.ASGName, err)
+		}
+		refreshID := awssdk.ToString(refresh.InstanceRefreshId)
+		if refreshID == "" {
+			return fmt.Errorf("start instance refresh %s returned no id", pool.ASGName)
+		}
+		if err := a.waitForInstanceRefresh(ctx, pool.ASGName, refreshID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (a Applier) waitForInstanceRefresh(ctx context.Context, asgName, refreshID string) error {
+	for {
+		output, err := a.AutoScaling.DescribeInstanceRefreshes(ctx, &autoscaling.DescribeInstanceRefreshesInput{
+			AutoScalingGroupName: awssdk.String(asgName),
+			InstanceRefreshIds:   []string{refreshID},
+		})
+		if err != nil {
+			return fmt.Errorf("describe instance refresh %s: %w", asgName, err)
+		}
+		if len(output.InstanceRefreshes) == 0 {
+			return fmt.Errorf("instance refresh %s for %s was not found", refreshID, asgName)
+		}
+		refresh := output.InstanceRefreshes[0]
+		switch refresh.Status {
+		case astypes.InstanceRefreshStatusSuccessful:
+			return nil
+		case astypes.InstanceRefreshStatusFailed, astypes.InstanceRefreshStatusCancelled, astypes.InstanceRefreshStatusRollbackFailed:
+			return fmt.Errorf("instance refresh %s for %s ended in %s: %s", refreshID, asgName, refresh.Status, awssdk.ToString(refresh.StatusReason))
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(10 * time.Second):
+		}
+	}
 }
 
 func (a Applier) ReconcileInfrastructure(ctx context.Context, plan installplan.Plan) error {
@@ -819,6 +908,28 @@ func (a Applier) createLaunchTemplate(ctx context.Context, plan installplan.Plan
 	if plan.AMIID == "" {
 		return "", fmt.Errorf("ami id is required to create launch template %q", pool.LaunchTemplateName)
 	}
+	data := launchTemplateData(plan, pool, securityGroupID, userData)
+	output, err := a.EC2.CreateLaunchTemplate(ctx, &ec2.CreateLaunchTemplateInput{
+		LaunchTemplateName: awssdk.String(pool.LaunchTemplateName),
+		LaunchTemplateData: data,
+		TagSpecifications: []ec2types.TagSpecification{
+			{
+				ResourceType: ec2types.ResourceTypeLaunchTemplate,
+				Tags:         ec2TagsWithName(plan.Tags, pool.LaunchTemplateName),
+			},
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("create launch template %s: %w", pool.LaunchTemplateName, err)
+	}
+	launchTemplateID := awssdk.ToString(output.LaunchTemplate.LaunchTemplateId)
+	if launchTemplateID == "" {
+		return "", fmt.Errorf("create launch template %s returned empty id", pool.LaunchTemplateName)
+	}
+	return launchTemplateID, nil
+}
+
+func launchTemplateData(plan installplan.Plan, pool installplan.Pool, securityGroupID string, userData string) *ec2types.RequestLaunchTemplateData {
 	data := &ec2types.RequestLaunchTemplateData{
 		ImageId:      awssdk.String(plan.AMIID),
 		InstanceType: ec2types.InstanceType(plan.InstanceType),
@@ -860,24 +971,7 @@ func (a Applier) createLaunchTemplate(ctx context.Context, plan installplan.Plan
 	if userData != "" {
 		data.UserData = awssdk.String(base64.StdEncoding.EncodeToString([]byte(userData)))
 	}
-	output, err := a.EC2.CreateLaunchTemplate(ctx, &ec2.CreateLaunchTemplateInput{
-		LaunchTemplateName: awssdk.String(pool.LaunchTemplateName),
-		LaunchTemplateData: data,
-		TagSpecifications: []ec2types.TagSpecification{
-			{
-				ResourceType: ec2types.ResourceTypeLaunchTemplate,
-				Tags:         ec2TagsWithName(plan.Tags, pool.LaunchTemplateName),
-			},
-		},
-	})
-	if err != nil {
-		return "", fmt.Errorf("create launch template %s: %w", pool.LaunchTemplateName, err)
-	}
-	launchTemplateID := awssdk.ToString(output.LaunchTemplate.LaunchTemplateId)
-	if launchTemplateID == "" {
-		return "", fmt.Errorf("create launch template %s returned empty id", pool.LaunchTemplateName)
-	}
-	return launchTemplateID, nil
+	return data
 }
 
 func (a Applier) createAutoScalingGroup(ctx context.Context, plan installplan.Plan, pool installplan.Pool, launchTemplateID string) error {

@@ -42,6 +42,12 @@ func TestDeriveGatewayState(t *testing.T) {
 	if derived.DatapathEngine.ValueString() != "loxilb" {
 		t.Fatalf("unexpected datapath engine: %s", derived.DatapathEngine.ValueString())
 	}
+	if derived.PrimaryInterface.ValueString() != "auto" {
+		t.Fatalf("unexpected primary interface: %s", derived.PrimaryInterface.ValueString())
+	}
+	if derived.SNATInterface.ValueString() != "auto" {
+		t.Fatalf("unexpected SNAT interface: %s", derived.SNATInterface.ValueString())
+	}
 	if derived.Cloud.ValueString() != "aws" {
 		t.Fatalf("unexpected cloud default: %s", derived.Cloud.ValueString())
 	}
@@ -163,6 +169,32 @@ func TestDeriveGatewayState(t *testing.T) {
 	}
 	if !strings.Contains(derived.AgentConfigJSON.ValueString(), `"renew_interval_seconds":1`) {
 		t.Fatalf("agent config should use default HA renew interval: %s", derived.AgentConfigJSON.ValueString())
+	}
+	if !strings.Contains(derived.AgentConfigJSON.ValueString(), `"primary_interface":"auto"`) {
+		t.Fatalf("agent config should default primary interface to auto: %s", derived.AgentConfigJSON.ValueString())
+	}
+	if !strings.Contains(derived.AgentConfigJSON.ValueString(), `"snat_interface":"auto"`) {
+		t.Fatalf("agent config should default SNAT interface to auto: %s", derived.AgentConfigJSON.ValueString())
+	}
+}
+
+func TestDeriveGatewayStatePreservesExplicitInterfaces(t *testing.T) {
+	plan := validGatewayPlan()
+	plan.PrimaryInterface = types.StringValue("enX0")
+	plan.SNATInterface = types.StringValue("enX1")
+
+	derived, err := DeriveGatewayState(context.Background(), &plan)
+	if err != nil {
+		t.Fatalf("derive gateway state: %v", err)
+	}
+	if derived.PrimaryInterface.ValueString() != "enX0" || derived.SNATInterface.ValueString() != "enX1" {
+		t.Fatalf("unexpected interfaces: primary=%q snat=%q", derived.PrimaryInterface.ValueString(), derived.SNATInterface.ValueString())
+	}
+	if !strings.Contains(derived.AgentConfigJSON.ValueString(), `"primary_interface":"enX0"`) {
+		t.Fatalf("agent config should preserve explicit primary interface: %s", derived.AgentConfigJSON.ValueString())
+	}
+	if !strings.Contains(derived.AgentConfigJSON.ValueString(), `"snat_interface":"enX1"`) {
+		t.Fatalf("agent config should preserve explicit SNAT interface: %s", derived.AgentConfigJSON.ValueString())
 	}
 }
 
@@ -763,6 +795,10 @@ func (f fakeInstaller) Install(context.Context, installplan.Plan, awsinstall.Inp
 }
 
 func (f fakeInstaller) UpdateCapacity(context.Context, installplan.Plan) error {
+	return nil
+}
+
+func (f fakeInstaller) UpdatePools(context.Context, installplan.Plan, string) error {
 	return nil
 }
 

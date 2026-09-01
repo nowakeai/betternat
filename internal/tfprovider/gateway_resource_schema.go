@@ -132,6 +132,18 @@ func (r *GatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Computed:            true,
 				Default:             stringdefault.StaticString("nftables"),
 			},
+			"primary_interface": schema.StringAttribute{
+				MarkdownDescription: "Primary network interface used for gateway identity, metrics, and HA operations. The default auto value detects the interface that owns the IPv4 default route during bootstrap. Set an explicit Linux interface name to override detection.",
+				Optional:            true,
+				Computed:            true,
+				Default:             stringdefault.StaticString("auto"),
+			},
+			"snat_interface": schema.StringAttribute{
+				MarkdownDescription: "Network interface whose IPv4 address LoxiLB uses for SNAT. The default auto value follows default-route interface detection during bootstrap. Set an explicit Linux interface name when the SNAT interface differs from the primary interface.",
+				Optional:            true,
+				Computed:            true,
+				Default:             stringdefault.StaticString("auto"),
+			},
 			"stable_egress_ip": schema.BoolAttribute{
 				Optional: true,
 				Computed: true,

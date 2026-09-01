@@ -46,6 +46,8 @@ resource "betternat_aws_gateway" "egress" {
   max_size            = 3
   betternat_version   = "v0.2.0"
   stable_egress_ip    = true
+  primary_interface   = "auto"
+  snat_interface      = "auto"
   prometheus_enabled  = true
   rollback_on_destroy = true
 }
@@ -62,6 +64,11 @@ resources.
 The active gateway owns the DynamoDB lease, private route target, and shared EIP
 when `stable_egress_ip=true`. Active connections may reset during failover; new
 connections recover after route and public identity ownership converge.
+
+`primary_interface` and `snat_interface` default to `auto`. During bootstrap,
+BetterNAT detects the Linux interface that owns the IPv4 default route and
+writes that concrete name into the runtime agent config. Both fields accept an
+explicit interface name for unusual multi-interface appliances.
 
 ## Destroy
 

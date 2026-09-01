@@ -14,6 +14,11 @@ func TestRenderUserData(t *testing.T) {
 	}
 
 	assertContains(t, script, "chmod 0600 '/etc/betternat/agent.json'")
+	assertContains(t, script, "primary_interface='auto'")
+	assertContains(t, script, "snat_interface='auto'")
+	assertContains(t, script, "ip -4 route show default")
+	assertContains(t, script, `s/\"primary_interface\":\"auto\"/\"primary_interface\":\"$primary_interface\"/g`)
+	assertContains(t, script, `s/\"snat_interface\":\"auto\"/\"snat_interface\":\"$snat_interface\"/g`)
 	assertContains(t, script, "apt-get install -y docker.io || DEBIAN_FRONTEND=noninteractive apt-get install -y docker")
 	assertContains(t, script, "install_package docker")
 	assertContains(t, script, "net.ipv4.ip_forward = 1")
@@ -25,6 +30,20 @@ func TestRenderUserData(t *testing.T) {
 	assertContains(t, script, `exec docker exec loxilb loxicmd "\$@"`)
 	assertContains(t, script, "ExecStart=/usr/local/bin/betternat-agent --config /etc/betternat/agent.json")
 	assertContains(t, script, "systemctl enable --now betternat-agent.service")
+}
+
+func TestRenderUserDataWithExplicitInterfaces(t *testing.T) {
+	script, err := RenderUserData(Spec{
+		AgentConfig:      `{"local":{"primary_interface":"enX0"},"datapath":{"loxilb":{"snat_interface":"enX1"}}}`,
+		PrimaryInterface: "enX0",
+		SNATInterface:    "enX1",
+	})
+	if err != nil {
+		t.Fatalf("render user data: %v", err)
+	}
+
+	assertContains(t, script, "primary_interface='enX0'")
+	assertContains(t, script, "snat_interface='enX1'")
 }
 
 func TestRenderUserDataWithBinaryURLs(t *testing.T) {

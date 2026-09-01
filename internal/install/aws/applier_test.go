@@ -345,6 +345,53 @@ func TestApplyCreatesASGPool(t *testing.T) {
 	}
 }
 
+func TestUpdatePoolsRollsASGWithoutReplacingGatewayInfrastructure(t *testing.T) {
+	ec2Client := &fakeEC2{describeGroupIDs: []string{"sg-123"}}
+	asgClient := &fakeAutoScaling{}
+	applier := Applier{EC2: ec2Client, AutoScaling: asgClient}
+	plan := installplan.Plan{
+		AMIID:               "ami-123",
+		InstanceType:        "t2.medium",
+		AssociatePublicIP:   true,
+		InstanceProfileName: "betternat-prod-egress-agent",
+		SecurityGroupName:   "betternat-prod-egress-appliance",
+		VPCID:               "vpc-123",
+		Pools: []installplan.Pool{{
+			Name:               "prod-egress-us-west-2a",
+			AvailabilityZone:   "us-west-2a",
+			LaunchTemplateName: "betternat-prod-egress-us-west-2a",
+			ASGName:            "betternat-prod-egress-us-west-2a",
+		}},
+	}
+
+	if err := applier.UpdatePools(context.Background(), plan, "#!/bin/bash\ntrue\n"); err != nil {
+		t.Fatalf("update pools: %v", err)
+	}
+	if ec2Client.createLaunchTemplateVersionInput == nil {
+		t.Fatal("expected a new launch template version")
+	}
+	if awssdk.ToString(ec2Client.createLaunchTemplateVersionInput.SourceVersion) != "$Latest" {
+		t.Fatalf("unexpected source version: %#v", ec2Client.createLaunchTemplateVersionInput)
+	}
+	if asgClient.startRefreshInput == nil || asgClient.startRefreshInput.DesiredConfiguration == nil {
+		t.Fatal("expected an instance refresh with desired configuration")
+	}
+	launchTemplate := asgClient.startRefreshInput.DesiredConfiguration.LaunchTemplate
+	if launchTemplate == nil || awssdk.ToString(launchTemplate.Version) != "2" {
+		t.Fatalf("unexpected desired launch template: %#v", launchTemplate)
+	}
+	preferences := asgClient.startRefreshInput.Preferences
+	if preferences == nil || awssdk.ToBool(preferences.AutoRollback) {
+		t.Fatalf("existing $Latest ASGs require refresh auto rollback to be disabled: %#v", preferences)
+	}
+	if awssdk.ToInt32(preferences.MinHealthyPercentage) != 100 || awssdk.ToInt32(preferences.MaxHealthyPercentage) != 150 {
+		t.Fatalf("unexpected HA refresh preferences: %#v", preferences)
+	}
+	if asgClient.describeRefreshInput == nil {
+		t.Fatal("expected the provider to wait for the instance refresh")
+	}
+}
+
 func TestApplyASGPoolCanDisableAssociatedPublicIP(t *testing.T) {
 	ec2Client := &fakeEC2{
 		securityGroupID:  "sg-123",
@@ -779,39 +826,40 @@ func (f *fakeIAM) DeleteRole(_ context.Context, params *iam.DeleteRoleInput, _ .
 }
 
 type fakeEC2 struct {
-	allocationID                    string
-	launchTemplateID                string
-	publicIP                        string
-	securityGroupID                 string
-	authorizeEgressInput            *ec2.AuthorizeSecurityGroupEgressInput
-	authorizeIngressInputs          []*ec2.AuthorizeSecurityGroupIngressInput
-	describeGroupIDs                []string
-	runInstanceIDs                  []string
-	addresses                       []ec2types.Address
-	createSecurityGroupError        error
-	allocateInput                   *ec2.AllocateAddressInput
-	associateAddressInput           *ec2.AssociateAddressInput
-	createLaunchTemplateInput       *ec2.CreateLaunchTemplateInput
-	createSecurityGroupInput        *ec2.CreateSecurityGroupInput
-	deleteLaunchTemplateInput       *ec2.DeleteLaunchTemplateInput
-	deleteSecurityGroupInput        *ec2.DeleteSecurityGroupInput
-	deleteSecurityGroupCalls        int
-	deleteSecurityGroupErrors       []error
-	describeInstancesInput          *ec2.DescribeInstancesInput
-	describeNetworkInterfaceOutputs []*ec2.DescribeNetworkInterfacesOutput
-	describeNetworkInterfacesCalls  int
-	describeNetworkInterfacesInputs []*ec2.DescribeNetworkInterfacesInput
-	createTagsInputs                []*ec2.CreateTagsInput
-	describeAddressesInput          *ec2.DescribeAddressesInput
-	disassociateInput               *ec2.DisassociateAddressInput
-	modifyInputs                    []*ec2.ModifyInstanceAttributeInput
-	replaceRouteInput               *ec2.ReplaceRouteInput
-	replaceRouteError               error
-	releaseAddressInput             *ec2.ReleaseAddressInput
-	describeSecurityInput           *ec2.DescribeSecurityGroupsInput
-	describeRouteTablesInput        *ec2.DescribeRouteTablesInput
-	runInputs                       []*ec2.RunInstancesInput
-	terminateInputs                 []*ec2.TerminateInstancesInput
+	allocationID                     string
+	launchTemplateID                 string
+	publicIP                         string
+	securityGroupID                  string
+	authorizeEgressInput             *ec2.AuthorizeSecurityGroupEgressInput
+	authorizeIngressInputs           []*ec2.AuthorizeSecurityGroupIngressInput
+	describeGroupIDs                 []string
+	runInstanceIDs                   []string
+	addresses                        []ec2types.Address
+	createSecurityGroupError         error
+	allocateInput                    *ec2.AllocateAddressInput
+	associateAddressInput            *ec2.AssociateAddressInput
+	createLaunchTemplateInput        *ec2.CreateLaunchTemplateInput
+	createLaunchTemplateVersionInput *ec2.CreateLaunchTemplateVersionInput
+	createSecurityGroupInput         *ec2.CreateSecurityGroupInput
+	deleteLaunchTemplateInput        *ec2.DeleteLaunchTemplateInput
+	deleteSecurityGroupInput         *ec2.DeleteSecurityGroupInput
+	deleteSecurityGroupCalls         int
+	deleteSecurityGroupErrors        []error
+	describeInstancesInput           *ec2.DescribeInstancesInput
+	describeNetworkInterfaceOutputs  []*ec2.DescribeNetworkInterfacesOutput
+	describeNetworkInterfacesCalls   int
+	describeNetworkInterfacesInputs  []*ec2.DescribeNetworkInterfacesInput
+	createTagsInputs                 []*ec2.CreateTagsInput
+	describeAddressesInput           *ec2.DescribeAddressesInput
+	disassociateInput                *ec2.DisassociateAddressInput
+	modifyInputs                     []*ec2.ModifyInstanceAttributeInput
+	replaceRouteInput                *ec2.ReplaceRouteInput
+	replaceRouteError                error
+	releaseAddressInput              *ec2.ReleaseAddressInput
+	describeSecurityInput            *ec2.DescribeSecurityGroupsInput
+	describeRouteTablesInput         *ec2.DescribeRouteTablesInput
+	runInputs                        []*ec2.RunInstancesInput
+	terminateInputs                  []*ec2.TerminateInstancesInput
 }
 
 func (f *fakeEC2) AuthorizeSecurityGroupEgress(_ context.Context, params *ec2.AuthorizeSecurityGroupEgressInput, _ ...func(*ec2.Options)) (*ec2.AuthorizeSecurityGroupEgressOutput, error) {
@@ -840,6 +888,13 @@ func (f *fakeEC2) CreateLaunchTemplate(_ context.Context, params *ec2.CreateLaun
 		LaunchTemplate: &ec2types.LaunchTemplate{
 			LaunchTemplateId: awssdk.String(f.launchTemplateID),
 		},
+	}, nil
+}
+
+func (f *fakeEC2) CreateLaunchTemplateVersion(_ context.Context, params *ec2.CreateLaunchTemplateVersionInput, _ ...func(*ec2.Options)) (*ec2.CreateLaunchTemplateVersionOutput, error) {
+	f.createLaunchTemplateVersionInput = params
+	return &ec2.CreateLaunchTemplateVersionOutput{
+		LaunchTemplateVersion: &ec2types.LaunchTemplateVersion{VersionNumber: awssdk.Int64(2)},
 	}, nil
 }
 
@@ -972,6 +1027,8 @@ type fakeAutoScaling struct {
 	describeInput            *autoscaling.DescribeAutoScalingGroupsInput
 	putLifecycleHookInput    *autoscaling.PutLifecycleHookInput
 	updateInput              *autoscaling.UpdateAutoScalingGroupInput
+	startRefreshInput        *autoscaling.StartInstanceRefreshInput
+	describeRefreshInput     *autoscaling.DescribeInstanceRefreshesInput
 }
 
 func (f *fakeAutoScaling) CreateAutoScalingGroup(_ context.Context, params *autoscaling.CreateAutoScalingGroupInput, _ ...func(*autoscaling.Options)) (*autoscaling.CreateAutoScalingGroupOutput, error) {
@@ -1005,9 +1062,21 @@ func (f *fakeAutoScaling) DescribeAutoScalingGroups(_ context.Context, params *a
 	}, nil
 }
 
+func (f *fakeAutoScaling) DescribeInstanceRefreshes(_ context.Context, params *autoscaling.DescribeInstanceRefreshesInput, _ ...func(*autoscaling.Options)) (*autoscaling.DescribeInstanceRefreshesOutput, error) {
+	f.describeRefreshInput = params
+	return &autoscaling.DescribeInstanceRefreshesOutput{
+		InstanceRefreshes: []astypes.InstanceRefresh{{Status: astypes.InstanceRefreshStatusSuccessful}},
+	}, nil
+}
+
 func (f *fakeAutoScaling) PutLifecycleHook(_ context.Context, params *autoscaling.PutLifecycleHookInput, _ ...func(*autoscaling.Options)) (*autoscaling.PutLifecycleHookOutput, error) {
 	f.putLifecycleHookInput = params
 	return &autoscaling.PutLifecycleHookOutput{}, nil
+}
+
+func (f *fakeAutoScaling) StartInstanceRefresh(_ context.Context, params *autoscaling.StartInstanceRefreshInput, _ ...func(*autoscaling.Options)) (*autoscaling.StartInstanceRefreshOutput, error) {
+	f.startRefreshInput = params
+	return &autoscaling.StartInstanceRefreshOutput{InstanceRefreshId: awssdk.String("refresh-123")}, nil
 }
 
 func (f *fakeAutoScaling) UpdateAutoScalingGroup(_ context.Context, params *autoscaling.UpdateAutoScalingGroupInput, _ ...func(*autoscaling.Options)) (*autoscaling.UpdateAutoScalingGroupOutput, error) {

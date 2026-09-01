@@ -92,10 +92,16 @@ Capacity-only updates are intended to be in-place. Other topology or bootstrap c
 | Name | Default | Description |
 | --- | --- | --- |
 | `datapath_engine` | `loxilb` | BetterNAT node datapath. |
+| `primary_interface` | `auto` | Primary Linux network interface used for gateway identity, metrics, and HA operations. `auto` detects the interface that owns the IPv4 default route during bootstrap. Set an explicit interface name to override detection. |
+| `snat_interface` | `auto` | Interface whose IPv4 address LoxiLB uses for SNAT. `auto` uses the detected IPv4 default-route interface. Set an explicit name when SNAT uses a different interface. |
 
 LoxiLB is the supported BetterNAT datapath. BetterNAT does not expose nftables
 fallback behavior as a product path. LoxiLB has its own eBPF conntrack state;
 Linux `nf_conntrack_max` is not the primary LoxiLB capacity knob.
+
+Automatic interface detection fails closed when no unambiguous IPv4 default
+route interface exists. This avoids assuming Nitro-style `ens5` on instance
+families such as T2 that expose a Xen-style name such as `enX0`.
 
 ### Egress Identity
 
