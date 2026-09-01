@@ -92,16 +92,31 @@ Capacity-only updates are intended to be in-place. Other topology or bootstrap c
 | Name | Default | Description |
 | --- | --- | --- |
 | `datapath_engine` | `loxilb` | BetterNAT node datapath. |
+| `primary_interface` | `auto` | Primary Linux network interface used for gateway identity, metrics, and HA operations. `auto` detects the interface that owns the IPv4 default route during bootstrap. Set an explicit interface name to override detection. |
+| `snat_interface` | `auto` | Interface whose IPv4 address LoxiLB uses for SNAT. `auto` uses the detected IPv4 default-route interface. Set an explicit name when SNAT uses a different interface. |
 
 LoxiLB is the supported BetterNAT datapath. BetterNAT does not expose nftables
 fallback behavior as a product path. LoxiLB has its own eBPF conntrack state;
 Linux `nf_conntrack_max` is not the primary LoxiLB capacity knob.
+
+Automatic interface detection fails closed when no unambiguous IPv4 default
+route interface exists. This avoids assuming Nitro-style `ens5` on instance
+families such as T2 that expose a Xen-style name such as `enX0`.
 
 ### Egress Identity
 
 | Name | Default | Description |
 | --- | --- | --- |
 | `stable_egress_ip` | `true` | If true, BetterNAT manages a shared EIP so new private-subnet egress flows converge back to the same public IP after failover. Gateway nodes may still have ordinary per-node public IPv4 addresses for bootstrap and management. If false, BetterNAT skips the shared EIP and the public source IP changes to the active instance's public IP after failover. |
+| `eip_allocation_ids` | `{}` | Optional AWS EIP allocation IDs keyed by availability zone. BetterNAT associates but never releases these externally managed EIPs. Omitted zones continue using provider-managed EIPs. Requires `stable_egress_ip=true`. |
+| `retain_managed_eips_on_destroy` | `false` | Preserve provider-managed EIPs during gateway destroy. A same-name recreation adopts the retained tagged EIPs. Set back to false before a final destroy that should release them. |
+
+For production, prefer independent `aws_eip` resources passed through
+`eip_allocation_ids`. This keeps the public identity in Terraform even when the
+gateway must be replaced. `retain_managed_eips_on_destroy` is primarily a
+compatibility and emergency-migration option; a retained EIP is intentionally
+left outside the destroyed gateway resource until a same-name gateway adopts
+it or an operator releases it.
 
 ### HA Timing
 

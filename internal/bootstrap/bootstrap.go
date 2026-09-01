@@ -22,6 +22,7 @@ type Spec struct {
 	LoxiLBImage         string
 	LoxiLBContainer     string
 	PrimaryInterface    string
+	SNATInterface       string
 	MetricsPort         int
 	Preinstalled        bool
 }
@@ -64,7 +65,10 @@ func withDefaults(spec Spec) Spec {
 		spec.LoxiLBContainer = "loxilb"
 	}
 	if spec.PrimaryInterface == "" {
-		spec.PrimaryInterface = "ens5"
+		spec.PrimaryInterface = "auto"
+	}
+	if spec.SNATInterface == "" {
+		spec.SNATInterface = spec.PrimaryInterface
 	}
 	if spec.MetricsPort == 0 {
 		spec.MetricsPort = 9108
@@ -141,6 +145,29 @@ cat > {{ shellQuote .ConfigPath }} <<'BETTERNAT_AGENT_CONFIG'
 {{ .AgentConfig }}
 BETTERNAT_AGENT_CONFIG
 chmod 0600 {{ shellQuote .ConfigPath }}
+
+primary_interface={{ shellQuote .PrimaryInterface }}
+snat_interface={{ shellQuote .SNATInterface }}
+if [ "$primary_interface" = auto ] || [ "$snat_interface" = auto ]; then
+  detected_interface="$(ip -4 route show default | awk '{ for (i = 1; i <= NF; i++) if ($i == "dev" && i < NF) { print $(i + 1); exit } }')"
+  case "$detected_interface" in
+    ""|*[!a-zA-Z0-9_.:-]*)
+      echo "unable to detect a safe primary interface from the IPv4 default route" >&2
+      exit 1
+      ;;
+  esac
+  [ -d "/sys/class/net/$detected_interface" ] || {
+    echo "detected primary interface $detected_interface does not exist" >&2
+    exit 1
+  }
+  [ "$primary_interface" = auto ] && primary_interface="$detected_interface"
+  [ "$snat_interface" = auto ] && snat_interface="$detected_interface"
+fi
+
+sed -i \
+  -e "s/\"primary_interface\":\"auto\"/\"primary_interface\":\"$primary_interface\"/g" \
+  -e "s/\"snat_interface\":\"auto\"/\"snat_interface\":\"$snat_interface\"/g" \
+  {{ shellQuote .ConfigPath }}
 
 cat > /etc/sysctl.d/99-betternat.conf <<'BETTERNAT_SYSCTL'
 net.ipv4.ip_forward = 1

@@ -132,10 +132,34 @@ func (r *GatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				Computed:            true,
 				Default:             stringdefault.StaticString("nftables"),
 			},
+			"primary_interface": schema.StringAttribute{
+				MarkdownDescription: "Primary network interface used for gateway identity, metrics, and HA operations. The default auto value detects the interface that owns the IPv4 default route during bootstrap. Set an explicit Linux interface name to override detection.",
+				Optional:            true,
+				Computed:            true,
+				Default:             stringdefault.StaticString("auto"),
+			},
+			"snat_interface": schema.StringAttribute{
+				MarkdownDescription: "Network interface whose IPv4 address LoxiLB uses for SNAT. The default auto value follows default-route interface detection during bootstrap. Set an explicit Linux interface name when the SNAT interface differs from the primary interface.",
+				Optional:            true,
+				Computed:            true,
+				Default:             stringdefault.StaticString("auto"),
+			},
 			"stable_egress_ip": schema.BoolAttribute{
 				Optional: true,
 				Computed: true,
 				Default:  booldefault.StaticBool(true),
+			},
+			"eip_allocation_ids": schema.MapAttribute{
+				MarkdownDescription: "Optional externally managed AWS EIP allocation IDs keyed by availability zone. BetterNAT associates these EIPs but never releases them. Omitted zones receive provider-managed EIPs when stable_egress_ip is true.",
+				ElementType:         types.StringType,
+				Optional:            true,
+				Computed:            true,
+			},
+			"retain_managed_eips_on_destroy": schema.BoolAttribute{
+				MarkdownDescription: "Keep provider-managed EIPs when this gateway resource is destroyed. A same-name replacement reuses retained EIPs by their BetterNAT tags. Set false before a final destroy when the EIPs should be released.",
+				Optional:            true,
+				Computed:            true,
+				Default:             booldefault.StaticBool(false),
 			},
 			"ha_profile": schema.StringAttribute{
 				MarkdownDescription: "High availability timing profile. Use default. Legacy values stable, balanced, and fast are accepted as aliases for default.",

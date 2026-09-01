@@ -42,6 +42,12 @@ func TestDeriveGatewayState(t *testing.T) {
 	if derived.DatapathEngine.ValueString() != "loxilb" {
 		t.Fatalf("unexpected datapath engine: %s", derived.DatapathEngine.ValueString())
 	}
+	if derived.PrimaryInterface.ValueString() != "auto" {
+		t.Fatalf("unexpected primary interface: %s", derived.PrimaryInterface.ValueString())
+	}
+	if derived.SNATInterface.ValueString() != "auto" {
+		t.Fatalf("unexpected SNAT interface: %s", derived.SNATInterface.ValueString())
+	}
 	if derived.Cloud.ValueString() != "aws" {
 		t.Fatalf("unexpected cloud default: %s", derived.Cloud.ValueString())
 	}
@@ -163,6 +169,32 @@ func TestDeriveGatewayState(t *testing.T) {
 	}
 	if !strings.Contains(derived.AgentConfigJSON.ValueString(), `"renew_interval_seconds":1`) {
 		t.Fatalf("agent config should use default HA renew interval: %s", derived.AgentConfigJSON.ValueString())
+	}
+	if !strings.Contains(derived.AgentConfigJSON.ValueString(), `"primary_interface":"auto"`) {
+		t.Fatalf("agent config should default primary interface to auto: %s", derived.AgentConfigJSON.ValueString())
+	}
+	if !strings.Contains(derived.AgentConfigJSON.ValueString(), `"snat_interface":"auto"`) {
+		t.Fatalf("agent config should default SNAT interface to auto: %s", derived.AgentConfigJSON.ValueString())
+	}
+}
+
+func TestDeriveGatewayStatePreservesExplicitInterfaces(t *testing.T) {
+	plan := validGatewayPlan()
+	plan.PrimaryInterface = types.StringValue("enX0")
+	plan.SNATInterface = types.StringValue("enX1")
+
+	derived, err := DeriveGatewayState(context.Background(), &plan)
+	if err != nil {
+		t.Fatalf("derive gateway state: %v", err)
+	}
+	if derived.PrimaryInterface.ValueString() != "enX0" || derived.SNATInterface.ValueString() != "enX1" {
+		t.Fatalf("unexpected interfaces: primary=%q snat=%q", derived.PrimaryInterface.ValueString(), derived.SNATInterface.ValueString())
+	}
+	if !strings.Contains(derived.AgentConfigJSON.ValueString(), `"primary_interface":"enX0"`) {
+		t.Fatalf("agent config should preserve explicit primary interface: %s", derived.AgentConfigJSON.ValueString())
+	}
+	if !strings.Contains(derived.AgentConfigJSON.ValueString(), `"snat_interface":"enX1"`) {
+		t.Fatalf("agent config should preserve explicit SNAT interface: %s", derived.AgentConfigJSON.ValueString())
 	}
 }
 
@@ -681,6 +713,42 @@ func TestDeriveGatewayStateNonStableEgressOmitsPublicIdentity(t *testing.T) {
 	}
 }
 
+func TestDeriveGatewayStateUsesExternalEIPAndRetainPolicy(t *testing.T) {
+	plan := validGatewayPlan()
+	plan.StableEgressIP = types.BoolValue(true)
+	plan.EIPAllocationIDs = mustStringMap(map[string]string{"us-west-2a": "eipalloc-external"})
+	plan.RetainManagedEIPs = types.BoolValue(true)
+	derived, err := DeriveGatewayState(context.Background(), &plan)
+	if err != nil {
+		t.Fatalf("derive gateway state: %v", err)
+	}
+	if !strings.Contains(derived.InstallPlanJSON.ValueString(), `"external_eip_allocation_ids":{"us-west-2a":"eipalloc-external"}`) {
+		t.Fatalf("missing external EIP in install plan: %s", derived.InstallPlanJSON.ValueString())
+	}
+	if strings.Contains(derived.InstallPlanJSON.ValueString(), `"eip_allocation_names":{"us-west-2a"`) {
+		t.Fatalf("external EIP must not also be managed: %s", derived.InstallPlanJSON.ValueString())
+	}
+	if !derived.RetainManagedEIPs.ValueBool() {
+		t.Fatal("retain policy was not preserved")
+	}
+	var installPlan installplan.Plan
+	if err := json.Unmarshal([]byte(derived.InstallPlanJSON.ValueString()), &installPlan); err != nil {
+		t.Fatalf("decode install plan: %v", err)
+	}
+	userData := gatewayUserDataByAZ(installPlan, derived.UserData.ValueString())["us-west-2a"]
+	if !strings.Contains(userData, `"allocation_id":"eipalloc-external"`) {
+		t.Fatalf("external allocation id was not injected into AZ user data: %s", userData)
+	}
+}
+
+func TestGatewayUserDataByAZKeepsBaseDataForManagedEIP(t *testing.T) {
+	plan := installplan.Plan{Pools: []installplan.Pool{{AvailabilityZone: "us-west-2a"}}}
+	userDataByAZ := gatewayUserDataByAZ(plan, "#!/bin/bash\nmanaged\n")
+	if userDataByAZ["us-west-2a"] != "#!/bin/bash\nmanaged\n" {
+		t.Fatalf("managed EIP pool lost base user data: %#v", userDataByAZ)
+	}
+}
+
 func TestDeriveGatewayStateRequiresRoutes(t *testing.T) {
 	plan := GatewayResourceModel{
 		Name:                 types.StringValue("prod-egress"),
@@ -763,6 +831,10 @@ func (f fakeInstaller) Install(context.Context, installplan.Plan, awsinstall.Inp
 }
 
 func (f fakeInstaller) UpdateCapacity(context.Context, installplan.Plan) error {
+	return nil
+}
+
+func (f fakeInstaller) UpdatePools(context.Context, installplan.Plan, map[string]string) error {
 	return nil
 }
 

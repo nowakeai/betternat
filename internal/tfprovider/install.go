@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	awssdkconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -22,6 +23,7 @@ import (
 type Installer interface {
 	Install(ctx context.Context, plan installplan.Plan, inputs awsinstall.Inputs) (awsinstall.Result, error)
 	UpdateCapacity(ctx context.Context, plan installplan.Plan) error
+	UpdatePools(ctx context.Context, plan installplan.Plan, userDataByAZ map[string]string) error
 	ReconcileInfrastructure(ctx context.Context, plan installplan.Plan) error
 }
 
@@ -59,6 +61,10 @@ func (i awsInstaller) Install(ctx context.Context, plan installplan.Plan, inputs
 
 func (i awsInstaller) UpdateCapacity(ctx context.Context, plan installplan.Plan) error {
 	return i.applier.UpdateCapacity(ctx, plan)
+}
+
+func (i awsInstaller) UpdatePools(ctx context.Context, plan installplan.Plan, userDataByAZ map[string]string) error {
+	return i.applier.UpdatePools(ctx, plan, userDataByAZ)
 }
 
 func (i awsInstaller) ReconcileInfrastructure(ctx context.Context, plan installplan.Plan) error {
@@ -202,7 +208,8 @@ func installGatewayState(ctx context.Context, state *GatewayResourceModel, facto
 		return err
 	}
 	result, err := installer.Install(ctx, plan, awsinstall.Inputs{
-		UserData: state.UserData.ValueString(),
+		UserData:     state.UserData.ValueString(),
+		UserDataByAZ: gatewayUserDataByAZ(plan, state.UserData.ValueString()),
 	})
 	if err != nil {
 		return err
@@ -241,6 +248,21 @@ func updateGatewayCapacity(ctx context.Context, state GatewayResourceModel, fact
 		return err
 	}
 	return installer.UpdateCapacity(ctx, plan)
+}
+
+func updateGatewayPools(ctx context.Context, state GatewayResourceModel, factory InstallerFactory) error {
+	if factory == nil {
+		return fmt.Errorf("installer factory is not configured")
+	}
+	var plan installplan.Plan
+	if err := json.Unmarshal([]byte(state.InstallPlanJSON.ValueString()), &plan); err != nil {
+		return fmt.Errorf("decode install plan: %w", err)
+	}
+	installer, err := factory(ctx, state.Region.ValueString())
+	if err != nil {
+		return err
+	}
+	return installer.UpdatePools(ctx, plan, gatewayUserDataByAZ(plan, state.UserData.ValueString()))
 }
 
 func launchedInstanceMaps(plan installplan.Plan, launched map[string]string) (map[string]string, map[string]string) {
@@ -311,7 +333,25 @@ func cleanupGatewayResources(ctx context.Context, state GatewayResourceModel, fa
 	if err != nil {
 		return err
 	}
-	return cleaner.Cleanup(ctx, plan, awsinstall.CleanupInputs{InstanceIDs: instanceIDs})
+	return cleaner.Cleanup(ctx, plan, awsinstall.CleanupInputs{
+		InstanceIDs:       instanceIDs,
+		RetainManagedEIPs: boolDefault(state.RetainManagedEIPs, false),
+	})
+}
+
+func gatewayUserDataByAZ(plan installplan.Plan, userData string) map[string]string {
+	result := make(map[string]string, len(plan.Pools)+len(plan.Appliances))
+	for _, pool := range plan.Pools {
+		result[pool.AvailabilityZone] = userData
+	}
+	for _, appliance := range plan.Appliances {
+		result[appliance.AvailabilityZone] = userData
+	}
+	for az, allocationID := range plan.ExternalEIPAllocationIDs {
+		encodedID, _ := json.Marshal(allocationID)
+		result[az] = strings.Replace(userData, `"allocation_id":"auto"`, `"allocation_id":`+string(encodedID), 1)
+	}
+	return result
 }
 
 func readGatewayState(ctx context.Context, state *GatewayResourceModel, factory ReaderFactory) error {

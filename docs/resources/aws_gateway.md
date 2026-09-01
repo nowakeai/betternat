@@ -46,10 +46,50 @@ resource "betternat_aws_gateway" "egress" {
   max_size            = 3
   betternat_version   = "v0.2.0"
   stable_egress_ip    = true
+  primary_interface   = "auto"
+  snat_interface      = "auto"
   prometheus_enabled  = true
   rollback_on_destroy = true
 }
 ```
+
+For production public identity, manage the EIP independently and pass its
+allocation ID to BetterNAT:
+
+```hcl
+resource "aws_eip" "betternat" {
+  domain = "vpc"
+
+  tags = {
+    Name = "prod-egress-us-west-2a"
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "betternat_aws_gateway" "egress" {
+  # ...
+  stable_egress_ip = true
+  eip_allocation_ids = {
+    us-west-2a = aws_eip.betternat.id
+  }
+}
+```
+
+Externally managed EIPs are associated and observed by BetterNAT but are never
+released by this resource. They therefore survive gateway replacement and final
+gateway destroy. Remove `prevent_destroy` and destroy the `aws_eip` explicitly
+only when the public identity is no longer needed.
+
+For compatibility with provider-managed EIPs, set
+`retain_managed_eips_on_destroy = true`. Destroy then leaves the tagged EIPs in
+the account, and a same-name gateway recreation adopts them instead of
+allocating new addresses. Before a final destroy that should release those
+EIPs, set the option back to `false`, apply that state-only change, and destroy
+the gateway. Independent `aws_eip` resources remain the recommended production
+ownership model because their lifecycle is explicit in Terraform.
 
 ## Route Ownership
 
@@ -62,6 +102,15 @@ resources.
 The active gateway owns the DynamoDB lease, private route target, and shared EIP
 when `stable_egress_ip=true`. Active connections may reset during failover; new
 connections recover after route and public identity ownership converge.
+
+Without `eip_allocation_ids` or `retain_managed_eips_on_destroy`, stability is
+limited to instance failover inside the gateway. Full Terraform resource
+replacement releases provider-managed EIPs by default.
+
+`primary_interface` and `snat_interface` default to `auto`. During bootstrap,
+BetterNAT detects the Linux interface that owns the IPv4 default route and
+writes that concrete name into the runtime agent config. Both fields accept an
+explicit interface name for unusual multi-interface appliances.
 
 ## Destroy
 

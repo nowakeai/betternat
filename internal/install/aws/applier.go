@@ -29,6 +29,7 @@ type EC2API interface {
 	AuthorizeSecurityGroupIngress(ctx context.Context, params *ec2.AuthorizeSecurityGroupIngressInput, optFns ...func(*ec2.Options)) (*ec2.AuthorizeSecurityGroupIngressOutput, error)
 	AssociateAddress(ctx context.Context, params *ec2.AssociateAddressInput, optFns ...func(*ec2.Options)) (*ec2.AssociateAddressOutput, error)
 	CreateLaunchTemplate(ctx context.Context, params *ec2.CreateLaunchTemplateInput, optFns ...func(*ec2.Options)) (*ec2.CreateLaunchTemplateOutput, error)
+	CreateLaunchTemplateVersion(ctx context.Context, params *ec2.CreateLaunchTemplateVersionInput, optFns ...func(*ec2.Options)) (*ec2.CreateLaunchTemplateVersionOutput, error)
 	CreateSecurityGroup(ctx context.Context, params *ec2.CreateSecurityGroupInput, optFns ...func(*ec2.Options)) (*ec2.CreateSecurityGroupOutput, error)
 	CreateTags(ctx context.Context, params *ec2.CreateTagsInput, optFns ...func(*ec2.Options)) (*ec2.CreateTagsOutput, error)
 	DeleteLaunchTemplate(ctx context.Context, params *ec2.DeleteLaunchTemplateInput, optFns ...func(*ec2.Options)) (*ec2.DeleteLaunchTemplateOutput, error)
@@ -51,7 +52,9 @@ type AutoScalingAPI interface {
 	DeleteAutoScalingGroup(ctx context.Context, params *autoscaling.DeleteAutoScalingGroupInput, optFns ...func(*autoscaling.Options)) (*autoscaling.DeleteAutoScalingGroupOutput, error)
 	DeleteLifecycleHook(ctx context.Context, params *autoscaling.DeleteLifecycleHookInput, optFns ...func(*autoscaling.Options)) (*autoscaling.DeleteLifecycleHookOutput, error)
 	DescribeAutoScalingGroups(ctx context.Context, params *autoscaling.DescribeAutoScalingGroupsInput, optFns ...func(*autoscaling.Options)) (*autoscaling.DescribeAutoScalingGroupsOutput, error)
+	DescribeInstanceRefreshes(ctx context.Context, params *autoscaling.DescribeInstanceRefreshesInput, optFns ...func(*autoscaling.Options)) (*autoscaling.DescribeInstanceRefreshesOutput, error)
 	PutLifecycleHook(ctx context.Context, params *autoscaling.PutLifecycleHookInput, optFns ...func(*autoscaling.Options)) (*autoscaling.PutLifecycleHookOutput, error)
+	StartInstanceRefresh(ctx context.Context, params *autoscaling.StartInstanceRefreshInput, optFns ...func(*autoscaling.Options)) (*autoscaling.StartInstanceRefreshOutput, error)
 	UpdateAutoScalingGroup(ctx context.Context, params *autoscaling.UpdateAutoScalingGroupInput, optFns ...func(*autoscaling.Options)) (*autoscaling.UpdateAutoScalingGroupOutput, error)
 }
 
@@ -83,11 +86,14 @@ type Applier struct {
 var (
 	securityGroupDependencyWaitAttempts = 60
 	securityGroupDependencyWaitInterval = 5 * time.Second
+	launchTemplateNameWaitAttempts      = 24
+	launchTemplateNameWaitInterval      = 5 * time.Second
 )
 
 type Inputs struct {
 	ApplianceInstanceIDs map[string]string
 	UserData             string
+	UserDataByAZ         map[string]string
 }
 
 type Result struct {
@@ -108,7 +114,8 @@ type RollbackRoute struct {
 }
 
 type CleanupInputs struct {
-	InstanceIDs []string
+	InstanceIDs       []string
+	RetainManagedEIPs bool
 }
 
 type ReadResult struct {
@@ -159,7 +166,7 @@ func (a Applier) Apply(ctx context.Context, plan installplan.Plan, inputs Inputs
 	}
 	if len(plan.Pools) > 0 {
 		for _, pool := range plan.Pools {
-			launchTemplateID, err := a.createLaunchTemplate(ctx, plan, pool, securityGroupID, inputs.UserData)
+			launchTemplateID, err := a.createLaunchTemplate(ctx, plan, pool, securityGroupID, userDataForAZ(inputs, pool.AvailabilityZone))
 			if err != nil {
 				return Result{}, err
 			}
@@ -185,7 +192,7 @@ func (a Applier) Apply(ctx context.Context, plan installplan.Plan, inputs Inputs
 		for _, appliance := range plan.Appliances {
 			instanceID := instanceIDs[appliance.Name]
 			if instanceID == "" {
-				instanceID, err = a.launchAppliance(ctx, plan, appliance, securityGroupID, inputs.UserData)
+				instanceID, err = a.launchAppliance(ctx, plan, appliance, securityGroupID, userDataForAZ(inputs, appliance.AvailabilityZone))
 				if err != nil {
 					return Result{}, err
 				}
@@ -214,6 +221,24 @@ func (a Applier) Apply(ctx context.Context, plan installplan.Plan, inputs Inputs
 		}
 		result.AllocatedEIPs[az] = allocationID
 		result.AllocatedPublicIPs[az] = publicIP
+	}
+	for az, allocationID := range plan.ExternalEIPAllocationIDs {
+		address, err := a.describeAddressByAllocationID(ctx, allocationID)
+		if err != nil {
+			return Result{}, fmt.Errorf("read external eip for %s: %w", az, err)
+		}
+		instanceID := instanceIDs[plan.Name+"-"+az+"-active"]
+		if instanceID == "" {
+			instanceID = instanceIDs[plan.Name+"-"+az]
+		}
+		if instanceID == "" {
+			return Result{}, fmt.Errorf("missing active instance id for %s", az)
+		}
+		if err := a.associateEIP(ctx, allocationID, instanceID); err != nil {
+			return Result{}, err
+		}
+		result.AllocatedEIPs[az] = allocationID
+		result.AllocatedPublicIPs[az] = awssdk.ToString(address.PublicIp)
 	}
 	for _, route := range plan.ManagedRoutes {
 		previousTarget, err := a.describeRouteTarget(ctx, route.RouteTableID, route.DestinationCIDR)
@@ -262,6 +287,92 @@ func (a Applier) UpdateCapacity(ctx context.Context, plan installplan.Plan) erro
 		}
 	}
 	return nil
+}
+
+// UpdatePools creates a new launch template version and rolls each ASG to it.
+// Unlike resource replacement, this preserves the gateway-owned EIPs and the
+// rest of the control-plane infrastructure.
+func (a Applier) UpdatePools(ctx context.Context, plan installplan.Plan, userDataByAZ map[string]string) error {
+	if len(plan.Pools) == 0 {
+		return fmt.Errorf("pool update requires ASG pools")
+	}
+	if a.EC2 == nil || a.AutoScaling == nil {
+		return fmt.Errorf("ec2 and autoscaling clients are required")
+	}
+	securityGroupID, err := a.findSecurityGroup(ctx, plan)
+	if err != nil {
+		return err
+	}
+	for _, pool := range plan.Pools {
+		output, err := a.EC2.CreateLaunchTemplateVersion(ctx, &ec2.CreateLaunchTemplateVersionInput{
+			LaunchTemplateName: awssdk.String(pool.LaunchTemplateName),
+			LaunchTemplateData: launchTemplateData(plan, pool, securityGroupID, userDataByAZ[pool.AvailabilityZone]),
+			SourceVersion:      awssdk.String("$Latest"),
+			VersionDescription: awssdk.String("BetterNAT provider in-place rollout"),
+		})
+		if err != nil {
+			return fmt.Errorf("create launch template version %s: %w", pool.LaunchTemplateName, err)
+		}
+		if output.LaunchTemplateVersion == nil || output.LaunchTemplateVersion.VersionNumber == nil {
+			return fmt.Errorf("create launch template version %s returned no version", pool.LaunchTemplateName)
+		}
+		version := fmt.Sprintf("%d", awssdk.ToInt64(output.LaunchTemplateVersion.VersionNumber))
+		refresh, err := a.AutoScaling.StartInstanceRefresh(ctx, &autoscaling.StartInstanceRefreshInput{
+			AutoScalingGroupName: awssdk.String(pool.ASGName),
+			DesiredConfiguration: &astypes.DesiredConfiguration{
+				LaunchTemplate: &astypes.LaunchTemplateSpecification{
+					LaunchTemplateName: awssdk.String(pool.LaunchTemplateName),
+					Version:            awssdk.String(version),
+				},
+			},
+			Preferences: &astypes.RefreshPreferences{
+				AutoRollback:         awssdk.Bool(false),
+				InstanceWarmup:       awssdk.Int32(60),
+				MaxHealthyPercentage: awssdk.Int32(150),
+				MinHealthyPercentage: awssdk.Int32(100),
+				SkipMatching:         awssdk.Bool(true),
+			},
+			Strategy: astypes.RefreshStrategyRolling,
+		})
+		if err != nil {
+			return fmt.Errorf("start instance refresh %s: %w", pool.ASGName, err)
+		}
+		refreshID := awssdk.ToString(refresh.InstanceRefreshId)
+		if refreshID == "" {
+			return fmt.Errorf("start instance refresh %s returned no id", pool.ASGName)
+		}
+		if err := a.waitForInstanceRefresh(ctx, pool.ASGName, refreshID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (a Applier) waitForInstanceRefresh(ctx context.Context, asgName, refreshID string) error {
+	for {
+		output, err := a.AutoScaling.DescribeInstanceRefreshes(ctx, &autoscaling.DescribeInstanceRefreshesInput{
+			AutoScalingGroupName: awssdk.String(asgName),
+			InstanceRefreshIds:   []string{refreshID},
+		})
+		if err != nil {
+			return fmt.Errorf("describe instance refresh %s: %w", asgName, err)
+		}
+		if len(output.InstanceRefreshes) == 0 {
+			return fmt.Errorf("instance refresh %s for %s was not found", refreshID, asgName)
+		}
+		refresh := output.InstanceRefreshes[0]
+		switch refresh.Status {
+		case astypes.InstanceRefreshStatusSuccessful:
+			return nil
+		case astypes.InstanceRefreshStatusFailed, astypes.InstanceRefreshStatusCancelled, astypes.InstanceRefreshStatusRollbackFailed:
+			return fmt.Errorf("instance refresh %s for %s ended in %s: %s", refreshID, asgName, refresh.Status, awssdk.ToString(refresh.StatusReason))
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(10 * time.Second):
+		}
+	}
 }
 
 func (a Applier) ReconcileInfrastructure(ctx context.Context, plan installplan.Plan) error {
@@ -321,8 +432,10 @@ func (a Applier) Cleanup(ctx context.Context, plan installplan.Plan, inputs Clea
 	if err := a.terminateAppliances(ctx, inputs.InstanceIDs); err != nil {
 		return err
 	}
-	if err := a.releaseEIPs(ctx, plan); err != nil {
-		return err
+	if !inputs.RetainManagedEIPs {
+		if err := a.releaseEIPs(ctx, plan); err != nil {
+			return err
+		}
 	}
 	if err := a.deleteLeaseTable(ctx, plan); err != nil {
 		return err
@@ -426,7 +539,22 @@ func (a Applier) Read(ctx context.Context, plan installplan.Plan) (ReadResult, e
 		result.EgressPublicIPs[az] = awssdk.ToString(address.PublicIp)
 		result.PublicIdentityInstanceIDs[az] = awssdk.ToString(address.InstanceId)
 	}
+	for az, allocationID := range plan.ExternalEIPAllocationIDs {
+		address, err := a.describeAddressByAllocationID(ctx, allocationID)
+		if err != nil {
+			return ReadResult{}, fmt.Errorf("read external eip %s: %w", allocationID, err)
+		}
+		result.EgressPublicIPs[az] = awssdk.ToString(address.PublicIp)
+		result.PublicIdentityInstanceIDs[az] = awssdk.ToString(address.InstanceId)
+	}
 	return result, nil
+}
+
+func userDataForAZ(inputs Inputs, availabilityZone string) string {
+	if userData := inputs.UserDataByAZ[availabilityZone]; userData != "" {
+		return userData
+	}
+	return inputs.UserData
 }
 
 func (a Applier) terminateAppliances(ctx context.Context, instanceIDs []string) error {
@@ -819,6 +947,47 @@ func (a Applier) createLaunchTemplate(ctx context.Context, plan installplan.Plan
 	if plan.AMIID == "" {
 		return "", fmt.Errorf("ami id is required to create launch template %q", pool.LaunchTemplateName)
 	}
+	data := launchTemplateData(plan, pool, securityGroupID, userData)
+	input := &ec2.CreateLaunchTemplateInput{
+		LaunchTemplateName: awssdk.String(pool.LaunchTemplateName),
+		LaunchTemplateData: data,
+		TagSpecifications: []ec2types.TagSpecification{
+			{
+				ResourceType: ec2types.ResourceTypeLaunchTemplate,
+				Tags:         ec2TagsWithName(plan.Tags, pool.LaunchTemplateName),
+			},
+		},
+	}
+	var output *ec2.CreateLaunchTemplateOutput
+	var err error
+	for attempt := 0; attempt < launchTemplateNameWaitAttempts; attempt++ {
+		output, err = a.EC2.CreateLaunchTemplate(ctx, input)
+		if err == nil {
+			break
+		}
+		if !isAPIError(err, "InvalidLaunchTemplateName.AlreadyExistsException") {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(launchTemplateNameWaitInterval):
+		}
+	}
+	if err != nil {
+		return "", fmt.Errorf("create launch template %s after name-release wait: %w", pool.LaunchTemplateName, err)
+	}
+	if output == nil || output.LaunchTemplate == nil {
+		return "", fmt.Errorf("create launch template %s returned no launch template", pool.LaunchTemplateName)
+	}
+	launchTemplateID := awssdk.ToString(output.LaunchTemplate.LaunchTemplateId)
+	if launchTemplateID == "" {
+		return "", fmt.Errorf("create launch template %s returned empty id", pool.LaunchTemplateName)
+	}
+	return launchTemplateID, nil
+}
+
+func launchTemplateData(plan installplan.Plan, pool installplan.Pool, securityGroupID string, userData string) *ec2types.RequestLaunchTemplateData {
 	data := &ec2types.RequestLaunchTemplateData{
 		ImageId:      awssdk.String(plan.AMIID),
 		InstanceType: ec2types.InstanceType(plan.InstanceType),
@@ -860,24 +1029,7 @@ func (a Applier) createLaunchTemplate(ctx context.Context, plan installplan.Plan
 	if userData != "" {
 		data.UserData = awssdk.String(base64.StdEncoding.EncodeToString([]byte(userData)))
 	}
-	output, err := a.EC2.CreateLaunchTemplate(ctx, &ec2.CreateLaunchTemplateInput{
-		LaunchTemplateName: awssdk.String(pool.LaunchTemplateName),
-		LaunchTemplateData: data,
-		TagSpecifications: []ec2types.TagSpecification{
-			{
-				ResourceType: ec2types.ResourceTypeLaunchTemplate,
-				Tags:         ec2TagsWithName(plan.Tags, pool.LaunchTemplateName),
-			},
-		},
-	})
-	if err != nil {
-		return "", fmt.Errorf("create launch template %s: %w", pool.LaunchTemplateName, err)
-	}
-	launchTemplateID := awssdk.ToString(output.LaunchTemplate.LaunchTemplateId)
-	if launchTemplateID == "" {
-		return "", fmt.Errorf("create launch template %s returned empty id", pool.LaunchTemplateName)
-	}
-	return launchTemplateID, nil
+	return data
 }
 
 func (a Applier) createAutoScalingGroup(ctx context.Context, plan installplan.Plan, pool installplan.Pool, launchTemplateID string) error {
@@ -1193,6 +1345,20 @@ func (a Applier) disableSourceDestCheck(ctx context.Context, instanceID string) 
 }
 
 func (a Applier) allocateEIP(ctx context.Context, name string, tags map[string]string) (string, string, error) {
+	existing, err := a.describeBetterNATAddresses(ctx, tags["BetterNATGateway"], name)
+	if err != nil {
+		return "", "", fmt.Errorf("find retained eip %s: %w", name, err)
+	}
+	if len(existing) > 1 {
+		return "", "", fmt.Errorf("retained eip %s is ambiguous: %d matches", name, len(existing))
+	}
+	if len(existing) == 1 {
+		allocationID := awssdk.ToString(existing[0].AllocationId)
+		if allocationID == "" {
+			return "", "", fmt.Errorf("retained eip %s has empty allocation id", name)
+		}
+		return allocationID, awssdk.ToString(existing[0].PublicIp), nil
+	}
 	output, err := a.EC2.AllocateAddress(ctx, &ec2.AllocateAddressInput{
 		Domain: ec2types.DomainTypeVpc,
 	})
@@ -1210,6 +1376,20 @@ func (a Applier) allocateEIP(ctx context.Context, name string, tags map[string]s
 		return "", "", fmt.Errorf("tag eip %s: %w", allocationID, err)
 	}
 	return allocationID, awssdk.ToString(output.PublicIp), nil
+}
+
+func (a Applier) describeAddressByAllocationID(ctx context.Context, allocationID string) (ec2types.Address, error) {
+	if allocationID == "" {
+		return ec2types.Address{}, fmt.Errorf("allocation id is required")
+	}
+	output, err := a.EC2.DescribeAddresses(ctx, &ec2.DescribeAddressesInput{AllocationIds: []string{allocationID}})
+	if err != nil {
+		return ec2types.Address{}, fmt.Errorf("describe address %s: %w", allocationID, err)
+	}
+	if len(output.Addresses) != 1 {
+		return ec2types.Address{}, fmt.Errorf("address %s returned %d matches", allocationID, len(output.Addresses))
+	}
+	return output.Addresses[0], nil
 }
 
 func (a Applier) associateEIP(ctx context.Context, allocationID string, instanceID string) error {

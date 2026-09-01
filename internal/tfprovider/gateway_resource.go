@@ -75,7 +75,11 @@ type GatewayResourceModel struct {
 	PrivateCIDRs             types.List   `tfsdk:"private_cidrs"`
 	DatapathEngine           types.String `tfsdk:"datapath_engine"`
 	FallbackDatapathEngine   types.String `tfsdk:"fallback_datapath_engine"`
+	PrimaryInterface         types.String `tfsdk:"primary_interface"`
+	SNATInterface            types.String `tfsdk:"snat_interface"`
 	StableEgressIP           types.Bool   `tfsdk:"stable_egress_ip"`
+	EIPAllocationIDs         types.Map    `tfsdk:"eip_allocation_ids"`
+	RetainManagedEIPs        types.Bool   `tfsdk:"retain_managed_eips_on_destroy"`
 	HAProfile                types.String `tfsdk:"ha_profile"`
 	HALeaseTTLSeconds        types.Int64  `tfsdk:"ha_lease_ttl_seconds"`
 	HARenewIntervalSeconds   types.Int64  `tfsdk:"ha_renew_interval_seconds"`
@@ -186,10 +190,56 @@ func (r *GatewayResource) Update(ctx context.Context, req resource.UpdateRequest
 		resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 		return
 	}
+	if gatewayPoolRolloutAllowed(state, plan) {
+		plan.EgressPublicIPs = state.EgressPublicIPs
+		plan.ActiveInstanceIDs = state.ActiveInstanceIDs
+		plan.StandbyInstanceIDs = state.StandbyInstanceIDs
+		plan.RollbackRouteTargetsJSON = state.RollbackRouteTargetsJSON
+		plan.ControlPlaneStatusJSON = state.ControlPlaneStatusJSON
+		plan.Status = state.Status
+		if err := updateGatewayCapacity(ctx, plan, r.installerFactory); err != nil {
+			resp.Diagnostics.AddError("Update BetterNAT gateway capacity", err.Error())
+			return
+		}
+		if err := updateGatewayPools(ctx, plan, r.installerFactory); err != nil {
+			resp.Diagnostics.AddError("Roll out BetterNAT gateway pools", err.Error())
+			return
+		}
+		if err := readGatewayState(ctx, &plan, r.readerFactory); err != nil {
+			resp.Diagnostics.AddWarning("Read BetterNAT gateway state", err.Error())
+		}
+		resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+		return
+	}
 	resp.Diagnostics.AddError(
 		"BetterNAT gateway replacement required",
-		"Only min_size, desired_capacity, and max_size can be updated in-place in this provider version. Changes to betternat_version, agent_binary_url, cli_binary_url, loxicmd_binary_url, AMI, instance type, subnets, routes, private CIDRs, datapath settings, stable egress IP mode, HA timing, tags, or other installation inputs require replacing the betternat_aws_gateway resource, for example with terraform apply -replace=betternat_aws_gateway.<name>.",
+		"Capacity and bootstrap-only changes that preserve topology and ownership can be rolled out in place. Changes to betternat_version, agent_binary_url, cli_binary_url, loxicmd_binary_url, AMI, instance type, subnets, routes, private CIDRs, datapath settings, stable egress IP mode or allocation ownership, HA timing, tags, or other installation inputs require replacing the betternat_aws_gateway resource, for example with terraform apply -replace=betternat_aws_gateway.<name>.",
 	)
+}
+
+func gatewayPoolRolloutAllowed(state GatewayResourceModel, plan GatewayResourceModel) bool {
+	if state.InstallPlanJSON.IsNull() || state.InstallPlanJSON.IsUnknown() || plan.InstallPlanJSON.IsNull() || plan.InstallPlanJSON.IsUnknown() {
+		return false
+	}
+	var oldPlan installplan.Plan
+	var newPlan installplan.Plan
+	if json.Unmarshal([]byte(state.InstallPlanJSON.ValueString()), &oldPlan) != nil || json.Unmarshal([]byte(plan.InstallPlanJSON.ValueString()), &newPlan) != nil {
+		return false
+	}
+	normalize := func(p *installplan.Plan) {
+		p.MinSize = 0
+		p.DesiredCapacity = 0
+		p.MaxSize = 0
+		for i := range p.Pools {
+			p.Pools[i].MinSize = 0
+			p.Pools[i].DesiredCapacity = 0
+			p.Pools[i].MaxSize = 0
+		}
+		delete(p.Tags, "BetterNATAgentConfigHash")
+	}
+	normalize(&oldPlan)
+	normalize(&newPlan)
+	return reflect.DeepEqual(oldPlan, newPlan)
 }
 
 func (r *GatewayResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -320,6 +370,8 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 
 	datapathEngine := stringDefault(plan.DatapathEngine, "loxilb")
 	fallbackEngine := stringDefault(plan.FallbackDatapathEngine, "nftables")
+	primaryInterface := stringDefault(plan.PrimaryInterface, "auto")
+	snatInterface := stringDefault(plan.SNATInterface, primaryInterface)
 	if datapathEngine != "loxilb" && datapathEngine != "nftables" {
 		return GatewayResourceModel{}, fmt.Errorf("unsupported datapath_engine %q", datapathEngine)
 	}
@@ -332,6 +384,14 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 		}
 	}
 	stableEgressIP := boolDefault(plan.StableEgressIP, true)
+	externalEIPAllocationIDs := map[string]string{}
+	if !plan.EIPAllocationIDs.IsNull() && !plan.EIPAllocationIDs.IsUnknown() {
+		externalEIPAllocationIDs, err = mapStrings(ctx, plan.EIPAllocationIDs)
+		if err != nil {
+			return GatewayResourceModel{}, fmt.Errorf("eip_allocation_ids: %w", err)
+		}
+	}
+	retainManagedEIPs := boolDefault(plan.RetainManagedEIPs, false)
 	haProfile := normalizeHAProfile(stringDefault(plan.HAProfile, "default"))
 	haTTLSeconds, haRenewSeconds, err := haTiming(plan.HALeaseTTLSeconds, plan.HARenewIntervalSeconds, haProfile)
 	if err != nil {
@@ -390,7 +450,7 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 		Datapath: provider.DatapathSpec{
 			Engine:         datapathEngine,
 			FallbackEngine: fallbackEngine,
-			SNATInterface:  "ens5",
+			SNATInterface:  snatInterface,
 		},
 		HA: provider.HASpec{
 			Enabled:               true,
@@ -428,7 +488,7 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 		HAGroupID:            plan.Name.ValueString() + "-" + firstAZ,
 		InstanceID:           "auto",
 		AvailabilityZone:     firstAZ,
-		PrimaryInterface:     "ens5",
+		PrimaryInterface:     primaryInterface,
 		RouteTableIDs:        routeTablesByAZ[firstAZ],
 		RouteDestinationCIDR: routeDestinationCIDR,
 	})
@@ -448,6 +508,8 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 		CLIBinarySHA256:     bootstrapArtifacts.CLIBinarySHA256,
 		LoxiCMDBinaryURL:    stringDefault(plan.LoxiCMDBinaryURL, ""),
 		LoxiCMDBinarySHA256: stringDefault(plan.LoxiCMDBinarySHA256, ""),
+		PrimaryInterface:    primaryInterface,
+		SNATInterface:       snatInterface,
 		Preinstalled:        bootstrapMode == "prebaked_ami",
 	})
 	if err != nil {
@@ -466,27 +528,28 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 		associatePublicIP = plan.AssociatePublicIPAddress.ValueBool()
 	}
 	installPlan, err := installplan.Build(installplan.Input{
-		Name:                  plan.Name.ValueString(),
-		Region:                plan.Region.ValueString(),
-		VPCID:                 plan.VPCID.ValueString(),
-		PublicSubnetIDs:       publicSubnetsByAZ,
-		PrivateRouteTableIDs:  routeTablesByAZ,
-		PrivateCIDRs:          privateCIDRs,
-		StableEgressIP:        stableEgressIP,
-		LeaseTableName:        leaseTable,
-		CoordinationTableName: coordinationTable,
-		AgentConfigHash:       hex.EncodeToString(configHash[:]),
-		AMIID:                 stringDefault(plan.AMIID, ""),
-		AMIChannel:            amiChannel,
-		InstanceType:          instanceType,
-		UseSpot:               useSpot,
-		MinSize:               int32(minSize),
-		DesiredCapacity:       int32(desiredCapacity),
-		MaxSize:               int32(maxSize),
-		RouteDestinationCIDR:  routeDestinationCIDR,
-		RouteTargetType:       routeTargetType,
-		AssociatePublicIP:     &associatePublicIP,
-		Tags:                  tags,
+		Name:                     plan.Name.ValueString(),
+		Region:                   plan.Region.ValueString(),
+		VPCID:                    plan.VPCID.ValueString(),
+		PublicSubnetIDs:          publicSubnetsByAZ,
+		PrivateRouteTableIDs:     routeTablesByAZ,
+		PrivateCIDRs:             privateCIDRs,
+		StableEgressIP:           stableEgressIP,
+		ExternalEIPAllocationIDs: externalEIPAllocationIDs,
+		LeaseTableName:           leaseTable,
+		CoordinationTableName:    coordinationTable,
+		AgentConfigHash:          hex.EncodeToString(configHash[:]),
+		AMIID:                    stringDefault(plan.AMIID, ""),
+		AMIChannel:               amiChannel,
+		InstanceType:             instanceType,
+		UseSpot:                  useSpot,
+		MinSize:                  int32(minSize),
+		DesiredCapacity:          int32(desiredCapacity),
+		MaxSize:                  int32(maxSize),
+		RouteDestinationCIDR:     routeDestinationCIDR,
+		RouteTargetType:          routeTargetType,
+		AssociatePublicIP:        &associatePublicIP,
+		Tags:                     tags,
 	})
 	if err != nil {
 		return GatewayResourceModel{}, err
@@ -503,6 +566,8 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	result.AssociatePublicIPAddress = types.BoolValue(associatePublicIP)
 	result.DatapathEngine = types.StringValue(datapathEngine)
 	result.FallbackDatapathEngine = types.StringValue(fallbackEngine)
+	result.PrimaryInterface = types.StringValue(primaryInterface)
+	result.SNATInterface = types.StringValue(snatInterface)
 	result.InstanceType = types.StringValue(instanceType)
 	result.UseSpot = types.BoolValue(useSpot)
 	result.MinSize = types.Int64Value(minSize)
@@ -524,6 +589,8 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 		result.CLIBinarySHA256 = types.StringValue(bootstrapArtifacts.CLIBinarySHA256)
 	}
 	result.StableEgressIP = types.BoolValue(stableEgressIP)
+	result.EIPAllocationIDs = mustStringMap(externalEIPAllocationIDs)
+	result.RetainManagedEIPs = types.BoolValue(retainManagedEIPs)
 	result.HAProfile = types.StringValue(haProfile)
 	result.HALeaseTTLSeconds = types.Int64Value(haTTLSeconds)
 	result.HARenewIntervalSeconds = types.Int64Value(haRenewSeconds)

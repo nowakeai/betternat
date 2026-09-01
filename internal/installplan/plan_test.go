@@ -108,6 +108,75 @@ func TestBuildUseSpot(t *testing.T) {
 	}
 }
 
+func TestBuildUsesExternalEIPAllocationIDsPerAZ(t *testing.T) {
+	plan, err := Build(Input{
+		Name:           "prod-egress",
+		Region:         "us-west-2",
+		VPCID:          "vpc-123",
+		StableEgressIP: true,
+		PublicSubnetIDs: map[string]string{
+			"us-west-2a": "subnet-public-a",
+			"us-west-2b": "subnet-public-b",
+		},
+		PrivateRouteTableIDs: map[string][]string{
+			"us-west-2a": {"rtb-a"},
+			"us-west-2b": {"rtb-b"},
+		},
+		ExternalEIPAllocationIDs: map[string]string{"us-west-2a": "eipalloc-external"},
+	})
+	if err != nil {
+		t.Fatalf("build plan: %v", err)
+	}
+	if plan.ExternalEIPAllocationIDs["us-west-2a"] != "eipalloc-external" {
+		t.Fatalf("missing external allocation: %#v", plan.ExternalEIPAllocationIDs)
+	}
+	if _, managed := plan.EIPAllocationNames["us-west-2a"]; managed {
+		t.Fatalf("external allocation must not also be provider managed: %#v", plan.EIPAllocationNames)
+	}
+	if plan.EIPAllocationNames["us-west-2b"] == "" {
+		t.Fatalf("omitted zone should retain provider-managed behavior: %#v", plan.EIPAllocationNames)
+	}
+}
+
+func TestBuildRejectsExternalEIPWithoutStableEgress(t *testing.T) {
+	_, err := Build(Input{
+		Name:                     "prod-egress",
+		Region:                   "us-west-2",
+		VPCID:                    "vpc-123",
+		StableEgressIP:           false,
+		PublicSubnetIDs:          map[string]string{"us-west-2a": "subnet-public-a"},
+		PrivateRouteTableIDs:     map[string][]string{"us-west-2a": {"rtb-a"}},
+		ExternalEIPAllocationIDs: map[string]string{"us-west-2a": "eipalloc-external"},
+	})
+	if err == nil {
+		t.Fatal("expected stable egress validation error")
+	}
+}
+
+func TestBuildRejectsExternalEIPAssignedToMultipleAZs(t *testing.T) {
+	_, err := Build(Input{
+		Name:           "prod-egress",
+		Region:         "us-west-2",
+		VPCID:          "vpc-123",
+		StableEgressIP: true,
+		PublicSubnetIDs: map[string]string{
+			"us-west-2a": "subnet-public-a",
+			"us-west-2b": "subnet-public-b",
+		},
+		PrivateRouteTableIDs: map[string][]string{
+			"us-west-2a": {"rtb-a"},
+			"us-west-2b": {"rtb-b"},
+		},
+		ExternalEIPAllocationIDs: map[string]string{
+			"us-west-2a": "eipalloc-shared",
+			"us-west-2b": "eipalloc-shared",
+		},
+	})
+	if err == nil {
+		t.Fatal("expected duplicate external EIP validation error")
+	}
+}
+
 func TestBuildCanDisableAssociatedPublicIP(t *testing.T) {
 	associatePublicIP := false
 	plan, err := Build(Input{
