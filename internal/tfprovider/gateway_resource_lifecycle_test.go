@@ -113,6 +113,47 @@ func TestGatewayReplacementNotRequiredForProviderInfrastructureRevisionChange(t 
 	}
 }
 
+func TestGatewayReplacementNotRequiredForManagedEIPRetentionChange(t *testing.T) {
+	statePlan := validGatewayPlan()
+	statePlan.RetainManagedEIPs = types.BoolValue(false)
+	state, err := DeriveGatewayState(context.Background(), &statePlan)
+	if err != nil {
+		t.Fatalf("derive state: %v", err)
+	}
+
+	nextPlan := validGatewayPlan()
+	nextPlan.PeerAPIAuthToken = state.PeerAPIAuthToken
+	nextPlan.RetainManagedEIPs = types.BoolValue(true)
+	next, err := DeriveGatewayState(context.Background(), &nextPlan)
+	if err != nil {
+		t.Fatalf("derive next: %v", err)
+	}
+
+	if gatewayReplacementRequired(state, next) {
+		t.Fatal("managed EIP retention must be a state-only in-place change")
+	}
+}
+
+func TestGatewayReplacementRequiredForExternalEIPChange(t *testing.T) {
+	statePlan := validGatewayPlan()
+	state, err := DeriveGatewayState(context.Background(), &statePlan)
+	if err != nil {
+		t.Fatalf("derive state: %v", err)
+	}
+
+	nextPlan := validGatewayPlan()
+	nextPlan.PeerAPIAuthToken = state.PeerAPIAuthToken
+	nextPlan.EIPAllocationIDs = mustStringMap(map[string]string{"us-west-2a": "eipalloc-external"})
+	next, err := DeriveGatewayState(context.Background(), &nextPlan)
+	if err != nil {
+		t.Fatalf("derive next: %v", err)
+	}
+
+	if !gatewayReplacementRequired(state, next) {
+		t.Fatal("changing EIP ownership must require replacement")
+	}
+}
+
 func TestDeriveGatewayStatePreservesPeerAPIAuthToken(t *testing.T) {
 	statePlan := validGatewayPlan()
 	state, err := DeriveGatewayState(context.Background(), &statePlan)

@@ -108,6 +108,15 @@ families such as T2 that expose a Xen-style name such as `enX0`.
 | Name | Default | Description |
 | --- | --- | --- |
 | `stable_egress_ip` | `true` | If true, BetterNAT manages a shared EIP so new private-subnet egress flows converge back to the same public IP after failover. Gateway nodes may still have ordinary per-node public IPv4 addresses for bootstrap and management. If false, BetterNAT skips the shared EIP and the public source IP changes to the active instance's public IP after failover. |
+| `eip_allocation_ids` | `{}` | Optional AWS EIP allocation IDs keyed by availability zone. BetterNAT associates but never releases these externally managed EIPs. Omitted zones continue using provider-managed EIPs. Requires `stable_egress_ip=true`. |
+| `retain_managed_eips_on_destroy` | `false` | Preserve provider-managed EIPs during gateway destroy. A same-name recreation adopts the retained tagged EIPs. Set back to false before a final destroy that should release them. |
+
+For production, prefer independent `aws_eip` resources passed through
+`eip_allocation_ids`. This keeps the public identity in Terraform even when the
+gateway must be replaced. `retain_managed_eips_on_destroy` is primarily a
+compatibility and emergency-migration option; a retained EIP is intentionally
+left outside the destroyed gateway resource until a same-name gateway adopts
+it or an operator releases it.
 
 ### HA Timing
 

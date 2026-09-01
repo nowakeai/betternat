@@ -713,6 +713,42 @@ func TestDeriveGatewayStateNonStableEgressOmitsPublicIdentity(t *testing.T) {
 	}
 }
 
+func TestDeriveGatewayStateUsesExternalEIPAndRetainPolicy(t *testing.T) {
+	plan := validGatewayPlan()
+	plan.StableEgressIP = types.BoolValue(true)
+	plan.EIPAllocationIDs = mustStringMap(map[string]string{"us-west-2a": "eipalloc-external"})
+	plan.RetainManagedEIPs = types.BoolValue(true)
+	derived, err := DeriveGatewayState(context.Background(), &plan)
+	if err != nil {
+		t.Fatalf("derive gateway state: %v", err)
+	}
+	if !strings.Contains(derived.InstallPlanJSON.ValueString(), `"external_eip_allocation_ids":{"us-west-2a":"eipalloc-external"}`) {
+		t.Fatalf("missing external EIP in install plan: %s", derived.InstallPlanJSON.ValueString())
+	}
+	if strings.Contains(derived.InstallPlanJSON.ValueString(), `"eip_allocation_names":{"us-west-2a"`) {
+		t.Fatalf("external EIP must not also be managed: %s", derived.InstallPlanJSON.ValueString())
+	}
+	if !derived.RetainManagedEIPs.ValueBool() {
+		t.Fatal("retain policy was not preserved")
+	}
+	var installPlan installplan.Plan
+	if err := json.Unmarshal([]byte(derived.InstallPlanJSON.ValueString()), &installPlan); err != nil {
+		t.Fatalf("decode install plan: %v", err)
+	}
+	userData := gatewayUserDataByAZ(installPlan, derived.UserData.ValueString())["us-west-2a"]
+	if !strings.Contains(userData, `"allocation_id":"eipalloc-external"`) {
+		t.Fatalf("external allocation id was not injected into AZ user data: %s", userData)
+	}
+}
+
+func TestGatewayUserDataByAZKeepsBaseDataForManagedEIP(t *testing.T) {
+	plan := installplan.Plan{Pools: []installplan.Pool{{AvailabilityZone: "us-west-2a"}}}
+	userDataByAZ := gatewayUserDataByAZ(plan, "#!/bin/bash\nmanaged\n")
+	if userDataByAZ["us-west-2a"] != "#!/bin/bash\nmanaged\n" {
+		t.Fatalf("managed EIP pool lost base user data: %#v", userDataByAZ)
+	}
+}
+
 func TestDeriveGatewayStateRequiresRoutes(t *testing.T) {
 	plan := GatewayResourceModel{
 		Name:                 types.StringValue("prod-egress"),
@@ -798,7 +834,7 @@ func (f fakeInstaller) UpdateCapacity(context.Context, installplan.Plan) error {
 	return nil
 }
 
-func (f fakeInstaller) UpdatePools(context.Context, installplan.Plan, string) error {
+func (f fakeInstaller) UpdatePools(context.Context, installplan.Plan, map[string]string) error {
 	return nil
 }
 

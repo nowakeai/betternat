@@ -154,6 +154,44 @@ func TestApplyRequiresAMIIDToLaunchMissingInstances(t *testing.T) {
 	}
 }
 
+func TestApplyAssociatesExternalEIPWithoutAllocating(t *testing.T) {
+	ec2Client := &fakeEC2{
+		securityGroupID: "sg-123",
+		addresses: []ec2types.Address{{
+			AllocationId: awssdk.String("eipalloc-external"),
+			PublicIp:     awssdk.String("198.51.100.10"),
+		}},
+	}
+	applier := Applier{EC2: ec2Client, DynamoDB: &fakeDynamoDB{}, IAM: &fakeIAM{}}
+	plan := installplan.Plan{
+		Name:                     "prod-egress",
+		VPCID:                    "vpc-123",
+		IAMRoleName:              "betternat-prod-egress-agent",
+		InstanceProfileName:      "betternat-prod-egress-agent",
+		SecurityGroupName:        "betternat-prod-egress-appliance",
+		LeaseTableName:           "betternat-prod-egress-leases",
+		ExternalEIPAllocationIDs: map[string]string{"us-west-2a": "eipalloc-external"},
+		Appliances: []installplan.Appliance{{
+			Name: "prod-egress-us-west-2a-active", AvailabilityZone: "us-west-2a", Role: "active",
+		}},
+	}
+	result, err := applier.Apply(context.Background(), plan, Inputs{
+		ApplianceInstanceIDs: map[string]string{"prod-egress-us-west-2a-active": "i-active"},
+	})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if ec2Client.allocateInput != nil {
+		t.Fatalf("external EIP must not be allocated by BetterNAT: %#v", ec2Client.allocateInput)
+	}
+	if awssdk.ToString(ec2Client.associateAddressInput.AllocationId) != "eipalloc-external" {
+		t.Fatalf("unexpected EIP association: %#v", ec2Client.associateAddressInput)
+	}
+	if result.AllocatedPublicIPs["us-west-2a"] != "198.51.100.10" {
+		t.Fatalf("unexpected external EIP result: %#v", result)
+	}
+}
+
 func TestApplyLaunchesMissingApplianceInstances(t *testing.T) {
 	ec2Client := &fakeEC2{
 		allocationID:     "eipalloc-123",
@@ -364,7 +402,7 @@ func TestUpdatePoolsRollsASGWithoutReplacingGatewayInfrastructure(t *testing.T) 
 		}},
 	}
 
-	if err := applier.UpdatePools(context.Background(), plan, "#!/bin/bash\ntrue\n"); err != nil {
+	if err := applier.UpdatePools(context.Background(), plan, map[string]string{"us-west-2a": "#!/bin/bash\ntrue\n"}); err != nil {
 		t.Fatalf("update pools: %v", err)
 	}
 	if ec2Client.createLaunchTemplateVersionInput == nil {
@@ -389,6 +427,35 @@ func TestUpdatePoolsRollsASGWithoutReplacingGatewayInfrastructure(t *testing.T) 
 	}
 	if asgClient.describeRefreshInput == nil {
 		t.Fatal("expected the provider to wait for the instance refresh")
+	}
+}
+
+func TestCreateLaunchTemplateWaitsForReleasedName(t *testing.T) {
+	oldAttempts := launchTemplateNameWaitAttempts
+	oldInterval := launchTemplateNameWaitInterval
+	launchTemplateNameWaitAttempts = 3
+	launchTemplateNameWaitInterval = 0
+	t.Cleanup(func() {
+		launchTemplateNameWaitAttempts = oldAttempts
+		launchTemplateNameWaitInterval = oldInterval
+	})
+	ec2Client := &fakeEC2{
+		launchTemplateID: "lt-123",
+		createLaunchTemplateErrors: []error{
+			&smithy.GenericAPIError{Code: "InvalidLaunchTemplateName.AlreadyExistsException", Message: "name is still releasing"},
+		},
+	}
+	applier := Applier{EC2: ec2Client}
+	_, err := applier.createLaunchTemplate(context.Background(), installplan.Plan{
+		AMIID:               "ami-123",
+		InstanceType:        "t2.medium",
+		InstanceProfileName: "betternat-prod-egress-agent",
+	}, installplan.Pool{LaunchTemplateName: "betternat-prod-egress-us-west-2a"}, "sg-123", "")
+	if err != nil {
+		t.Fatalf("create launch template: %v", err)
+	}
+	if ec2Client.createLaunchTemplateCalls != 2 {
+		t.Fatalf("expected one bounded retry, got %d calls", ec2Client.createLaunchTemplateCalls)
 	}
 }
 
@@ -600,6 +667,59 @@ func TestCleanupWaitsForSecurityGroupNetworkInterfaces(t *testing.T) {
 	}
 	if awssdk.ToString(ec2Client.describeNetworkInterfacesInputs[0].Filters[0].Name) != "group-id" {
 		t.Fatalf("expected group-id dependency filter: %#v", ec2Client.describeNetworkInterfacesInputs[0])
+	}
+}
+
+func TestCleanupCanRetainManagedEIPs(t *testing.T) {
+	ec2Client := &fakeEC2{securityGroupID: "sg-123", describeGroupIDs: []string{"sg-123"}}
+	applier := Applier{EC2: ec2Client, DynamoDB: &fakeDynamoDB{}, IAM: &fakeIAM{}}
+	plan := installplan.Plan{
+		Name:               "prod-egress",
+		VPCID:              "vpc-123",
+		SecurityGroupName:  "betternat-prod-egress-appliance",
+		EIPAllocationNames: map[string]string{"us-west-2a": "betternat-prod-egress-us-west-2a"},
+	}
+	if err := applier.Cleanup(context.Background(), plan, CleanupInputs{RetainManagedEIPs: true}); err != nil {
+		t.Fatalf("cleanup: %v", err)
+	}
+	if ec2Client.releaseAddressInput != nil || ec2Client.disassociateInput != nil {
+		t.Fatalf("retained managed EIP must not be released: %#v %#v", ec2Client.disassociateInput, ec2Client.releaseAddressInput)
+	}
+}
+
+func TestCleanupNeverReleasesExternalEIPs(t *testing.T) {
+	ec2Client := &fakeEC2{securityGroupID: "sg-123", describeGroupIDs: []string{"sg-123"}}
+	applier := Applier{EC2: ec2Client, DynamoDB: &fakeDynamoDB{}, IAM: &fakeIAM{}}
+	plan := installplan.Plan{
+		VPCID:                    "vpc-123",
+		SecurityGroupName:        "betternat-prod-egress-appliance",
+		ExternalEIPAllocationIDs: map[string]string{"us-west-2a": "eipalloc-external"},
+	}
+	if err := applier.Cleanup(context.Background(), plan, CleanupInputs{}); err != nil {
+		t.Fatalf("cleanup: %v", err)
+	}
+	if ec2Client.releaseAddressInput != nil || ec2Client.disassociateInput != nil {
+		t.Fatalf("external EIP must never be released: %#v %#v", ec2Client.disassociateInput, ec2Client.releaseAddressInput)
+	}
+}
+
+func TestAllocateEIPReusesRetainedTaggedAddress(t *testing.T) {
+	ec2Client := &fakeEC2{addresses: []ec2types.Address{{
+		AllocationId: awssdk.String("eipalloc-retained"),
+		PublicIp:     awssdk.String("198.51.100.20"),
+	}}}
+	applier := Applier{EC2: ec2Client}
+	allocationID, publicIP, err := applier.allocateEIP(context.Background(), "betternat-prod-egress-us-west-2a", map[string]string{
+		"BetterNATGateway": "prod-egress",
+	})
+	if err != nil {
+		t.Fatalf("reuse retained EIP: %v", err)
+	}
+	if allocationID != "eipalloc-retained" || publicIP != "198.51.100.20" {
+		t.Fatalf("unexpected retained EIP: %s %s", allocationID, publicIP)
+	}
+	if ec2Client.allocateInput != nil {
+		t.Fatalf("retained EIP reuse must not allocate a new address: %#v", ec2Client.allocateInput)
 	}
 }
 
@@ -840,6 +960,8 @@ type fakeEC2 struct {
 	associateAddressInput            *ec2.AssociateAddressInput
 	createLaunchTemplateInput        *ec2.CreateLaunchTemplateInput
 	createLaunchTemplateVersionInput *ec2.CreateLaunchTemplateVersionInput
+	createLaunchTemplateErrors       []error
+	createLaunchTemplateCalls        int
 	createSecurityGroupInput         *ec2.CreateSecurityGroupInput
 	deleteLaunchTemplateInput        *ec2.DeleteLaunchTemplateInput
 	deleteSecurityGroupInput         *ec2.DeleteSecurityGroupInput
@@ -884,6 +1006,12 @@ func (f *fakeEC2) AssociateAddress(_ context.Context, params *ec2.AssociateAddre
 
 func (f *fakeEC2) CreateLaunchTemplate(_ context.Context, params *ec2.CreateLaunchTemplateInput, _ ...func(*ec2.Options)) (*ec2.CreateLaunchTemplateOutput, error) {
 	f.createLaunchTemplateInput = params
+	f.createLaunchTemplateCalls++
+	if len(f.createLaunchTemplateErrors) > 0 {
+		err := f.createLaunchTemplateErrors[0]
+		f.createLaunchTemplateErrors = f.createLaunchTemplateErrors[1:]
+		return nil, err
+	}
 	return &ec2.CreateLaunchTemplateOutput{
 		LaunchTemplate: &ec2types.LaunchTemplate{
 			LaunchTemplateId: awssdk.String(f.launchTemplateID),
