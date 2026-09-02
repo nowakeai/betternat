@@ -7,6 +7,7 @@ import (
 
 type Input struct {
 	Name                     string
+	GenerationID             string
 	Region                   string
 	VPCID                    string
 	PublicSubnetIDs          map[string]string
@@ -32,6 +33,7 @@ type Input struct {
 
 type Plan struct {
 	Name                     string            `json:"name"`
+	GenerationID             string            `json:"generation_id,omitempty"`
 	Region                   string            `json:"region"`
 	VPCID                    string            `json:"vpc_id"`
 	PrivateCIDRs             []string          `json:"private_cidrs"`
@@ -153,6 +155,7 @@ func Build(input Input) (Plan, error) {
 	}
 	plan := Plan{
 		Name:                     input.Name,
+		GenerationID:             input.GenerationID,
 		Region:                   input.Region,
 		VPCID:                    input.VPCID,
 		PrivateCIDRs:             append([]string{}, input.PrivateCIDRs...),
@@ -216,6 +219,9 @@ func Build(input Input) (Plan, error) {
 	}
 	plan.Tags["BetterNATGateway"] = input.Name
 	plan.Tags["ManagedBy"] = "betternat"
+	if input.GenerationID != "" {
+		plan.Tags["BetterNATGeneration"] = input.GenerationID
+	}
 	if input.AgentConfigHash != "" {
 		plan.Tags["BetterNATAgentConfigHash"] = input.AgentConfigHash
 	}
@@ -229,6 +235,10 @@ func Build(input Input) (Plan, error) {
 			return Plan{}, fmt.Errorf("missing private route tables for %s", az)
 		}
 		poolName := input.Name + "-" + az
+		physicalPoolName := poolName
+		if input.GenerationID != "" {
+			physicalPoolName += "-" + input.GenerationID
+		}
 		plan.Pools = append(plan.Pools, Pool{
 			Name:               poolName,
 			AvailabilityZone:   az,
@@ -236,8 +246,8 @@ func Build(input Input) (Plan, error) {
 			MinSize:            minSize,
 			DesiredCapacity:    desiredCapacity,
 			MaxSize:            maxSize,
-			LaunchTemplateName: "betternat-" + poolName,
-			ASGName:            "betternat-" + poolName,
+			LaunchTemplateName: "betternat-" + physicalPoolName,
+			ASGName:            "betternat-" + physicalPoolName,
 		})
 		if input.StableEgressIP && plan.ExternalEIPAllocationIDs[az] == "" {
 			plan.EIPAllocationNames[az] = "betternat-" + input.Name + "-" + az

@@ -2,7 +2,9 @@ package awsinstall
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"time"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
@@ -431,12 +433,12 @@ func TestUpdatePoolsRollsASGWithoutReplacingGatewayInfrastructure(t *testing.T) 
 }
 
 func TestCreateLaunchTemplateWaitsForReleasedName(t *testing.T) {
-	oldAttempts := launchTemplateNameWaitAttempts
+	oldTimeout := launchTemplateNameWaitTimeout
 	oldInterval := launchTemplateNameWaitInterval
-	launchTemplateNameWaitAttempts = 3
+	launchTemplateNameWaitTimeout = time.Second
 	launchTemplateNameWaitInterval = 0
 	t.Cleanup(func() {
-		launchTemplateNameWaitAttempts = oldAttempts
+		launchTemplateNameWaitTimeout = oldTimeout
 		launchTemplateNameWaitInterval = oldInterval
 	})
 	ec2Client := &fakeEC2{
@@ -456,6 +458,50 @@ func TestCreateLaunchTemplateWaitsForReleasedName(t *testing.T) {
 	}
 	if ec2Client.createLaunchTemplateCalls != 2 {
 		t.Fatalf("expected one bounded retry, got %d calls", ec2Client.createLaunchTemplateCalls)
+	}
+}
+
+func TestCreateLaunchTemplateStopsAtNameReleaseDeadline(t *testing.T) {
+	oldTimeout := launchTemplateNameWaitTimeout
+	oldInterval := launchTemplateNameWaitInterval
+	launchTemplateNameWaitTimeout = time.Millisecond
+	launchTemplateNameWaitInterval = time.Hour
+	t.Cleanup(func() {
+		launchTemplateNameWaitTimeout = oldTimeout
+		launchTemplateNameWaitInterval = oldInterval
+	})
+	ec2Client := &fakeEC2{createLaunchTemplateErrors: []error{
+		&smithy.GenericAPIError{Code: "InvalidLaunchTemplateName.AlreadyExistsException", Message: "name is still releasing"},
+	}}
+	_, err := (Applier{EC2: ec2Client}).createLaunchTemplate(context.Background(), installplan.Plan{
+		AMIID:               "ami-123",
+		InstanceType:        "t2.medium",
+		InstanceProfileName: "betternat-prod-egress-agent",
+	}, installplan.Pool{LaunchTemplateName: "betternat-prod-egress-us-west-2a"}, "sg-123", "")
+	if err == nil || !strings.Contains(err.Error(), "name-release deadline") {
+		t.Fatalf("expected deadline error, got %v", err)
+	}
+	if ec2Client.createLaunchTemplateCalls != 1 {
+		t.Fatalf("deadline should bound retries, got %d calls", ec2Client.createLaunchTemplateCalls)
+	}
+}
+
+func TestGenerationSupersededByAnotherAutoScalingGroup(t *testing.T) {
+	plan := installplan.Plan{Name: "prod-egress", GenerationID: "old-generation", Pools: []installplan.Pool{{ASGName: "betternat-prod-egress-us-west-2a-old-generation"}}}
+	superseded, err := (Applier{AutoScaling: &fakeAutoScaling{instanceIDs: []string{"i-current"}}}).GenerationSuperseded(context.Background(), plan)
+	if err != nil || superseded {
+		t.Fatalf("existing generation should own itself, superseded=%t err=%v", superseded, err)
+	}
+	superseded, err = (Applier{AutoScaling: &fakeAutoScaling{describeNoGroups: true}}).GenerationSuperseded(context.Background(), plan)
+	if err != nil || superseded {
+		t.Fatalf("missing generation without a successor should remain cleanable, superseded=%t err=%v", superseded, err)
+	}
+	superseded, err = (Applier{AutoScaling: &fakeAutoScaling{describeNoGroups: true, supersedingGeneration: "new-generation"}}).GenerationSuperseded(context.Background(), plan)
+	if err != nil {
+		t.Fatalf("check superseding generation: %v", err)
+	}
+	if !superseded {
+		t.Fatal("a different generation for the same gateway must supersede old state")
 	}
 }
 
@@ -1153,6 +1199,8 @@ type fakeAutoScaling struct {
 	deleteInput              *autoscaling.DeleteAutoScalingGroupInput
 	deleteLifecycleHookInput *autoscaling.DeleteLifecycleHookInput
 	describeInput            *autoscaling.DescribeAutoScalingGroupsInput
+	describeNoGroups         bool
+	supersedingGeneration    string
 	putLifecycleHookInput    *autoscaling.PutLifecycleHookInput
 	updateInput              *autoscaling.UpdateAutoScalingGroupInput
 	startRefreshInput        *autoscaling.StartInstanceRefreshInput
@@ -1176,6 +1224,15 @@ func (f *fakeAutoScaling) DeleteLifecycleHook(_ context.Context, params *autosca
 
 func (f *fakeAutoScaling) DescribeAutoScalingGroups(_ context.Context, params *autoscaling.DescribeAutoScalingGroupsInput, _ ...func(*autoscaling.Options)) (*autoscaling.DescribeAutoScalingGroupsOutput, error) {
 	f.describeInput = params
+	if f.describeNoGroups {
+		if len(params.AutoScalingGroupNames) == 0 && f.supersedingGeneration != "" {
+			return &autoscaling.DescribeAutoScalingGroupsOutput{AutoScalingGroups: []astypes.AutoScalingGroup{{Tags: []astypes.TagDescription{
+				{Key: awssdk.String("BetterNATGateway"), Value: awssdk.String("prod-egress")},
+				{Key: awssdk.String("BetterNATGeneration"), Value: awssdk.String(f.supersedingGeneration)},
+			}}}}, nil
+		}
+		return &autoscaling.DescribeAutoScalingGroupsOutput{}, nil
+	}
 	instances := make([]astypes.Instance, 0, len(f.instanceIDs))
 	for _, instanceID := range f.instanceIDs {
 		instances = append(instances, astypes.Instance{

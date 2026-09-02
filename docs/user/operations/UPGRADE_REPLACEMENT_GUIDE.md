@@ -189,9 +189,9 @@ The provider records an internal `provider_infrastructure_revision` value in res
 
 ## Changes That Require Replacement
 
-The provider intentionally rejects topology and ownership changes that cannot
-be reconciled safely in place. Bootstrap-only changes can use the provider's
-ASG launch-template rollout path.
+The provider marks topology and ownership changes that cannot be reconciled
+safely in place as replacements during `terraform plan`. Bootstrap-only
+changes can use the provider's ASG launch-template rollout path.
 
 Replacement is required for changes such as:
 
@@ -219,13 +219,28 @@ Replacement is required for changes such as:
 - `route_target_type`
 - tags and other installation inputs.
 
-If you try to update these fields in place, Terraform reports:
+When one of these fields changes, Terraform plans a destroy/create replacement
+instead of deferring the decision until apply. Review the replacement before
+approving it:
 
 ```text
-BetterNAT gateway replacement required
+-/+ resource "betternat_aws_gateway" "egress" {
+      # ...
+    }
 ```
 
 This is deliberate. A silent in-place mutation could leave private routes, EIP association, lease ownership, datapath rules, and rollback metadata inconsistent.
+
+Each physical installation has a provider-generated `generation_id`. Auto
+Scaling groups and launch templates include that identity in their names and
+carry a `BetterNATGeneration` tag. Shared resources, including externally
+managed EIPs and retained provider-managed EIPs, keep stable logical names.
+
+This generation boundary protects failed replacements and Terraform deposed
+state: an old generation whose Auto Scaling groups no longer exist cannot
+refresh itself from, roll back routes for, or clean up a newer generation. A
+retry also receives fresh launch-template names, while same-generation AWS
+name-release races use a bounded ten-minute retry deadline.
 
 ## Replacement Options
 

@@ -17,6 +17,10 @@ func (r *GatewayResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			"id": schema.StringAttribute{
 				Computed: true,
 			},
+			"generation_id": schema.StringAttribute{
+				Computed:            true,
+				MarkdownDescription: "Provider-generated identity for one physical gateway installation. Replacement generations use distinct Auto Scaling group and launch template names.",
+			},
 			"name": schema.StringAttribute{
 				Required: true,
 			},

@@ -2,13 +2,194 @@ package tfprovider
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	awsinstall "github.com/nowakeai/betternat/internal/install/aws"
+	"github.com/nowakeai/betternat/internal/installplan"
 )
+
+func TestModifyPlanMarksUnsafeUpdateForReplacement(t *testing.T) {
+	ctx := context.Background()
+	resourceUnderTest := &GatewayResource{}
+	var schemaResp resource.SchemaResponse
+	resourceUnderTest.Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+
+	stateInput := validGatewayPlan()
+	stateInput.GenerationID = types.StringValue("a1b2c3d4e5f6")
+	stateInput.Tags = types.MapNull(types.StringType)
+	state, err := DeriveGatewayState(ctx, &stateInput)
+	if err != nil {
+		t.Fatalf("derive state: %v", err)
+	}
+	plan := state
+	plan.EIPAllocationIDs = mustStringMap(map[string]string{"us-west-2a": "eipalloc-external"})
+
+	req := resource.ModifyPlanRequest{
+		Config: tfsdk.Config{Schema: schemaResp.Schema},
+		State:  tfsdk.State{Schema: schemaResp.Schema},
+		Plan:   tfsdk.Plan{Schema: schemaResp.Schema},
+	}
+	if diags := req.State.Set(ctx, state); diags.HasError() {
+		t.Fatalf("set state: %v", diags)
+	}
+	if diags := req.Plan.Set(ctx, plan); diags.HasError() {
+		t.Fatalf("set plan: %v", diags)
+	}
+	req.Config.Raw = req.Plan.Raw
+	resp := resource.ModifyPlanResponse{Plan: req.Plan}
+	resourceUnderTest.ModifyPlan(ctx, req, &resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("modify plan: %v", resp.Diagnostics)
+	}
+	if len(resp.RequiresReplace) != 1 || resp.RequiresReplace[0].String() != "install_plan_json" {
+		t.Fatalf("expected plan-time replacement, got %#v", resp.RequiresReplace)
+	}
+}
+
+func TestDeleteSkipsSupersededGeneration(t *testing.T) {
+	ctx := context.Background()
+	resourceUnderTest := &GatewayResource{}
+	var schemaResp resource.SchemaResponse
+	resourceUnderTest.Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+	input := validGatewayPlan()
+	input.GenerationID = types.StringValue("old-generation")
+	input.Tags = types.MapNull(types.StringType)
+	state, err := DeriveGatewayState(ctx, &input)
+	if err != nil {
+		t.Fatalf("derive state: %v", err)
+	}
+	state.RollbackRouteTargetsJSON = types.StringValue(`{"rtb-private-a":{"destination_cidr":"0.0.0.0/0","target":"nat-previous"}}`)
+	superseded := true
+	rollbackCalls := 0
+	cleanupCalls := 0
+	resourceUnderTest.readerFactory = func(context.Context, string) (Reader, error) {
+		return fakeReader{generationSuperseded: &superseded}, nil
+	}
+	resourceUnderTest.rollbackerFactory = func(context.Context, string) (Rollbacker, error) {
+		return lifecycleRollbacker{calls: &rollbackCalls}, nil
+	}
+	resourceUnderTest.cleanerFactory = func(context.Context, string) (Cleaner, error) {
+		return lifecycleCleaner{calls: &cleanupCalls}, nil
+	}
+	req := resource.DeleteRequest{State: tfsdk.State{Schema: schemaResp.Schema}}
+	if diags := req.State.Set(ctx, state); diags.HasError() {
+		t.Fatalf("set state: %v", diags)
+	}
+	var resp resource.DeleteResponse
+	resourceUnderTest.Delete(ctx, req, &resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("delete superseded generation: %v", resp.Diagnostics)
+	}
+	if rollbackCalls != 0 || cleanupCalls != 0 {
+		t.Fatalf("superseded generation touched current infrastructure: rollback=%d cleanup=%d", rollbackCalls, cleanupCalls)
+	}
+}
+
+func TestFailedCreateRetryUsesFreshGenerationAndPlansNoFurtherReplacement(t *testing.T) {
+	ctx := context.Background()
+	var schemaResp resource.SchemaResponse
+	resourceUnderTest := &GatewayResource{}
+	resourceUnderTest.Schema(ctx, resource.SchemaRequest{}, &schemaResp)
+	input := validGatewayPlan()
+	input.Tags = types.MapNull(types.StringType)
+	planned, err := DeriveGatewayState(ctx, &input)
+	if err != nil {
+		t.Fatalf("derive plan: %v", err)
+	}
+	planned.GenerationID = types.StringUnknown()
+	plan := tfsdk.Plan{Schema: schemaResp.Schema}
+	if diags := plan.Set(ctx, planned); diags.HasError() {
+		t.Fatalf("set create plan: %v", diags)
+	}
+	installer := &lifecycleInstaller{failures: 1}
+	cleanupCalls := 0
+	resourceUnderTest.installerFactory = func(context.Context, string) (Installer, error) { return installer, nil }
+	resourceUnderTest.cleanerFactory = func(context.Context, string) (Cleaner, error) {
+		return lifecycleCleaner{calls: &cleanupCalls}, nil
+	}
+
+	first := resource.CreateResponse{State: tfsdk.State{Schema: schemaResp.Schema}}
+	resourceUnderTest.Create(ctx, resource.CreateRequest{Plan: plan}, &first)
+	if !first.Diagnostics.HasError() || cleanupCalls != 1 {
+		t.Fatalf("failed create should report error and clean up once: diagnostics=%v cleanup=%d", first.Diagnostics, cleanupCalls)
+	}
+	second := resource.CreateResponse{State: tfsdk.State{Schema: schemaResp.Schema}}
+	resourceUnderTest.Create(ctx, resource.CreateRequest{Plan: plan}, &second)
+	if second.Diagnostics.HasError() {
+		t.Fatalf("retry create: %v", second.Diagnostics)
+	}
+	if len(installer.plans) != 2 || installer.plans[0].GenerationID == installer.plans[1].GenerationID {
+		t.Fatalf("retry must use a fresh generation: %#v", installer.plans)
+	}
+	if installer.plans[0].Pools[0].ASGName == installer.plans[1].Pools[0].ASGName {
+		t.Fatalf("retry reused physical pool name: %#v", installer.plans)
+	}
+	var recovered GatewayResourceModel
+	if diags := second.State.Get(ctx, &recovered); diags.HasError() {
+		t.Fatalf("read recovered state: %v", diags)
+	}
+
+	stablePlan := tfsdk.Plan{Schema: schemaResp.Schema}
+	if diags := stablePlan.Set(ctx, recovered); diags.HasError() {
+		t.Fatalf("set stable plan: %v", diags)
+	}
+	stableState := tfsdk.State{Schema: schemaResp.Schema}
+	if diags := stableState.Set(ctx, recovered); diags.HasError() {
+		t.Fatalf("set stable state: %v", diags)
+	}
+	modifyReq := resource.ModifyPlanRequest{
+		Config: tfsdk.Config{Raw: stablePlan.Raw, Schema: schemaResp.Schema},
+		State:  stableState,
+		Plan:   stablePlan,
+	}
+	modifyResp := resource.ModifyPlanResponse{Plan: stablePlan}
+	resourceUnderTest.ModifyPlan(ctx, modifyReq, &modifyResp)
+	if modifyResp.Diagnostics.HasError() || len(modifyResp.RequiresReplace) != 0 {
+		t.Fatalf("recovered generation should plan no further replacement: diagnostics=%v replace=%#v", modifyResp.Diagnostics, modifyResp.RequiresReplace)
+	}
+}
+
+type lifecycleRollbacker struct{ calls *int }
+
+func (f lifecycleRollbacker) RestoreRoutes(context.Context, []awsinstall.RollbackRoute) error {
+	(*f.calls)++
+	return nil
+}
+
+type lifecycleCleaner struct{ calls *int }
+
+func (f lifecycleCleaner) Cleanup(context.Context, installplan.Plan, awsinstall.CleanupInputs) error {
+	(*f.calls)++
+	return nil
+}
+
+type lifecycleInstaller struct {
+	failures int
+	plans    []installplan.Plan
+}
+
+func (f *lifecycleInstaller) Install(_ context.Context, plan installplan.Plan, _ awsinstall.Inputs) (awsinstall.Result, error) {
+	f.plans = append(f.plans, plan)
+	if f.failures > 0 {
+		f.failures--
+		return awsinstall.Result{}, errors.New("injected create failure")
+	}
+	return awsinstall.Result{}, nil
+}
+
+func (f *lifecycleInstaller) UpdateCapacity(context.Context, installplan.Plan) error { return nil }
+func (f *lifecycleInstaller) UpdatePools(context.Context, installplan.Plan, map[string]string) error {
+	return nil
+}
+func (f *lifecycleInstaller) ReconcileInfrastructure(context.Context, installplan.Plan) error {
+	return nil
+}
 
 func TestCapacityOnlyUpdateIgnoresPoolCapacity(t *testing.T) {
 	statePlan := validGatewayPlan()

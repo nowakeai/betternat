@@ -108,6 +108,37 @@ func TestBuildUseSpot(t *testing.T) {
 	}
 }
 
+func TestBuildScopesPoolResourcesToGeneration(t *testing.T) {
+	plan, err := Build(Input{
+		Name:           "prod-egress",
+		GenerationID:   "a1b2c3d4e5f6",
+		Region:         "us-west-2",
+		VPCID:          "vpc-123",
+		StableEgressIP: true,
+		PublicSubnetIDs: map[string]string{
+			"us-west-2a": "subnet-public-a",
+		},
+		PrivateRouteTableIDs: map[string][]string{
+			"us-west-2a": {"rtb-a"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("build plan: %v", err)
+	}
+	if plan.Pools[0].ASGName != "betternat-prod-egress-us-west-2a-a1b2c3d4e5f6" {
+		t.Fatalf("unexpected generated ASG name: %s", plan.Pools[0].ASGName)
+	}
+	if plan.Pools[0].LaunchTemplateName != "betternat-prod-egress-us-west-2a-a1b2c3d4e5f6" {
+		t.Fatalf("unexpected generated launch template name: %s", plan.Pools[0].LaunchTemplateName)
+	}
+	if plan.Tags["BetterNATGeneration"] != "a1b2c3d4e5f6" {
+		t.Fatalf("missing generation tag: %#v", plan.Tags)
+	}
+	if plan.IAMRoleName != "betternat-prod-egress-agent" || plan.EIPAllocationNames["us-west-2a"] != "betternat-prod-egress-us-west-2a" {
+		t.Fatalf("shared resource names must remain stable: %#v", plan)
+	}
+}
+
 func TestBuildUsesExternalEIPAllocationIDsPerAZ(t *testing.T) {
 	plan, err := Build(Input{
 		Name:           "prod-egress",

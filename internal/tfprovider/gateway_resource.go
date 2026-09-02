@@ -12,6 +12,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
@@ -22,6 +23,7 @@ import (
 
 var _ resource.Resource = (*GatewayResource)(nil)
 var _ resource.ResourceWithConfigure = (*GatewayResource)(nil)
+var _ resource.ResourceWithModifyPlan = (*GatewayResource)(nil)
 
 const providerInfrastructureRevision = "2026-06-23-handover-v1"
 
@@ -50,6 +52,7 @@ func NewAWSGatewayResourceWithFactories(installerFactory InstallerFactory, rollb
 
 type GatewayResourceModel struct {
 	ID                       types.String `tfsdk:"id"`
+	GenerationID             types.String `tfsdk:"generation_id"`
 	Name                     types.String `tfsdk:"name"`
 	Cloud                    types.String `tfsdk:"cloud"`
 	Region                   types.String `tfsdk:"region"`
@@ -126,11 +129,51 @@ func (r *GatewayResource) Configure(_ context.Context, req resource.ConfigureReq
 	r.readerFactory = data.ReaderFactory
 }
 
+func (r *GatewayResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
+		return
+	}
+	if !req.Config.Raw.IsFullyKnown() {
+		return
+	}
+	var plan GatewayResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	var state GatewayResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if plan.PeerAPIAuthToken.IsNull() || plan.PeerAPIAuthToken.IsUnknown() {
+		plan.PeerAPIAuthToken = state.PeerAPIAuthToken
+	}
+	if plan.GenerationID.IsNull() || plan.GenerationID.IsUnknown() {
+		plan.GenerationID = state.GenerationID
+	}
+	resp.Diagnostics.Append(applyGatewayPlan(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if gatewayReplacementRequired(state, plan) && !gatewayPoolRolloutAllowed(state, plan) {
+		resp.RequiresReplace = append(resp.RequiresReplace, path.Root("install_plan_json"))
+	}
+}
+
 func (r *GatewayResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan GatewayResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+	if plan.GenerationID.IsNull() || plan.GenerationID.IsUnknown() {
+		generationID, err := newGatewayGenerationID()
+		if err != nil {
+			resp.Diagnostics.AddError("Generate BetterNAT gateway generation", err.Error())
+			return
+		}
+		plan.GenerationID = types.StringValue(generationID)
 	}
 	resp.Diagnostics.Append(applyGatewayPlan(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
@@ -152,6 +195,13 @@ func (r *GatewayResource) Read(ctx context.Context, req resource.ReadRequest, re
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	superseded, err := gatewayGenerationSuperseded(ctx, state, r.readerFactory)
+	if err != nil {
+		resp.Diagnostics.AddWarning("Check BetterNAT gateway generation", err.Error())
+	} else if superseded {
+		resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
+		return
+	}
 	if err := readGatewayState(ctx, &state, r.readerFactory); err != nil {
 		resp.Diagnostics.AddWarning("Read BetterNAT gateway state", err.Error())
 	}
@@ -168,6 +218,9 @@ func (r *GatewayResource) Update(ctx context.Context, req resource.UpdateRequest
 	}
 	if (plan.PeerAPIAuthToken.IsNull() || plan.PeerAPIAuthToken.IsUnknown()) && !state.PeerAPIAuthToken.IsNull() && !state.PeerAPIAuthToken.IsUnknown() {
 		plan.PeerAPIAuthToken = state.PeerAPIAuthToken
+	}
+	if plan.GenerationID.IsNull() || plan.GenerationID.IsUnknown() {
+		plan.GenerationID = state.GenerationID
 	}
 	resp.Diagnostics.Append(applyGatewayPlan(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
@@ -246,6 +299,14 @@ func (r *GatewayResource) Delete(ctx context.Context, req resource.DeleteRequest
 	var state GatewayResourceModel
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+	superseded, err := gatewayGenerationSuperseded(ctx, state, r.readerFactory)
+	if err != nil {
+		resp.Diagnostics.AddError("Check BetterNAT gateway generation", err.Error())
+		return
+	}
+	if superseded {
 		return
 	}
 	rollbackOnDestroy := boolDefault(state.RollbackOnDestroy, true)
@@ -529,6 +590,7 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	}
 	installPlan, err := installplan.Build(installplan.Input{
 		Name:                     plan.Name.ValueString(),
+		GenerationID:             stringDefault(plan.GenerationID, ""),
 		Region:                   plan.Region.ValueString(),
 		VPCID:                    plan.VPCID.ValueString(),
 		PublicSubnetIDs:          publicSubnetsByAZ,
@@ -560,6 +622,7 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	}
 
 	result.ID = types.StringValue(plan.Name.ValueString())
+	result.GenerationID = plan.GenerationID
 	result.Cloud = types.StringValue(cloud)
 	result.AMIChannel = types.StringValue(amiChannel)
 	result.BootstrapMode = types.StringValue(bootstrapMode)
@@ -616,6 +679,14 @@ func DeriveGatewayState(ctx context.Context, plan *GatewayResourceModel) (Gatewa
 	result.ControlPlaneStatusJSON = types.StringValue("{}")
 	result.Status = types.StringValue("planned")
 	return result, nil
+}
+
+func newGatewayGenerationID() (string, error) {
+	value := make([]byte, 6)
+	if _, err := cryptorand.Read(value); err != nil {
+		return "", fmt.Errorf("generate random identity: %w", err)
+	}
+	return hex.EncodeToString(value), nil
 }
 
 func resolveBootstrapArtifacts(plan *GatewayResourceModel, version string, instanceType string) (bootstrapArtifacts, error) {

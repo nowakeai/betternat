@@ -86,7 +86,7 @@ type Applier struct {
 var (
 	securityGroupDependencyWaitAttempts = 60
 	securityGroupDependencyWaitInterval = 5 * time.Second
-	launchTemplateNameWaitAttempts      = 24
+	launchTemplateNameWaitTimeout       = 10 * time.Minute
 	launchTemplateNameWaitInterval      = 5 * time.Second
 )
 
@@ -122,6 +122,48 @@ type ReadResult struct {
 	RouteTargets              map[string]string `json:"route_targets"`
 	EgressPublicIPs           map[string]string `json:"egress_public_ips"`
 	PublicIdentityInstanceIDs map[string]string `json:"public_identity_instance_ids"`
+}
+
+func (a Applier) GenerationSuperseded(ctx context.Context, plan installplan.Plan) (bool, error) {
+	if a.AutoScaling == nil {
+		return false, fmt.Errorf("autoscaling client is required")
+	}
+	names := make([]string, 0, len(plan.Pools))
+	for _, pool := range plan.Pools {
+		if pool.ASGName != "" {
+			names = append(names, pool.ASGName)
+		}
+	}
+	if len(names) == 0 {
+		return false, nil
+	}
+	output, err := a.AutoScaling.DescribeAutoScalingGroups(ctx, &autoscaling.DescribeAutoScalingGroupsInput{AutoScalingGroupNames: names})
+	if err != nil {
+		return false, fmt.Errorf("describe generation auto scaling groups: %w", err)
+	}
+	if len(output.AutoScalingGroups) > 0 {
+		return false, nil
+	}
+	var nextToken *string
+	for {
+		output, err = a.AutoScaling.DescribeAutoScalingGroups(ctx, &autoscaling.DescribeAutoScalingGroupsInput{NextToken: nextToken})
+		if err != nil {
+			return false, fmt.Errorf("list gateway auto scaling groups: %w", err)
+		}
+		for _, group := range output.AutoScalingGroups {
+			tags := map[string]string{}
+			for _, tag := range group.Tags {
+				tags[awssdk.ToString(tag.Key)] = awssdk.ToString(tag.Value)
+			}
+			if tags["BetterNATGateway"] == plan.Name && tags["BetterNATGeneration"] != plan.GenerationID {
+				return true, nil
+			}
+		}
+		if output.NextToken == nil || awssdk.ToString(output.NextToken) == "" {
+			return false, nil
+		}
+		nextToken = output.NextToken
+	}
 }
 
 func (a Applier) Apply(ctx context.Context, plan installplan.Plan, inputs Inputs) (Result, error) {
@@ -960,8 +1002,10 @@ func (a Applier) createLaunchTemplate(ctx context.Context, plan installplan.Plan
 	}
 	var output *ec2.CreateLaunchTemplateOutput
 	var err error
-	for attempt := 0; attempt < launchTemplateNameWaitAttempts; attempt++ {
-		output, err = a.EC2.CreateLaunchTemplate(ctx, input)
+	waitCtx, cancel := context.WithTimeout(ctx, launchTemplateNameWaitTimeout)
+	defer cancel()
+	for {
+		output, err = a.EC2.CreateLaunchTemplate(waitCtx, input)
 		if err == nil {
 			break
 		}
@@ -969,8 +1013,8 @@ func (a Applier) createLaunchTemplate(ctx context.Context, plan installplan.Plan
 			break
 		}
 		select {
-		case <-ctx.Done():
-			return "", ctx.Err()
+		case <-waitCtx.Done():
+			return "", fmt.Errorf("create launch template %s after name-release deadline: %w", pool.LaunchTemplateName, err)
 		case <-time.After(launchTemplateNameWaitInterval):
 		}
 	}
