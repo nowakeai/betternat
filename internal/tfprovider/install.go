@@ -37,6 +37,7 @@ type Cleaner interface {
 
 type Reader interface {
 	Read(ctx context.Context, plan installplan.Plan) (awsinstall.ReadResult, error)
+	GenerationSuperseded(ctx context.Context, plan installplan.Plan) (bool, error)
 }
 
 type InstallerFactory func(ctx context.Context, region string) (Installer, error)
@@ -81,6 +82,10 @@ func (i awsInstaller) Cleanup(ctx context.Context, plan installplan.Plan, inputs
 
 func (i awsInstaller) Read(ctx context.Context, plan installplan.Plan) (awsinstall.ReadResult, error) {
 	return i.applier.Read(ctx, plan)
+}
+
+func (i awsInstaller) GenerationSuperseded(ctx context.Context, plan installplan.Plan) (bool, error) {
+	return i.applier.GenerationSuperseded(ctx, plan)
 }
 
 func defaultInstallerFactory(ctx context.Context, region string) (Installer, error) {
@@ -392,6 +397,21 @@ func readGatewayState(ctx context.Context, state *GatewayResourceModel, factory 
 	}
 	state.Status = types.StringValue(statusFromReadResult(plan, result))
 	return nil
+}
+
+func gatewayGenerationSuperseded(ctx context.Context, state GatewayResourceModel, factory ReaderFactory) (bool, error) {
+	if factory == nil {
+		return false, fmt.Errorf("reader factory is not configured")
+	}
+	var plan installplan.Plan
+	if err := json.Unmarshal([]byte(state.InstallPlanJSON.ValueString()), &plan); err != nil {
+		return false, fmt.Errorf("decode install plan: %w", err)
+	}
+	reader, err := factory(ctx, state.Region.ValueString())
+	if err != nil {
+		return false, err
+	}
+	return reader.GenerationSuperseded(ctx, plan)
 }
 
 func statusFromReadResult(plan installplan.Plan, result awsinstall.ReadResult) string {

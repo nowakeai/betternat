@@ -843,11 +843,19 @@ func (f fakeInstaller) ReconcileInfrastructure(context.Context, installplan.Plan
 }
 
 type fakeReader struct {
-	result awsinstall.ReadResult
+	result               awsinstall.ReadResult
+	generationSuperseded *bool
 }
 
 func (f fakeReader) Read(context.Context, installplan.Plan) (awsinstall.ReadResult, error) {
 	return f.result, nil
+}
+
+func (f fakeReader) GenerationSuperseded(context.Context, installplan.Plan) (bool, error) {
+	if f.generationSuperseded == nil {
+		return false, nil
+	}
+	return *f.generationSuperseded, nil
 }
 
 func mustMapList(values map[string][]string) types.Map {
